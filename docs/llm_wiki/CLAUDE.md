@@ -153,6 +153,12 @@ Field semantics:
 - `raw_completeness: full` when the archive was produced by `scripts/claude_jsonl_to_md.py`; `approximate` when Claude wrote a summary inline at session-end; `none` when no archive was kept.
 - When `raw_source` points at a local-only archive: note in the `## References` section that this link is local-only (will be a broken link on a fresh clone).
 
+**Optional fields added in v3** — all have defined defaults, so every pre-v3 entry stays valid:
+
+- `headline: "<= 120 chars"` — the scan-level one-liner rendered into `_topic_index.md`. When absent, the generator truncates `summary` at its first sentence (140-char cap). Set it by hand when the truncation reads badly; there is no backfill obligation.
+- `relations: ["<type>:<id>", ...]` — **auto-populated** from typed body wikilinks by `scripts/claude/regen_wiki_links.py`; do not hand-type. See §12.
+- `use_count: <int>` / `last_used: <YYYY-MM-DD>` — reinforcement counters bumped by `scripts/claude/wiki_touch.py` when `/wiki-read` surfaces the entry at L3. **Read-count only, never decay** (a refuted hypothesis stays refuted; age is not evidence of irrelevance), and it counts *skill-mediated reads only* — an ad-hoc grep is invisible. Treat it as a lower bound on usefulness: fine for breaking ties in recall order or spotting folders nothing reads, never grounds for deleting an entry.
+
 ---
 
 ## 6. Fragmentation safeguards (4-layer)
@@ -297,15 +303,34 @@ The regenerator is additive: it merges any `[[id]]` tokens it finds with whateve
 | Pre-commit check | `python scripts/claude/regen_wiki_links.py --check` | Read-only; exits 0 if no files would change, 1 if any would. |
 | Custom root | `python scripts/claude/regen_wiki_links.py --root <path>` | Override the default `docs/llm_wiki` root. |
 
-The script is stdlib-only (no PyYAML); it parses frontmatter with regex and rewrites only the `related:` line, preserving every other byte of the file.
+The script is stdlib-only (no PyYAML); it parses frontmatter with regex and rewrites only the `related:` and `relations:` lines, preserving every other byte of the file.
 
 ### `/wiki-write` Step 9 contract
 
 Step 9 (auto-commit) **must** run `scripts/claude/regen_wiki_links.py` before staging, so any `[[id]]` tokens written in the body during Step 4 are reflected in `related:` before the commit lands. See `.claude/skills/wiki-write/SKILL.md` Step 9 for the exact command.
 
-### `[[id|alias]]` form
+### Typed links — `[[id|type]]`
 
-If you encounter `[[id|alias]]` (Obsidian alias syntax), the regenerator captures `id` and logs the alias. Alias support is not used in this project yet; use plain `[[id]]` only.
+A bare `[[id]]` says two entries are related but not *how*. In a research log the most valuable edge is "entry B refutes entry A", and that information was previously unrecordable. Use the alias slot to carry a relation type:
+
+```
+Round 3 overturned this under matched smells — see [[20260512_1428_sameprop_class_discriminating_defence_event_level|refutes]].
+```
+
+**Closed vocabulary.** An unrecognised type is treated as a typo, not a new relation: the regenerator warns and demotes it to `see_also`, so nobody silently invents a one-off edge kind that no query can find.
+
+| Type | Use for |
+|---|---|
+| `refutes` | This entry's evidence overturns the linked claim |
+| `supersedes` | Replaces the linked entry wholesale (pair with the `supersedes:` frontmatter field) |
+| `extends` | Refines or builds on the linked entry without contradicting it |
+| `caused` | The linked entry's decision or bug produced what this entry describes |
+| `fixed` | This entry records the fix for a problem the linked entry recorded |
+| `depends_on` | This conclusion is only valid while the linked one holds |
+| `contradicts` | Tension surfaced but NOT resolved — deliberately weaker than `refutes` |
+| `see_also` | Plain relatedness; the default meaning of an untyped `[[id]]` |
+
+Both forms coexist. `related:` keeps holding **bare IDs** for every link, typed or not, so every existing consumer keeps working; `relations:` holds the typed form. The ~326 pre-v3 untyped edges remain valid and mean `see_also` — there is no backfill obligation. Type new links when the relation is genuinely one of the above; leave it untyped when it is just "related".
 
 ---
 
@@ -363,3 +388,36 @@ The contradiction check is reasoning-shaped, not algorithm-shaped. A Python scri
 **Lifetime**: immutable. Snapshots are dated records, not living documents. They never get edited, only superseded by newer snapshots.
 
 **Recall**: `/wiki-read` surfaces snapshots when the user asks about past code state ("how did the model look at v1.4 ship"). Otherwise the live graph in `src/graphify-out/GRAPH_REPORT.md` is the right surface for "what does the code look like now."
+
+---
+
+## 15. Folder synthesis pages (`_state.md`) — the semantic tier
+
+An entry records **what happened in one session**. Nothing in v1/v2 recorded **what we currently believe about a topic**. With 28 entries in `dreamer_diagnosis`, a reader asking "so what's wrong with Dreamer?" had to read all 28 and synthesize — every time, from scratch. That is the gap the 2026 literature calls the step from *Reflection* to *Experience* (cross-trajectory abstraction).
+
+Each topic folder may carry a `_state.md`: the folder's current belief state, with every claim citing the entries behind it. Start from `docs/llm_wiki/TEMPLATES/state.md`.
+
+**Rules that keep it honest:**
+
+- **Rewritten in place, never appended.** It is a belief state, not a log. The log is the entries.
+- **Every claim cites entries.** A claim in `_state.md` with no `[[id]]` behind it is an unsourced assertion and should be deleted or turned into an entry.
+- **Contested things stay contested.** Where entries disagree, `_state.md` names both sides and says why it is unresolved. It must not silently pick a winner — an open disagreement is real information, and resolving one is what the §13 contradiction protocol is for.
+- **Staleness is visible.** The frontmatter carries `synthesized_from` (entry count), `synthesized_on`, and `last_entry_included`, so a reader can see at a glance how far behind the page is.
+- **Refresh trigger**: when a folder has gained ≥ 5 entries since `last_entry_included`, or on demand. Refreshing is a `/wiki-write`-adjacent act, not something to do casually mid-task.
+
+**Read position**: L2, alongside `_topic_index.md` — and read it *first*. For the question "what do we know about X", `_state.md` is strictly cheaper and better than scanning the index and opening three entries. `_topic_index.md` links to it automatically when it exists.
+
+## 16. Promotion — the procedural tier
+
+A lesson that keeps recurring should stop being something to *re-read* and become something that is *followed*. The wiki is the episodic and semantic record; it is not where enforcement lives.
+
+| Signal | Promote to | Why there |
+|---|---|---|
+| The same lesson recurs in ≥ 3 entries | a rule in the owning agent / skill doc | it has become procedure, not history |
+| A one-line rule an agent must obey on **every** invocation | built-in auto-memory `MEMORY.md` | already the §2 split — machine-local typed rules |
+| A repeatable multi-step procedure | a skill under `.claude/skills/` | skills are the executable tier |
+| A project-wide invariant | root `CLAUDE.md` | already the §2 split |
+
+**Promotion does not delete the entry.** The entry keeps the rationale — why the rule exists, what was tried, what was rejected — which is exactly what a one-line rule cannot carry. The promoted artifact carries the *instruction* and links back to the entry for the *reasoning*. Deleting the entry on promotion is how a project ends up with rules nobody can question because nobody remembers why they exist.
+
+**The three tiers, named:** episodic (`entries/<topic>/<id>.md`) → semantic (`entries/<topic>/_state.md`) → procedural (skills, agent docs, `CLAUDE.md`, auto-memory). Each is a different lifetime and a different read cost; none replaces the one below it.

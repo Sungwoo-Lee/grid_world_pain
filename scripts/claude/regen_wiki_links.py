@@ -16,6 +16,16 @@ DEFAULT_ROOT = ROOT / "docs" / "llm_wiki"
 # includes commas and digits, not the YYYYMMDD_HHMM_slug pattern.
 ID_PATTERN = re.compile(r"\[\[(\d{8}_\d{4}_[a-z0-9_]+)(?:\|[^\]]+)?\]\]")
 
+# Typed-link form [[id|type]]. Closed vocabulary — an unrecognised type is a typo,
+# not a new relation, so it is warned about and demoted to see_also rather than
+# silently creating a one-off edge kind that nothing can query.
+RELATION_TYPES = {
+    "refutes", "supersedes", "extends", "caused",
+    "fixed", "depends_on", "contradicts", "see_also",
+}
+TYPED_PATTERN = re.compile(r"\[\[(\d{8}_\d{4}_[a-z0-9_]+)\|([a-z_]+)\]\]")
+RELATIONS_LINE_RE = re.compile(r"^relations:[ \t]*(.*)", re.MULTILINE)
+
 # Matches the entire related: line (single-line only; multi-line YAML not used).
 RELATED_LINE_RE = re.compile(r"^related:[ \t]*(.*)", re.MULTILINE)
 
@@ -23,6 +33,15 @@ RELATED_LINE_RE = re.compile(r"^related:[ \t]*(.*)", re.MULTILINE)
 # mirrors the same exclusion in regen_wiki_graph.py (lines 206-211) so that
 # Phase B's injected backlink IDs are not picked up as outbound wikilinks.
 BACKLINKS_BLOCK_RE = re.compile(r"<!-- BACKLINKS.*?<!-- END BACKLINKS -->\s*", re.DOTALL)
+
+
+def _rel(path: Path) -> Path | str:
+    """Repo-relative path for display; falls back to the absolute path when the
+    --root argument points outside the repo (e.g. a scratch tree in a test)."""
+    try:
+        return path.relative_to(ROOT)
+    except ValueError:
+        return path
 
 
 def _canonical(ids: list[str]) -> str:
@@ -87,8 +106,16 @@ def process_file(path: Path, dry_run: bool = False) -> bool:
     # Extract [[id]] tokens from the body only (not from frontmatter).
     # [[id|alias]] form: capture the id, log the alias presence.
     wikilink_ids = ID_PATTERN.findall(body_clean)
-    for alias_match in re.finditer(r"\[\[(\d{8}_\d{4}_[a-z0-9_]+)\|([^\]]+)\]\]", body_clean):
-        print(f"note: {path.name} has alias form [[{alias_match.group(1)}|{alias_match.group(2)}]] — treating as [[{alias_match.group(1)}]]")
+
+    # Typed links [[id|type]] -> relations: ["type:id", ...]. The id also stays in
+    # related: as a bare id, so every existing consumer of related: keeps working.
+    relations = []
+    for tid, ttype in TYPED_PATTERN.findall(body_clean):
+        if ttype not in RELATION_TYPES:
+            print(f"warn: {path.name} uses unknown relation type '{ttype}' on [[{tid}]] "
+                  f"— demoted to see_also. Known: {', '.join(sorted(RELATION_TYPES))}")
+            ttype = "see_also"
+        relations.append(f"{ttype}:{tid}")
 
     # Union: preserve existing related IDs and add any body [[id]] tokens.
     # --normalise-existing is the same algorithm but is documented as the
@@ -96,21 +123,37 @@ def process_file(path: Path, dry_run: bool = False) -> bool:
     all_ids = list(set(existing_ids) | set(wikilink_ids))
 
     new_value = _canonical(all_ids)
+    new_relations = _canonical(relations)
+
+    rm = RELATIONS_LINE_RE.search(fm_block)
+    existing_relations = rm.group(1).strip() if rm else None
+    relations_ok = (existing_relations == new_relations) or (
+        rm is None and new_relations == "[]"
+    )
 
     # Skip writing when the file already has exactly the right canonical string.
     # We compare the new value against the current raw value directly — this
     # catches both content differences (new IDs to add) and format differences
     # (same IDs but written without quotes or in wrong order).
-    if new_value == existing_raw:
+    if new_value == existing_raw and relations_ok:
         return False
 
-    # Rewrite only the related: line
+    # Rewrite the related: line, then the relations: line (inserting it directly
+    # after related: on first use so the two stay adjacent in the frontmatter).
     new_fm_block = fm_block[: m.start()] + f"related: {new_value}" + fm_block[m.end():]
+    if not relations_ok:
+        rm2 = RELATIONS_LINE_RE.search(new_fm_block)
+        if rm2:
+            new_fm_block = new_fm_block[: rm2.start()] + f"relations: {new_relations}" + new_fm_block[rm2.end():]
+        elif new_relations != "[]":
+            m2 = RELATED_LINE_RE.search(new_fm_block)
+            new_fm_block = (new_fm_block[: m2.end()] + f"\nrelations: {new_relations}"
+                            + new_fm_block[m2.end():])
     new_text = "---\n" + new_fm_block + "\n---\n" + body
 
     if not dry_run:
         path.write_text(new_text, encoding="utf-8")
-        print(f"updated: {path.relative_to(ROOT)}  ({existing_raw!r} → {new_value})")
+        print(f"updated: {_rel(path)}  ({existing_raw!r} → {new_value})")
     return True
 
 
@@ -121,7 +164,7 @@ def collect_insights(wiki_root: Path) -> list[Path]:
     return sorted(
         p
         for p in entries.rglob("*.md")
-        if p.name not in ("_topic_index.md", "_global_tags.md")
+        if not p.name.startswith("_")   # skip _topic_index / _global_tags / _state
     )
 
 
@@ -157,7 +200,7 @@ def main() -> int:
         if process_file(path, dry_run=args.check):
             changed += 1
             if args.check:
-                print(f"would change: {path.relative_to(ROOT)}")
+                print(f"would change: {_rel(path)}")
 
     if args.check:
         if changed:

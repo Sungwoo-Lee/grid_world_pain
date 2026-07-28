@@ -6,6 +6,7 @@ folder: wiki_system_design
 tags: [wiki, design, decision, meta]
 summary: "The wiki is pull-only and was gated on 'when wiki work is requested', so it was never consulted during ordinary work (bug fixes, refactors, config changes) even when a relevant entry existed — while Claude Code's built-in auto-memory is pushed into context every turn. Widened the trigger to 'before any non-trivial task' while preserving lazy-load: read the ROOT_INDEX Active-folders TABLE (~2 KB), not the file (52 KB, mostly change log). Drill to a topic index only on a match. Commit 76d29d5."
 related: ["20260508_0315_claude_memory_system_genesis", "20260516_1431_v2_three_role_architecture", "20260516_1434_cross_phase_generator_backlinks_strip", "20260728_1645_wiki_search_subagent_rejected_on_economics"]
+relations: ["extends:20260508_0315_claude_memory_system_genesis", "extends:20260516_1431_v2_three_role_architecture"]
 session_origin: claude_code
 session_label: "LLM Wiki rename + consult gate"
 importance: high
@@ -39,7 +40,7 @@ Nothing in the wiki loads automatically. The only instruction telling anyone to 
 - `docs/llm_wiki/CLAUDE.md` gains §3 "When to consult, and how far to drill", carrying the per-level cost table. Mechanism detail lives there, not in root `CLAUDE.md`, which is loaded every turn and must stay minimal.
 - §9 (lazy-load levels) had to be reconciled: its old L1 row said "first read of any wiki **operation**", which directly contradicted the widened trigger. L1 is now split into **L1a** (Active-folders table only — the gate, before any non-trivial task) and **L1b** (full `ROOT_INDEX` + tag dictionary — explicit wiki operations only).
 - Because sub-agents inherit the project `CLAUDE.md`, this applies to `developer`, `experiment-designer`, the reviewers, and the rest — not only top-level Claude.
-- Refines the lazy-load design from [[20260508_0315_claude_memory_system_genesis]] and [[20260516_1431_v2_three_role_architecture]] rather than superseding it: the L0–L4 levels are unchanged, only the entry trigger moved.
+- Refines the lazy-load design from [[20260508_0315_claude_memory_system_genesis|extends]] and [[20260516_1431_v2_three_role_architecture|extends]] rather than superseding it: the L0–L4 levels are unchanged, only the entry trigger moved.
 
 ## Open questions and follow-ups
 

@@ -6,6 +6,7 @@ folder: wiki_system_design
 tags: [wiki, design, decision, meta]
 summary: "The project's in-repo session-insight layer and Claude Code's built-in auto-memory were both called 'memory', forcing a disambiguation every time either came up. Renamed the in-repo layer to the LLM Wiki: docs/memory/ -> docs/llm_wiki/, memories/ -> entries/, /memorize -> /wiki-write, /recall -> /wiki-read, lint_memory + regen_memory_* -> lint_wiki + regen_wiki_*, tag `memory` -> `wiki`. 276 files / 1462 replacements, commit 46f0310. Entry IDs were deliberately NOT renamed."
 related: ["20260508_0315_claude_memory_system_genesis", "20260528_0216_foam_wikilinks_filename_as_id_sparse_aliases", "20260728_1643_bulk_rename_component_path_and_domain_term_traps", "20260728_1644_wiki_pull_gate_widened_before_any_task", "20260728_1645_wiki_search_subagent_rejected_on_economics"]
+relations: ["extends:20260508_0315_claude_memory_system_genesis"]
 session_origin: claude_code
 session_label: "LLM Wiki rename + consult gate"
 importance: high
@@ -15,6 +16,8 @@ confidence: high
 supersedes: []
 raw_source: claude_data/.claude/projects/-media-nas01-projects-Interoceptive-AI-grid-world-pain/dec28250-837d-46e8-b4c9-5ce845ae7698.jsonl
 raw_completeness: full
+use_count: 0
+last_used: 2026-07-28
 ---
 
 # The in-repo memory layer is now the LLM Wiki — one name per layer
@@ -38,7 +41,7 @@ This project keeps two places to remember things, and until now both were called
 - **Natural-language trigger phrases were kept.** `/wiki-write` still fires on "remember this", "memorize this", "save to memory" — those are how the user actually talks, and stripping them would trade triggering accuracy for cosmetic purity.
 - **The unit noun in machinery is now "entry"** (directory `entries/`, `TEMPLATES/entry.md`); historical bodies that say "insight" were left alone, since "insight" was never the confusing word.
 - Two literal quotations were deliberately left un-renamed: a real historical commit subject (`fix(memory): regen_memory_links strip BACKLINKS blocks...`) and the diary note describing the rename. Rewriting a quoted commit message would falsify the record.
-- The coexistence rule from [[20260508_0315_claude_memory_system_genesis]] is refined, not superseded — the two-layer split by insight density still holds; only the naming changed.
+- The coexistence rule from [[20260508_0315_claude_memory_system_genesis|extends]] is refined, not superseded — the two-layer split by insight density still holds; only the naming changed.
 
 ## Open questions and follow-ups
 

@@ -121,12 +121,17 @@ This is a hard step. A capture that skips it creates the risk of two contradicto
 3. Fill all 5 body sections in plain English. `## Open questions and follow-ups` writes "None" if there are none. `## References` includes the "Why a new folder" line if applicable.
    - When referencing another insight, write `[[<insight_id>]]` inline in the body section (typically `## References` or `## Decisions and actions`). The `related:` frontmatter is auto-populated by `scripts/claude/regen_wiki_links.py` — do not hand-type it.
 
-### Step 5 — Update the topic index
+### Step 5 — Regenerate the topic indexes
 
-For each insight:
+`_topic_index.md` files are **generated artifacts** — do not hand-edit them and do not prepend rows. After writing the insight files, run:
 
-- New topic folder → create `docs/llm_wiki/entries/<topic>/_topic_index.md` with the standard header (read an existing topic index for the format) and a single row.
-- Existing folder → prepend a row (reverse-chronological) to the existing `_topic_index.md`. Match the existing row format.
+```bash
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/claude/regen_wiki_indexes.py
+```
+
+This rebuilds every folder's index from entry frontmatter: rows, counts, `Last updated`, lifecycle markers (`[superseded]`, `[expired ...]`), and the `_state.md` link when one exists. A new topic folder gets its index created automatically; add its **Folder definition** by putting the folder's row in `ROOT_INDEX.md` (Step 6) before running, or the generator writes a "definition missing" placeholder.
+
+Hand-editing was the old contract and caused a real failure on 2026-07-28: two parallel sessions editing the same index left rows missing and the count stale. Generation is race-proof — whoever runs it last is correct. If a generated row reads badly, fix it by setting a `headline:` field on the entry, not by editing the index.
 
 ### Step 6 — Update root index and tag dictionary
 
@@ -192,10 +197,16 @@ After all writes succeed, bundle every file this skill touched into a single com
 
 Before staging, run both regenerators in order:
 
-1. **Link regenerator** — populates `related:` from body `[[id]]` tokens and normalises any hand-typed values:
+1. **Link regenerator** — populates `related:` from body `[[id]]` tokens, and `relations:` from typed `[[id|type]]` tokens (§12 vocabulary):
 
 ```bash
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/claude/regen_wiki_links.py
+```
+
+1b. **Index regenerator** — rebuilds every `_topic_index.md` (re-run here even if Step 5 already did, since Step 6 may have changed folder definitions):
+
+```bash
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/claude/regen_wiki_indexes.py
 ```
 
 2. **Graph regenerator** — rebuilds `GRAPH_REPORT.md` and injects per-insight Backlinks blocks (idempotent):

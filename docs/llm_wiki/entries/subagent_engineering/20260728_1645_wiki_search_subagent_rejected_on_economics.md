@@ -6,6 +6,7 @@ folder: subagent_engineering
 tags: [subagent, wiki, decision, design, meta]
 summary: "Considered and rejected a dedicated wiki-search sub-agent that would answer topic queries so main Claude never loads wiki content. Two reasons. (1) Arithmetic: a sub-agent's boot floor is ~36 KB (root CLAUDE.md 27 KB + agent profile 8.8 KB) against a mean entry of 12.5 KB, so delegation only pays above ~3 entries — for a targeted lookup it costs MORE than reading directly. (2) Reachability: sub-agents have no Agent tool, so it would be invisible to developer / plan-reviewer / code-reviewer / experiment-designer — the exact walk-back bug-curator just took in 87a2e4d. Verdict: keep the 2 KB gate for targeted work, use existing Explore for fan-out, and tighten topic-index rows instead."
 related: ["20260528_1647_bg_isolation_subagent_bypass", "20260728_1643_subagents_cannot_delegate_dead_instructions", "20260728_1644_wiki_pull_gate_widened_before_any_task"]
+relations: ["extends:20260728_1643_subagents_cannot_delegate_dead_instructions"]
 session_origin: claude_code
 session_label: "LLM Wiki rename + consult gate"
 importance: high
@@ -30,7 +31,7 @@ The idea was appealing: a sub-agent that takes a topic question, reads around th
 - **Targeted lookup** (gate + one topic index + one entry) ~32 KB read directly. Delegated: ~36 KB boot + the same ~32 KB read inside the sub-agent + ~2 KB returned. Net loss.
 - **Crossover: ~36 KB boot / ~12.5 KB per entry ≈ 3 entries.** Above that, delegation wins.
 - **Fan-out** ("what have we learned about Dreamer?" — 25 entries in `dreamer_diagnosis`) ≈ 312 KB. Delegated, the main context pays ~38 KB instead of ~314 KB — roughly 8x.
-- Reachability: only top-level Claude and `senior-developer` hold the `Agent` tool. A parallel session captured the same constraint from the opposite direction — four agent profiles carried an unexecutable "consult `bug-curator`" instruction — in [[20260728_1643_subagents_cannot_delegate_dead_instructions]]. `developer`, `code-reviewer`, `plan-reviewer`, `env-config-reviewer`, `experiment-designer`, `training-runner` do not.
+- Reachability: only top-level Claude and `senior-developer` hold the `Agent` tool. A parallel session captured the same constraint from the opposite direction — four agent profiles carried an unexecutable "consult `bug-curator`" instruction — in [[20260728_1643_subagents_cannot_delegate_dead_instructions|extends]]. `developer`, `code-reviewer`, `plan-reviewer`, `env-config-reviewer`, `experiment-designer`, `training-runner` do not.
 - **Empirical precedent from this repo, one commit earlier**: `87a2e4d` ("reachable bug registry") rewrote `plan-reviewer` to grep `KNOWN_BUGS.md` directly, adding "**You cannot spawn `bug-curator`** — sub-agents have no `Agent` tool". `bug-curator`'s serve mode is the exact design pattern proposed here, and it had just been walked back for this reason.
 - Topic-index rows average ~600 bytes each (`cluster_ops` 24,489 B / 40 rows = 612; `hypervigilance` 578; `dreamer_diagnosis` 669).
 

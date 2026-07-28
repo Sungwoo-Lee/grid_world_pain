@@ -152,8 +152,8 @@ def collect_insights(wiki_root: Path) -> list[Path]:
         return []
     paths = []
     for p in sorted(entries.rglob("*.md")):
-        # skip index files
-        if p.name in ("_topic_index.md", "_global_tags.md"):
+        # skip index/meta pages (_topic_index, _global_tags, _state)
+        if p.name.startswith("_"):
             continue
         # skip _archive and .trash directories anywhere in path
         parts = set(p.parts)
@@ -278,6 +278,33 @@ def count_turns(jsonl_path: Path) -> int | None:
 # ─── GRAPH_REPORT.md generation ─────────────────────────────────────────────
 
 
+def _collect_typed_edges(insights: dict[str, "InsightNode"]) -> list[tuple[str, str, str, str]]:
+    """Return (type, source_id, dest_id, source_folder) for every typed relation.
+
+    Reads the `relations:` frontmatter line directly from each entry file rather than
+    threading a new field through InsightNode (which uses __slots__), keeping the
+    graph-building pass unchanged.
+    """
+    out: list[tuple[str, str, str, str]] = []
+    for iid, node in insights.items():
+        if node.path is None:
+            continue
+        try:
+            text = node.path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        m = re.search(r"^relations:[ \t]*\[(.*)\]$", text, re.MULTILINE)
+        if not m or not m.group(1).strip():
+            continue
+        for tok in m.group(1).split(","):
+            tok = tok.strip().strip('"').strip("'")
+            if ":" not in tok:
+                continue
+            rtype, _, dest = tok.partition(":")
+            out.append((rtype.strip(), iid, dest.strip(), node.folder))
+    return out
+
+
 def _render_report(
     insights: dict[str, InsightNode],
     sessions: dict[str, SessionNode],
@@ -400,6 +427,26 @@ def _render_report(
     lines.append("")
 
     # ── Section 6: Conversation provenance ───────────────────────────────
+    # ── Typed edges (v3): relation-typed links, e.g. refutes / fixed / caused ──
+    typed = _collect_typed_edges(insights)
+    lines.append("## Typed edges (`[[id|type]]` relations)")
+    if not typed:
+        lines.append("_No typed relations yet. Untyped `[[id]]` links mean `see_also` — see operating manual §12._")
+    else:
+        by_type: dict[str, list[tuple[str, str, str, str]]] = {}
+        for e in typed:
+            by_type.setdefault(e[0], []).append(e)
+        lines.append(f"_{len(typed)} typed edge(s) across {len(by_type)} relation type(s)._")
+        lines.append("")
+        lines.append("| Type | Source | → | Target |")
+        lines.append("|---|---|---|---|")
+        # refutes/contradicts first — the highest-signal edges in a research log.
+        priority = {"refutes": 0, "contradicts": 1, "supersedes": 2, "fixed": 3, "caused": 4}
+        for rtype in sorted(by_type, key=lambda t: (priority.get(t, 9), t)):
+            for _, src, dest, folder in sorted(by_type[rtype]):
+                lines.append(f"| `{rtype}` | [[{src}]] ({folder}) | → | [[{dest}]] |")
+    lines.append("")
+
     lines.append("## Conversation provenance")
     lines.append("")
 

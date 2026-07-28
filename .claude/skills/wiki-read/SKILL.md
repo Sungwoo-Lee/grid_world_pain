@@ -54,6 +54,22 @@ When rendering a recalled insight in drill-down (Step 4), if the insight's `## K
 
 Apply this hint only when a God-nodes top-10 symbol actually appears in the insight's body. Do not add it for every insight — only when there is a genuine code-symbol match. Check `src/graphify-out/GRAPH_REPORT.md` lazily (read it only when you have a candidate insight to cross-reference, never preemptively).
 
+## Reading order at L2 — `_state.md` first
+
+When a question narrows to one topic and that folder has a `_state.md`, **read it before the topic index**. It is the folder's current belief state with citations (operating manual §15) and is strictly cheaper than scanning the index and opening three entries. Fall through to `_topic_index.md` when `_state.md` is absent, or when the question is about *when* something happened rather than *what is true*.
+
+Check its `synthesized_from` / `last_entry_included` frontmatter: if the folder has gained several entries since, say so in one line ("this summary is N entries behind") rather than presenting it as current.
+
+## Recording reads at L3
+
+Whenever this skill opens a full entry (L3) to answer a question, record the read:
+
+```bash
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/claude/wiki_touch.py <entry_id> [<entry_id> ...]
+```
+
+This bumps `use_count` and sets `last_used`. It is a **lower bound** on usefulness — ad-hoc greps and direct file reads are invisible to it — so never present the count as a popularity ranking, and never use it to justify deleting an entry. Skip the call in natural-language mode output; it is bookkeeping, not something to narrate.
+
 ## Step-by-step flow
 
 ### Step 1 — Read context

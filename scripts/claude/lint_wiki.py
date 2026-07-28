@@ -108,7 +108,7 @@ def collect_insights(wiki_root: Path) -> list[Path]:
         return []
     paths = []
     for p in sorted(entries.rglob("*.md")):
-        if p.name in ("_topic_index.md", "_global_tags.md"):
+        if p.name.startswith("_"):   # _topic_index / _global_tags / _state — meta, not entries
             continue
         parts = set(p.parts)
         if "_archive" in parts or ".trash" in parts:

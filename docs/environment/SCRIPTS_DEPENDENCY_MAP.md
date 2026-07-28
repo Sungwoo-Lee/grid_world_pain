@@ -103,7 +103,9 @@ These are commands hardcoded in skills and agent profiles with the full conda in
 |---|---|
 | `scripts/claude/diary_append.py` | **7 callers** — skills: `diary`, `wiki-write` (L182), `summarize-study` (L279,373); agents: `developer` (L94), `senior-developer` (L97), `experiment-analyzer` (L114), `training-runner` (L286). Most-wired dependency in the repo. |
 | `scripts/claude/regen_dev_index.py` | agent `senior-developer` (L52, executable); contracts in `CLAUDE.md`, `AGENT_PLAYBOOK.md`, `FRONTMATTER_CONTRACT.md`; `experiment-analyzer`/`experiment-designer` name it in *negative* "do NOT run" instructions. |
-| `scripts/claude/regen_wiki_links.py` | skill `wiki-write` Step 9 (L198, executable); contract `docs/llm_wiki/CLAUDE.md`. |
+| `scripts/claude/regen_wiki_links.py` | skill `wiki-write` Step 9 (executable); contract `docs/llm_wiki/CLAUDE.md` §12. Writes `related:` + `relations:`. |
+| `scripts/claude/regen_wiki_indexes.py` | skill `wiki-write` Steps 5 + 9 (executable). Generates every `_topic_index.md`; those files are no longer hand-edited. |
+| `scripts/claude/wiki_touch.py` | skill `wiki-read` at L3 (executable). Bumps `use_count` / `last_used`. |
 | `scripts/claude/regen_wiki_graph.py` | skill `wiki-write` (L248, executable). |
 | `scripts/claude/snapshot_code_graph.py` | skill `wiki-write` (L34,79, optional step). |
 | `scripts/claude/claude_jsonl_to_md.py` | skill `wiki-write` (L40,156,280). |
@@ -140,6 +142,8 @@ Stakes legend: **CODE** = breaks Python/subprocess; **TOOL** = breaks a skill/ag
 | `scripts/claude/diary_append.py` | 4 agents + 3 skills | TOOL | all 7 commands (see §2) |
 | `scripts/claude/regen_dev_index.py` | `senior-developer` agent; 3 contract docs | TOOL | agent cmd + contract docs |
 | `scripts/claude/regen_wiki_links.py` | `wiki-write` skill; wiki contract | TOOL | skill + doc |
+| `scripts/claude/regen_wiki_indexes.py` | `wiki-write` skill | TOOL | skill |
+| `scripts/claude/wiki_touch.py` | `wiki-read` skill | TOOL | skill |
 | `scripts/claude/regen_wiki_graph.py` | `wiki-write` skill | TOOL | skill |
 | `scripts/claude/snapshot_code_graph.py` | `wiki-write` skill | TOOL | skill |
 | `scripts/claude/claude_jsonl_to_md.py` | `wiki-write` skill | TOOL | skill |
