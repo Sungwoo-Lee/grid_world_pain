@@ -1,0 +1,26 @@
+# Behavior-probe sweep for the NEW hierarchical-encoding Dreamer runs launched
+# 2026-07-28 on node 114 by the parallel dreamer-investigation session. Both are
+# XS / basic03 / seed 0 / decay_power 1.0 (verified from saved env_config),
+# critic two-hot ±6, replay ratio 0.25 — same base as the bins6 arms, with the
+# single new variable being encoding_mode: hierarchical:
+#   hier_heads  = hierarchical encoder, decoder NOT mirrored (mirror_encoder_in_decoder: false)
+#   hier_mirror = hierarchical encoder, decoder mirrors encoder   (mirror_encoder_in_decoder: true)
+# Same seed-0 / 12-condition pipeline as dp1_dreamer_bins6 so these are directly
+# comparable to the bins6 arms + ±20 controls. Output kept separate under
+# avoidance/dp1/dreamer_hier/. Runs are STILL TRAINING — incremental snapshot.
+#
+# Run: python scripts/eval/dwell_sweep/run_sweep.py configs/eval_sweeps/dp1_dreamer_hier.yaml
+# `nodes` must be FREE at run time — check gpu_status first (104 down, 111 flaky as of launch).
+name: dp1_dreamer_hier
+algo: dreamer
+output_dir: results/eval/avoidance/dp1/dreamer_hier
+probe: clean
+conditions: all
+episodes: 30
+nodes: [101, 102, 103, 105, 106, 112]
+npar: 5
+x_axis: episodes
+plot_measures: [bush_dwell, spatial_spread, survival_steps]
+runs:
+  - {label: hier_heads,  path: results/JAX_DreamerSRL/20260728-060740_dsrl_b03_XS_bins6_rr0p25_hier_heads}
+  - {label: hier_mirror, path: results/JAX_DreamerSRL/20260728-060745_dsrl_b03_XS_bins6_rr0p25_hier_mirror}
