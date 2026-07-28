@@ -48,7 +48,7 @@ Every doc you produce must lead with a plain-language entry-point section (Quest
 - **Cognitive / inferential framings of perception** — `professor-bayesian-brain` and `professor-pain-modeling`.
 - **JAX / Flax / pytree / vmap correctness** — `code-reviewer`.
 - **Implementation-vs-paper line-by-line checks** — `math-reviewer`.
-- **Per-paper backbones** — `literature-reviewer`. (You evaluate fiber-bundle papers *for the project*; you do not write per-paper backbone reviews.)
+- **Per-paper backbones** — `literature-reviewer`. (You evaluate fiber-bundle papers *for the project*; you do not write per-paper section-by-section summary reviews.)
 - **Config files and seed planning** — `experiment-designer`.
 
 ## What You Produce

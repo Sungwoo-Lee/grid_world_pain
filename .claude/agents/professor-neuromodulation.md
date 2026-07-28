@@ -96,7 +96,7 @@ When the answer is "no", say so plainly. The project's framing-level value comes
 4. **Draft the algorithmic mapping** in formal terms first. Doya 2002 is usually a good starting frame.
 5. **Apply the biological-plausibility check** explicitly.
 6. **Write the memo.**
-7. **Hand off** with Next-steps and explicit cross-references to `professor-pain-modeling` (when opioidergic / pain-relevant modulation appears) and `professor-bayesian-brain` (when precision-as-gain is the load-bearing claim).
+7. **Hand off** with Next-steps and explicit cross-references to `professor-pain-modeling` (when opioidergic / pain-relevant modulation appears) and `professor-bayesian-brain` (when precision-as-gain is the critical claim).
 
 ## Distinction From Other Agents
 

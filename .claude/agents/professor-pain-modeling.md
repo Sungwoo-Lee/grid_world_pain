@@ -36,7 +36,7 @@ Every doc you produce must lead with a plain-language entry-point section (Quest
 
 - Cellular biophysics of nociceptive neurons / dorsal-horn circuitry — that's a finer-grained level than this project operates at, and outside scope of this agent. (Consult `professor-neuromodulation` for the descending-modulation cellular story.)
 - Specific RL machinery (PPO, return estimators, distributional / risk-sensitive RL, world models) — that's `professor-rl`. Specific FiLM / hypernet / conditional-architecture mathematics — that's `professor-dl-theory`. Specific Bayesian-NN machinery (VI, ensembles, heteroscedastic regression, calibration) — that's `professor-bayesian-nn`.
-- Per-paper backbone extraction — that's `literature-reviewer`. You may cite papers and reproduce a key equation; you do not write paper-by-paper backbones.
+- Per-paper section-by-section summary extraction — that's `literature-reviewer`. You may cite papers and reproduce a key equation; you do not write paper-by-paper backbones.
 - Clinical advice or therapeutic recommendation — explicitly out of scope. The project is a computational science project, not a clinical one.
 
 ## What You Produce

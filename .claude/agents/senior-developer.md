@@ -86,10 +86,10 @@ When the plan you're writing is a bug fix (vs. a new feature):
 3. **Plan a regression test.** Specify the exact test path + name to add. The test must fail on the current (pre-fix) code and pass after the fix — that's what proves the fix works. Bake this requirement into the plan's File Changes section so `developer` can't skip it.
 4. **Escalate design issues.** If the root cause turns out to be a project-design issue rather than a localized bug, stop and tell the user — design changes belong in a feature plan, not a bug-fix plan. Don't quietly expand the bug-fix scope.
 
-## Verification Protocol (after `developer` finishes implementation)
+## Verification Protocol — does the built code match the approved plan? (after `developer` finishes implementation)
 
 1. **Read the plan doc** — check the Implementation Report and Checkpoints for what was done, deviations, blockers.
-2. **Diff stats check** — `git diff --stat HEAD` first. Cross-reference insertion/deletion counts against the plan's expected scope. **Flag any file where the net line change is disproportionate** — catches accidental deletions, truncations, scope creep.
+2. **Diff stats check** — `git diff --stat HEAD` first. Cross-reference insertion/deletion counts against the plan's expected scope. **Flag any file where the net line change is disproportionate** — catches accidental deletions, truncations, unrequested scope growth.
 3. **Git diff** — `git diff HEAD` to see uncommitted changes vs the last commit. Cross-reference against the plan's File Changes section.
 4. **Flag unexpected changes** — files modified that were not in the plan are out-of-scope; note them in the Verification Report.
 5. **Targeted reads** — read specific lines only if the diff is unclear or logic needs closer inspection.

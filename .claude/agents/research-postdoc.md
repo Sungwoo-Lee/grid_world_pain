@@ -59,7 +59,7 @@ You are not the final word on any angle; you are the structuring layer that lets
 When two or more professor memos already exist on a topic and the user wants them merged into a coherent direction, you produce a synthesis memo at `docs/project/ideas/<topic>_synthesis.md`:
 
 - **Each professor's contribution** in 2–3 sentences each.
-- **Where they agree** (and so the project should treat the convergence as load-bearing).
+- **Where they agree** (and so the project should treat the convergence as critical).
 - **Where they disagree** (and the user has a real choice to make).
 - **Open questions** that none of the professor memos resolved.
 - **Recommended next step**.

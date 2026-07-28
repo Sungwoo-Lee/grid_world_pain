@@ -19,7 +19,7 @@ Every doc you produce must lead with a plain-language entry-point section (Quest
 
 ## Two Analysis Modes
 
-### Mode A — Fill in a pre-registered design doc
+### Mode A (planned) — Fill in a design doc written before the runs
 
 Triggered when an `experiment-designer` doc exists at `docs/experiments/active/<topic>/<EXP_NAME>.md` with empty Results / Analysis / Conclusions sections, and the user returns to interpret the runs.
 
@@ -31,7 +31,7 @@ Triggered when an `experiment-designer` doc exists at `docs/experiments/active/<
 6. **Fill in Conclusions**: did the design's hypothesis hold? If yes, with what effect size and seed stability? If no, was it the architecture, the run, or the design? Reference the failure-mode catalog explicitly.
 7. **Bump frontmatter** `last_updated` to today. **Do not edit the Launch Manifest** — its planned columns belong to `experiment-designer`, the actual columns belong to `training-runner`. You read it; you don't write to it.
 
-### Mode B — Post-hoc analysis with no pre-registered design
+### Mode B (retroactive) — Analyse runs that were never designed
 
 Triggered when the user attaches a screenshot or run IDs and asks a question, and there is no prior design doc.
 
@@ -45,8 +45,8 @@ Triggered when the user attaches a screenshot or run IDs and asks a question, an
 When given run IDs (typically `YYYYMMDD_HHMMSS`):
 
 1. **Extract run IDs**:
-   - **Mode A with a populated manifest**: pull WandB run IDs from the `## 3. Launch Manifest` table. The manifest's `WandB run ID` and `Log path` columns are authoritative.
-   - **Mode B or Mode A without a manifest**: extract run datetime IDs from the user's screenshot/message.
+   - **Mode A (planned) with a populated manifest**: pull WandB run IDs from the `## 3. Launch Manifest` table. The manifest's `WandB run ID` and `Log path` columns are authoritative.
+   - **Mode B (retroactive) or Mode A (planned) without a manifest**: extract run datetime IDs from the user's screenshot/message.
 2. **Locate local WandB logs** in `wandb/run-YYYYMMDD_HHMMSS-<wandb_id>/`. **Do NOT query the WandB web API** — local files only. Project convention.
 3. **Invoke the `wandb-analysis` skill** to parse logs.
 4. **Save intermediate extractions** to `tmp/YYYYMMDD_HHMMSS_<topic>.md` after each step (Working File Convention). Multiple analyses may run in parallel — each gets its own timestamped file.
@@ -64,7 +64,7 @@ WandB metrics answer "what do the summary numbers say"; they do NOT answer "what
 
 - **Analysis docs** under `docs/experiments/active/<topic>/<NAME>.md` per the [experiments Frontmatter Contract](../../docs/experiments/meta/FRONTMATTER_CONTRACT.md).
 - **Required frontmatter**: `title`, `topic`, `status: active`, `created`, `last_updated`. Optional: `phase`, `wandb_tag` (the runs' tag pattern), `develop_link` (if tied to a develop-side spec), `supersedes` / `superseded_by`.
-- **Template**: [docs/TEMPLATES/training_analysis.md](../../docs/TEMPLATES/training_analysis.md) — hypothesis-driven structure (research question → design → predicted outcomes → results → analysis → conclusions). Mode A fills the back half; Mode B fills the entire doc with a retroactive frame.
+- **Template**: [docs/TEMPLATES/training_analysis.md](../../docs/TEMPLATES/training_analysis.md) — hypothesis-driven structure (research question → design → predicted outcomes → results → analysis → conclusions). Mode A (planned) fills the back half; Mode B (retroactive) fills the entire doc with a retroactive frame.
 - **Working files** in `tmp/YYYYMMDD_HHMMSS_<topic>.md`, written after each extraction step.
 - **No INDEX script** — `docs/experiments/` is not auto-indexed (yet). Do NOT run `scripts/claude/regen_dev_index.py`.
 
@@ -85,15 +85,15 @@ The user reads this section. If accepted, the user invokes `feature-workflow` (`
 
 - If the analysis surfaces a **bug** or unexpected behavior in the codebase, add a `## Related Issues` link to a separate `bug-fix-workflow` plan under `docs/develop/active/<topic>/`. Cross-reference both directions.
 - If the analysis surfaces a **needed code change** beyond logging (new feature, refactor), the user invokes `feature-workflow`. Note it in `## Related Issues`.
-- If the analysis is paired with an `experiment-designer` design doc (Mode A), they share the same file — no cross-link needed; you fill in the bottom half of the doc the designer wrote.
-- If you write a fresh post-hoc doc (Mode B) that should later be re-run as a pre-registered experiment, add a TODO to the doc and surface it to the user.
+- If the analysis is paired with an `experiment-designer` design doc (Mode A (planned)), they share the same file — no cross-link needed; you fill in the bottom half of the doc the designer wrote.
+- If you write a fresh post-hoc doc (Mode B (retroactive)) that should later be re-run as a pre-registered experiment, add a TODO to the doc and surface it to the user.
 
 ## Common Mistakes to Avoid
 
 - **Querying the WandB web API**. Local `wandb/run-*/` files only.
 - **Reporting only end-of-training metrics**. Temporal evolution is mandatory.
 - **Cumulative reward as headline**. This project uses survival steps. Reward is at best a secondary diagnostic.
-- **Writing the Results before approving the design** (Mode A only) — that is the kind of motivated reasoning the hypothesis-driven template exists to prevent.
+- **Writing the Results before approving the design** (Mode A (planned) only) — that is the kind of motivated reasoning the hypothesis-driven template exists to prevent.
 - **Holding all 32 runs' metrics in conversation context** — use `tmp/` working files.
 - **Implicit confirmation bias**: if your prose hedges around "the trend suggests X," check the per-seed values. A 3/5-seed signal with high variance is not a confirmation.
 - **Out-of-scope edits**: never patch `src/` to "add the missing metric" yourself. Use the Metrics Requested channel.

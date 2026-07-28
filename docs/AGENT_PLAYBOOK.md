@@ -17,7 +17,7 @@ Keep this doc small. Anything agent-specific belongs in the agent's profile. Onl
         ↓
 senior-developer (plan, docs/develop/)
         ↓
-plan-reviewer   (pre-mortem on the plan)      ← User approves plan (Critical findings resolved first)
+plan-reviewer   (advance failure check on the plan)      ← User approves plan (Critical findings resolved first)
         ↓
 developer       (implement, dirty tree)
         ↓
@@ -37,7 +37,7 @@ Plan-first is non-negotiable: the user approves the *plan* before any code chang
 ```
 senior-developer (root cause + fix plan)
         ↓
-plan-reviewer   (pre-mortem on the fix plan)  ← User approves diagnosis + fix
+plan-reviewer   (advance failure check on the fix plan)  ← User approves diagnosis + fix
         ↓
 developer       (regression test FIRST → fix → confirm test passes)
         ↓
@@ -54,7 +54,7 @@ experiment-designer (design doc + configs + LAUNCH MANIFEST §3)
                       Tag, wandb-name, wandb-group, wandb-job-type, Seed
                     Plus §3.1 mapping each row to env+agent config YAMLs.
         ↓
-plan-reviewer       (pre-mortem on the design: controls, seeds / statistical power,
+plan-reviewer       (advance failure check on the design: controls, seeds / statistical power,
                      confounds, pre-registered refutation criteria, GPU feasibility,
                      budget wiring)
         ↓
@@ -76,7 +76,7 @@ training-runner     (one spawn per manifest row)
         ↓
 USER waits for training (and updates Status=completed/failed/cancelled per row)
         ↓
-experiment-analyzer (Mode A; reads manifest as authoritative run inventory;
+experiment-analyzer (Mode A (planned); reads manifest as authoritative run inventory;
                      fills Results / Analysis / Conclusions of the same doc)
         ↓
 plan-reviewer       (empirical-claim pass: does the evidence support the verdict?
@@ -89,7 +89,7 @@ pi                  (post-comparison: deepen / pivot / shelve?
                     Required after any multi-run comparison; user decides next move.
 ```
 
-The Launch Manifest is the **system-of-record** binding experimental cells to WandB folders. Three agents share it with **strict column ownership**:
+The Launch Manifest is the **authoritative record** binding experimental cells to WandB folders. Three agents share it with **strict column ownership**:
 
 | Agent | Reads | Writes |
 |---|---|---|
@@ -106,9 +106,9 @@ If an experiment-analyzer or experiment-designer adds a `## Metrics Requested` s
 ### Analyzing existing runs (no prior design)
 
 ```
-experiment-analyzer (Mode B — retroactive hypothesis frame, full doc to docs/experiments/)
+experiment-analyzer (Mode B (retroactive) — retroactive hypothesis frame, full doc to docs/experiments/)
         ↓
-plan-reviewer       (empirical-claim pass — Mode B verdicts carry no pre-registration,
+plan-reviewer       (empirical-claim pass — Mode B (retroactive) verdicts carry no pre-registration,
                      so the inference audit matters more here, not less)
         ↓
 pi                  (only if the analysis spans 3+ runs or changes a track-level
@@ -140,11 +140,11 @@ The PI is the gate between researcher-generated direction memos and downstream c
 | 20–40 papers | 4–5 parallel. |
 | 40+ papers | 5–6 parallel (cap). |
 
-Sharding rules for the parallel case:
-- Shard by file count, not topic. K = ceil(N / 5), capped at 6.
-- Each reviewer writes to its own `tmp/lit_review_shard_<i>.md`.
-- After all shards complete, merge into `docs/project/references/<topic>/<topic>_lit_review.md`. Each topic folder follows a fixed layout: review docs at the topic root, raw source PDFs/.txt extracts inside a `sources/` subfolder (`docs/project/references/<topic>/sources/*.pdf`). `<topic>` is the exact name of the source-PDF subfolder under `docs/project/references/`. Dedupe at merge (a paper may have ended up in two shards).
-- Per-paper processing inside each shard stays sequential — the 4-step backbone needs focused attention per paper.
+Batching rules for the parallel case:
+- Batch by file count, not topic. K = ceil(N / 5), capped at 6.
+- Each reviewer writes to its own `tmp/lit_review_batch_<i>.md`.
+- After all batches complete, merge into `docs/project/references/<topic>/<topic>_lit_review.md`. Each topic folder follows a fixed layout: review docs at the topic root, raw source PDFs/.txt extracts inside a `sources/` subfolder (`docs/project/references/<topic>/sources/*.pdf`). `<topic>` is the exact name of the source-PDF subfolder under `docs/project/references/`. Dedupe at merge (a paper may have ended up in two batches).
+- Per-paper processing inside each batch stays sequential — the 4-step section-by-section summary needs focused attention per paper.
 - For thematic regrouping after the merge, hand off to `literature-curator`.
 
 ## Cross-Cutting Constraints
@@ -158,7 +158,7 @@ These apply across multiple flows. The `agent-manager` flags them as preconditio
 - **Temporal evolution mandatory** in any training analysis — not just end-of-training snapshots.
 - **No fallback defaults** for critical config params — `config.get_mandatory()` everywhere, missing key → `ValueError`. Plans list new keys explicitly.
 - **Frontmatter contracts**: develop tree is auto-INDEX'd via `scripts/claude/regen_dev_index.py`; experiments tree is by-convention only (no INDEX). Don't run `regen_dev_index.py` for `docs/experiments/`.
-- **Soft-split rule**: pre-existing experiment-shaped docs under `docs/develop/active/{hypervigilance,noise,diagnosis}/` are NOT migrated retroactively. Read as reference, write new docs to `docs/experiments/active/<topic>/`.
+- **No-retroactive-move rule**: pre-existing experiment-shaped docs under `docs/develop/active/{hypervigilance,noise,diagnosis}/` are NOT migrated retroactively. Read as reference, write new docs to `docs/experiments/active/<topic>/`.
 - **Dirty working tree for verification.** `developer` does NOT commit; `senior-developer` reads the uncommitted diff. Once committed, the verification signal is lost.
 
 ## Reviewer Coverage & Overlap
@@ -179,7 +179,7 @@ Their checklists overlap on purpose — `get_mandatory` discipline, static-field
 
 The `agent-manager` flags these in its routing plan; the parent (or any directly-invoking agent) pushes back on them before spawning sub-agents:
 
-- **"Analysis but no design exists"** — user asks for analysis of pre-registered hypothesis but there's no design doc. Push back: do you want Mode B post-hoc (weaker), or should we design first?
+- **"Analysis but no design exists"** — user asks for analysis of pre-registered hypothesis but there's no design doc. Push back: do you want Mode B (retroactive) post-hoc (weaker), or should we design first?
 - **"Bug fix but the plan rewrites the design"** — root cause is a project-design issue, not a localized bug. Escalate to feature flow.
 - **"Skip user approval because the plan looks obvious"** — there is no such thing as an obviously correct plan. Always pause at user-approval gates.
 - **"Skip the PI on a multi-week / multi-paper-shaped commitment"** — the PI's whole purpose is the focus-vs-explore call at portfolio scope. A roadmap-level plan or a multi-run experiment series that goes straight from `experiment-designer` to `training-runner` without a PI call is a missed opportunity to ask "is this the right thing to spend GPU-weeks on?". Conversely, **invoking `pi` for a one-line config tweak or a routine bug fix** is also wrong — the PI declines and tells the user.

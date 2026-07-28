@@ -78,7 +78,7 @@ Recommend **parallel** spawns when:
 
 Recommend **sequential** when:
 - Plan → implement → verify (hand-off chain).
-- Per-paper analysis inside a literature-review shard.
+- Per-paper analysis inside a literature-review batch.
 - Anything where one agent's output is the next's input.
 
 When in doubt, default to sequential and recommend the parent ask the user before parallelizing — parallel agent runs are real cost.
@@ -100,7 +100,7 @@ Pick by the object that actually exists at that moment:
 Ordering rules:
 
 1. **Upstream gates first.** A finding is cheapest to fix in the plan, dearer in the config, dearest in the code. Sequence `plan-reviewer` → `env-config-reviewer` → `code-reviewer` when a job passes through all three stages.
-2. **Route the analysis gate.** After `experiment-analyzer` produces a verdict — Mode A or Mode B — sequence `plan-reviewer` before `pi`. A wrong plan costs a rerun; a wrong verdict becomes a paper claim, and `pi` asks whether to continue, not whether the inference holds.
+2. **Route the analysis gate.** After `experiment-analyzer` produces a verdict — Mode A (planned) or Mode B (retroactive) — sequence `plan-reviewer` before `pi`. A wrong plan costs a rerun; a wrong verdict becomes a paper claim, and `pi` asks whether to continue, not whether the inference holds.
 3. **Only spawn a reviewer whose object exists.** Do not route `code-reviewer` at plan time or `plan-reviewer` at post-implementation time. If nothing math-shaped appears in the work, omit `math-reviewer` — do not spawn all four by reflex.
 4. **Parallelize same-stage reviewers.** `code-reviewer` + `math-reviewer` on one diff, or `plan-reviewer` + `math-reviewer` on an equation-bearing plan, are independent and should run concurrently.
 5. **Duplicate findings are a signal, not waste.** Tell the parent that two reviewers agreeing raises confidence; where they *disagree* on a verdict, the parent surfaces both to the user rather than arbitrating.
@@ -110,8 +110,8 @@ Ordering rules:
 
 - **"Add a new sensor for X"** → plan: `senior-developer` (plan) → user-approval gate → `developer` (implement) → `senior-developer` (verify) + `env-config-reviewer` parallel (env touched). (No PI: this is a bounded feature add, not roadmap-level.)
 - **"Training is NaN-ing on noise > 0.5"** → plan: `senior-developer` (root cause + fix plan; reproduce first) → user-approval gate → `developer` (regression test → fix) → `senior-developer` (verify). (No PI: routine bug fix.)
-- **"Run an ablation over lambda_precision"** → plan: `experiment-designer` (design + configs + Launch Manifest) → `env-config-reviewer` (audit) → **`pi` (focus-vs-explore call before GPU commitment)** → user-approval gate + collect node/GPU → `training-runner` (one spawn per manifest row) → … → user returns with run IDs → `experiment-analyzer` (Mode A fill) → **`pi` (deepen / pivot / shelve call)**.
-- **"Compare these 4 runs"** (no prior design) → plan: `experiment-analyzer` (Mode B, retroactive frame). (PI optional — only if 3+ runs and a track-level question is at stake.)
+- **"Run an ablation over lambda_precision"** → plan: `experiment-designer` (design + configs + Launch Manifest) → `env-config-reviewer` (audit) → **`pi` (focus-vs-explore call before GPU commitment)** → user-approval gate + collect node/GPU → `training-runner` (one spawn per manifest row) → … → user returns with run IDs → `experiment-analyzer` (Mode A (planned) fill) → **`pi` (deepen / pivot / shelve call)**.
+- **"Compare these 4 runs"** (no prior design) → plan: `experiment-analyzer` (Mode B (retroactive), retroactive frame). (PI optional — only if 3+ runs and a track-level question is at stake.)
 - **"Review these 25 papers"** → plan: 4–5 parallel `literature-reviewer` instances per playbook K heuristic → merge step → optional `literature-curator` for synthesis. (No PI: extraction work; PI re-enters only if a curator synthesis surfaces a new track.)
 - **"Audit this config"** → single-agent task; recommend the parent spawn `env-config-reviewer` directly without going through you next time.
 - **"What's the next paper / are we exploring too much?"** → single-agent task; recommend the parent spawn `pi` directly with the latest analyses + portfolio as context.
