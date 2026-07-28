@@ -74,4 +74,5 @@ The Claude Code background-job isolation guard that blocks `Edit` / `Write` / `N
 - [[20260529_1826_lazy_import_schema_drift_first_call_crash]] (dreamer_diagnosis, 2026-05-29) — 4 dreamer-srl cells crashed at episode 10000 (first checkpoint) with AttributeEr
 - [[20260609_1724_verbatim_embed_fidelity_diff_check]] (subagent_engineering, 2026-06-09) — Parallel sub-agents transcribing source into docs silently corrupt non-ASCII and
 - [[20260726_0420_subagent_bg_job_orphan_idle_ping]] (subagent_engineering, 2026-07-26) — A sub-agent that launches a nohup/background driver and then returns leaves the 
+- [[20260728_1645_wiki_search_subagent_rejected_on_economics]] (subagent_engineering, 2026-07-28) — Considered and rejected a dedicated wiki-search sub-agent that would answer topi
 <!-- END BACKLINKS -->

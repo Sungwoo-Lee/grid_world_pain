@@ -3,7 +3,7 @@
 > Check this file before inventing a new tag. If a suitable tag already exists, use it exactly as written.
 > Tag drift leads to missed recall — use the canonical form.
 
-**Last updated**: 2026-07-26
+**Last updated**: 2026-07-28
 
 ---
 
@@ -57,6 +57,7 @@ These are not yet active — they become active when first used in an insight. R
 ---
 
 ## Change history
+- 2026-07-28: 5 insights from the agent-team maintenance session (4 subagent_engineering: 1643/1644/1645/1647; 1 cluster_ops: 1646) reused existing tags `subagent`, `meta`, `decision`, `design`, `learned_lesson` — no new tags promoted.
 - 2026-07-26: 6 insights from the decay_power-drift + config-governance + results-refresh + dreamer-imagination session (3 config_system: 0415/0416/0419; 2 behavior_measures: 0417/0418; 1 subagent_engineering: 0420) reused existing tags `config`, `design`, `decision`, `meta`, `learned_lesson`, `dreamer`, `subagent` — no new tags promoted. Added `dreamer` to behavior_measures top-tags.
 - 2026-07-23: 4 insights from the Fable-5 re-diagnosis + sheeprl parity + NNX archival + live-path inspection session (`20260723_1909_nnx_abandoned_archived_stack_confusion`, `20260723_1910_sheeprl_parity_drift_lives_in_glue`, `20260723_1912_fresh_empirical_reaudit_finds_new_bug_class` into dreamer_diagnosis; `20260723_1911_rppo_nmn_config_boundary_traps` into nmn_diagnosis) reused existing tags `dreamer`, `decision`, `learned_lesson`, `meta`, `refutation`, `nmn`, `film`, `config`, `subagent` — no new tags promoted.
 - 2026-07-21: 4 insights from the eval-speed + batched-Dreamer + size-sweep session (`20260721_0421_eval_sweep_cpu_bound_not_nas` cluster_ops; `20260721_0422_batched_dreamer_eval_rng_and_unify` dreamer_diagnosis; `20260721_0423_batched_eval_layout_and_npar`, `20260721_0424_dreamer_low_dwell_real_trajectory_verified` behavior_measures) reused existing tags `training_runner`, `learned_lesson`, `meta`, `decision`, `dreamer`, `design`, `refutation` — no new tags promoted.
