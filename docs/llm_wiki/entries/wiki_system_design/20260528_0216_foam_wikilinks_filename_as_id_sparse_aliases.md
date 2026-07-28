@@ -60,4 +60,5 @@ Cross-doc references across the EPISODE project (everywhere except `docs/llm_wik
 ## Backlinks
 - [[20260528_0215_foam_excludes_required_not_search_exclude]] (cluster_ops, 2026-05-28) — Foam doesn't honor VSCode's search.exclude; needs its own foam.files.ignore. Add
 - [[20260528_0217_episode_direction_4x3_framework_two_papers]] (nmn_diagnosis, 2026-05-28) — project_plan.md rewritten from 760-line Nature MI staged plan to 138-line stable
+- [[20260728_1642_llm_wiki_rename_ends_memory_collision]] (wiki_system_design, 2026-07-28) — The project's in-repo session-insight layer and Claude Code's built-in auto-memo
 <!-- END BACKLINKS -->

@@ -44,4 +44,5 @@ train.py:369-373 loads the `--config` file with `Config.load_yaml` (= yaml.safe_
 - [[20260703_1508_eval_video_drops_true_obs_no_noise_contrast]] (env_entities, 2026-07-03) — The training-time VIDEO eval pass does not record the clean true_obs, so percept
 - [[20260704_2012_noise_matched_frozen_probe]] (behavior_measures, 2026-07-04) — A noise-trained agent must be probed with a config carrying its EXACT training p
 - [[20260726_0415_decay_power_silent_drift_reverted_1p0]] (config_system, 2026-07-26) — The olfactory distance-discounting exponent sensory.decay_power was silently fli
+- [[20260728_1643_bulk_rename_component_path_and_domain_term_traps]] (wiki_system_design, 2026-07-28) — Two traps in a repo-wide mechanical rename, both of which a naive sed would have
 <!-- END BACKLINKS -->

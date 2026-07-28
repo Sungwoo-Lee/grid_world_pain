@@ -62,4 +62,5 @@ Memory v2 separates knowledge into three surfaces with distinct lifetimes and up
 - [[20260516_1432_karpathy_graphify_adaptation_rationale]] (wiki_system_design, 2026-05-16) — Memory v2 borrowed wikilinks + backlinks + lint + contradiction-flag from Karpat
 - [[20260516_1433_graphifyy_integration_cheatsheet]] (cluster_ops, 2026-05-16) — To use Graphify in any project conda env: install `graphifyy` (double-y; single-
 - [[20260516_1435_worktree_baseref_and_propagation]] (subagent_engineering, 2026-05-16) — EnterWorktree defaults to branching from origin/<default-branch> (worktree.baseR
+- [[20260728_1644_wiki_pull_gate_widened_before_any_task]] (wiki_system_design, 2026-07-28) — The wiki is pull-only and was gated on 'when wiki work is requested', so it was 
 <!-- END BACKLINKS -->
