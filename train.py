@@ -1406,7 +1406,12 @@ def main():
         Shared by the two-level path (rolling window) and the legacy path
         (cleared-per-interval list) so key coverage can never diverge."""
         from src.utils.rolling_logging import spread
-        ep_log = {"Episode/Number": total_eps, **_stage_tag()}
+        # _window_n: sample count behind this row. RollingWindow emits PARTIAL
+        # windows on the interval (2026-07-28 curriculum-audit fix), so this
+        # makes a 300-sample mean distinguishable from a 5000-sample one.
+        ep_log = {"Episode/Number": total_eps,
+                  "Episode/_window_n": len(eps),
+                  **_stage_tag()}
         # Spread on the two headline metrics: a mean survival of 133 that is secretly
         # bimodal (~400 no-predator vs ~20 with-predator) looks fine while hiding a
         # mixture — the std exposes it. (Reward_Min/Max already existed; keep names.)

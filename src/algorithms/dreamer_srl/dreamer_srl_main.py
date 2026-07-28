@@ -1123,7 +1123,12 @@ def main() -> None:
         already documents.
         """
         from src.utils.rolling_logging import spread
-        ep_log = {"Episode/Number": total_eps}
+        # _window_n: sample count behind this row. RollingWindow now emits
+        # PARTIAL windows on the interval (2026-07-28 curriculum-audit fix —
+        # short curriculum stages previously produced ZERO episode rows), so
+        # this makes a 300-sample mean distinguishable from a 5000-sample one.
+        ep_log = {"Episode/Number": total_eps,
+                  "Episode/_window_n": len(eps)}
         spread([ep['r'] for ep in eps], "Episode/Reward", ep_log)
         spread([ep['l'] for ep in eps], "Episode/Steps",  ep_log)
 
@@ -1373,6 +1378,85 @@ def main() -> None:
               f"(iter={iter_num:,}, policy_step={policy_step:,}, "
               f"grad_steps={cumulative_grad_steps:,}). Refilling buffer for "
               f"{refill_iters} iterations before gradients resume.", flush=True)
+
+    # -----------------------------------------------------------------------
+    # 12c. Curriculum resume: rebuild the env for the restored stage.
+    #      Port of train.py:1368-1392 (rPPO H2 fix, diag_fable5_20260704/01
+    #      Finding 2). The env at section 4 was built from STAGE 0 before the
+    #      restore, and restoring current_stage makes the in-loop transition
+    #      check (`_new_stage != current_stage`) compare equal — so without
+    #      this block a stage-N resume trains stage-N counters on a stage-0
+    #      world, silently. Derive the stage from the schedule (trusted over
+    #      the checkpoint's 'stage' field), then rebuild UNCONDITIONALLY
+    #      (idempotent for stage 0; resume is rare).
+    #      Step numbering mirrors the in-loop stage-transition block below
+    #      (the authoritative env-swap pattern). Steps 3 (replay-buffer clear)
+    #      and 4 (episode-accumulator wipe) are deliberately OMITTED: on a
+    #      fresh process the buffer is already empty (and the refill gate
+    #      `train_start_iter` above must not be disturbed) and the episode
+    #      accumulators are all zero.
+    # -----------------------------------------------------------------------
+    if args.load_checkpoint and schedule is not None:
+        _resumed_stage = schedule.stage_for_episode(total_episodes_completed)
+        if _resumed_stage != current_stage and not args.quiet:
+            print(f"[RESUME] Checkpoint 'stage' field ({current_stage}) != "
+                  f"schedule-derived stage ({_resumed_stage}) for "
+                  f"ep={total_episodes_completed}; trusting the schedule.")
+        current_stage = _resumed_stage
+
+        # 1. Rebuild env + full reset (env_params reassigned — the in-loop
+        #    autoreset path reads it).
+        env_params = load_env_params(schedule.stage_configs[current_stage])
+        env = ParallelEnv(env_params)
+        key, _k_resume_reset = jax.random.split(key)
+        states, _resume_obs_jax = env.reset(_k_resume_reset, num_envs)
+        obs = np.asarray(_resume_obs_jax)
+
+        # Re-sync the staged step_data row to the resumed stage — mirrors the
+        # in-loop block's re-sync: step_data["obs"] is a NumPy view of the
+        # STAGE-0 probe obs, and buffer.add(step_data) runs at the top of the
+        # first iteration, so without this the first row of the (empty) buffer
+        # would pair the resumed stage's is_first=1 anchor with stage-0 obs.
+        step_data["obs"]        = obs[np.newaxis]                          # [1, B, obs_dim]
+        step_data["rewards"]    = np.zeros((1, num_envs, 1), dtype=np.float32)
+        step_data["terminated"] = np.zeros((1, num_envs, 1), dtype=np.float32)
+        step_data["truncated"]  = np.zeros((1, num_envs, 1), dtype=np.float32)
+
+        # 2. Fresh recurrent + posterior state (weights retained); every env
+        #    starts a new episode on the resumed stage's world.
+        player.init_states()
+        is_first[:] = 1.0
+        step_data["is_first"][:] = 1.0
+
+        # 5. Rebuild per-tag accumulators + BM state for the resumed stage's
+        #    tag roster (mirrors in-loop step 5) — these were sized from the
+        #    stage-0 roster at section 11, and _emit_episode_row reads
+        #    neutral_tags/predator_tags by name at call time.
+        neutral_tags  = tuple(env_params.neutral_tags)
+        predator_tags = tuple(env_params.predator_tags)
+        num_neutral_for_log  = len(neutral_tags)
+        num_predator_for_log = len(predator_tags)
+        episode_dist_per_neutral_sums  = np.zeros(
+            (num_envs, num_neutral_for_log),  dtype=np.float32
+        )
+        episode_dist_per_predator_sums = np.zeros(
+            (num_envs, num_predator_for_log), dtype=np.float32
+        )
+        if bm_enabled:
+            _bm_state = make_bm_state(
+                num_envs=num_envs,
+                num_predator_tags=num_predator_for_log,
+                num_neutral_tags=num_neutral_for_log,
+                bm_R=bm_R,
+                bm_K=bm_K,
+            )
+
+        # 6. Per-stage checkpoint cadence (mirrors in-loop step 6).
+        checkpoint_frequency_active = schedule.checkpoint_frequencies[current_stage]
+        if not args.quiet:
+            print(f"[RESUME] Stage {current_stage}:"
+                  f"{schedule.stage_names[current_stage]} environment rebuilt "
+                  f"at ep={total_episodes_completed}.", flush=True)
 
     from src.utils.rolling_logging import resolve_logging_cfg, RollingWindow
     # Two-level logging (docs/develop/active/refactors/TWO_LEVEL_LOGGING_REDESIGN.md).
