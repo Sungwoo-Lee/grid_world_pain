@@ -1454,6 +1454,9 @@ def main():
         rngs = nnx.Rngs(args.seed)
         world_model, actor, critic, target_critic = build_agent(
             obs_dim=obs_dim, action_dim=action_dim_d, cfg=dreamer_agent_cfg.to_dict(), rngs=rngs,
+            # D-018: required when the saved agent config sets
+            # algo.world_model.encoding_mode: hierarchical (optional kwarg; flat ignores it).
+            observation_breakdown=dreamer_envs[0]["obs_breakdown"],
         )
 
         # --- Restore checkpoint weights (topology-agnostic; see

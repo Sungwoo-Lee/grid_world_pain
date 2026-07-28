@@ -195,6 +195,8 @@ def main():
     rngs = nnx.Rngs(args.seed)
     world_model, actor, critic, target_critic = build_agent(
         obs_dim=obs_dim, action_dim=action_dim, cfg=agent_cfg.to_dict(), rngs=rngs,
+        # D-018: required for hierarchical checkpoints (optional kwarg; flat ignores it).
+        observation_breakdown=get_observation_breakdown(env_params),
     )
     print('[probe-eval] build_agent OK')
 

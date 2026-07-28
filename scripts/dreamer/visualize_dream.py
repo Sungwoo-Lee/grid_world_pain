@@ -801,6 +801,8 @@ def main(args):
         action_dim=action_dim,
         cfg=cfg_dict,
         rngs=rngs,
+        # D-018: required for hierarchical checkpoints (optional kwarg; flat ignores it).
+        observation_breakdown=breakdown,
     )
     print(f'[viz] Agent built successfully')
 
