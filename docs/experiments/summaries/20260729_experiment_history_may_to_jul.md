@@ -119,6 +119,15 @@ stakes and scarcity, but it stayed a clean null ("lethality masks gating"). **Cu
 honest measurement is event-level and post-contact; the injury-gated olfactory-noise route (basic06)
 is the untested next hypothesis for eliciting genuine hypervigilance.
 
+**Training runs** (WandB-matchable — `date-time_tag`, under `results/JAX_RecurrentPPO/`):
+- **SameProp R1 relog** — `20260507-223117_hypervigilance-sameprop-relog-seed42`, `20260507-223540_hypervigilance-sameprop-relog-seed43` (2 runs)
+- **SameProp R2 / R2.5** — `20260508-141800_hypervigilance-round2-C-seed42`, `20260508-142020_hypervigilance-round2-A1-seed43`; R2.5 `20260509-182529_hypervigilance-round25-C-seed42`, `20260509-182720_hypervigilance-round25-A1-seed43` (4 runs)
+- **SameProp R2.6 + relaunch** — `20260512-170112_hypervigilance-round26-C-seed44`, `20260512-170345_hypervigilance-round26-A1-seed45`, then `20260516-132103_hypervigilance-round26-C-seed44_relaunch`, `20260516-132144_hypervigilance-round26-A1-seed45_relaunch` (4 runs)
+- **SameProp R3 distributional** — `20260528-161849_hypervigilance-round3-distributional-seed46` (1 run)
+- **Predator-vs-rabbit control** — `20260609-191226_recurrent_ppo_08-singlePredRabbit_disengage_s42` (1 run)
+- **Hunger-gated hg01–hg10** — `20260619-024727_rppo_hg01_s0_sig0_s42` … (batch of ~11, 2026-06-19 02:47–02:56); dp1 re-run batch `20260620-175820_rppo_hg02_s0.05_sig0_dp1_s42` … +11 (2026-06-20 17:58–18:00, +`20260622-161510_rppo_hg01_s0_sig0_dp1_s42`)
+- **Scarcity** — `20260620-174058_rppo_hvs_scarce_s42`, `20260620-174136_rppo_hvs_abundant_s42` (2 runs)
+
 ### Thread 2 — NMN / FiLM neuromodulator architecture
 **Arc:** Does a FiLM "context" network beat a plain baseline? The **noise-heterogeneity sweep refuted
 it** (5–13 steps *worse*); the temp-clip rerun recovered most of the gap but never won on the
@@ -130,6 +139,15 @@ re-launched under corrected `decay_power` in late July. A recurring blocker: the
 vector is **never logged**, so the CKA/Mahalanobis "is the modulator actually engaging" pre-check
 remains un-computable. **Current state:** positive only in the continual regime; steady-state null;
 config-boundary traps (dead `lr_critic`, silent Multiplicative fallback) found in the July audit.
+
+**Training runs** (WandB-matchable — `date-time_tag`, under `results/JAX_RecurrentPPO/`):
+- **Noise-heterogeneity sweep** — `20260507-232114_rppo_nmn_het_p2_unmod_c3` … (batch of 10 cells, 2026-05-07 23:21 + 2026-05-08 01:34)
+- **Temp-clip ceiling rerun** — `20260508-203444_rppo_nmn_tempceil10_p3_film_g1_s0` … (5 cells, 2026-05-08 20:34–20:45)
+- **Continual double-return (the FiLM win)** — R2 sister pair `20260511-174837_rppo_nmn_cont_dr_mod_s0_r2`, `20260511-175432_rppo_nmn_cont_dr_unmod_s0_r2` (original R1 pair `20260509-182723_rppo_nmn_cont_dr_mod_s0`, `20260509-183021_rppo_nmn_cont_dr_unmod_s0`)
+- **Meta specialist ceilings** — `20260509-183355_rppo_nmn_meta_spec_active_matched_s0` … (6 worlds, 2026-05-09 18:33–18:48)
+- **FiLM grouping screen (g1–g128)** — `20260627-015101_rppo_nmn_film_g1_screen_s42` … (24 dirs across the screen + `curric_longL4` batches, 2026-06-27)
+- **NMN vs plain long level-4** — `20260624-043011_rppo_nmn_film_curric_longL4_n114` vs plain `20260623-220259_rppo_basic_curriculum_longL4` (2 runs)
+- **Plain-vs-NMN dp1 ladder** — NMN arms `20260726-053813_rppo_nmn_g32_b01_mc_dp1_n108`, `20260726-053840_rppo_nmn_g32_b02_mc_dp1_n108`, `20260726-051332_rppo_nmn_g32_b03_mc_dp1_n113`, `20260726-051402_rppo_nmn_g32_b04_mc_dp1_n113` (4 runs; pre-dp1 batch `20260723-210710_rppo_nmn_g32_b03_mc_n112` … discarded)
 
 ### Thread 3 — In-house DreamerV3 (`dreamer_srl`) vs recurrent-PPO
 **Arc:** The longest thread. May's diagnosis localised collapse to the **world-model reward head**; a
@@ -145,6 +163,18 @@ slower in wall-clock on an **oversized** network, and the likely remaining bottl
 two-hot bin resolution** (~52 survival-steps per bin). **Current state:** bins±6 and replay-ratio arms
 training to settle the causal question; hierarchical-encoder arms on top.
 
+**Training runs** (WandB-matchable — `date-time_tag`). *The early Dreamer diagnosis + fix-cascade + sheeprl-SPS runs live under `results/JAX_DreamerV3/` (the abandoned NNX stack); the rebuild lives under `results/JAX_DreamerSRL/`:*
+- **Conventional-fixes battery** (NNX stack) — `20260509-050606_dreamer_conv_NoPred_rr06_s0`, `20260509-050736_dreamer_conv_Pred_rr06_dp1_s0` (2 runs)
+- **Fix cascade Z1/Z2** (NNX stack) — `20260510-011255_dreamer_zinit_NoPred_rr06_s0`, `20260510-221153_dreamer_twohotrng_NoPred_rr06_s0` (2 runs)
+- **JAX-vs-sheeprl SPS comparison** (NNX stack) — `20260513-153429_jax_sheeprl_matched_n4_s0`, `20260513-155413_jax_sheeprl_matched_n16_s0` (2 runs)
+- **dreamer-srl v2 parity + hyperparameter search** — `20260526-010205_dreamer_srl_v2_postfix_XS_envs_16_ep10M_buf256k_s42` … (11 postfix dirs, 4 seeds, 2026-05-26→05-29)
+- **dsrl 3-stage size curriculum** — `20260610-003220_dreamer_srl_curric3_size_s42`; budget cells `20260611-145128_dreamer_srl_curric3_T1_s42` … `_T4_s42` (4 cells)
+- **dsrl basic ladder** — `20260620-164055_dsrl_basic00_static_n113` … (60 dirs across recompile-fix relaunches, 2026-06-20→06-30)
+- **dsrl replay-ratio + 128-env** — rr sweep `20260717-025141_dsrl_b04_M_rr0p0625` (+rr0p25/0p5/1p0), then `20260723-221645_dsrl_b04_M_128env_n114`, `20260725-015711_dsrl_b03_M_rr0p0625_128env`
+- **decay_power-1.0 2×2 size grid** — `20260726-042618_dsrl_b03_M_dp1`, `20260726-042620_dsrl_b03_XS_dp1`, `20260726-042624_dsrl_b04_M_dp1`, `20260726-042624_dsrl_b04_XS_dp1` (4 runs)
+- **Critic bins±6 arms** — `20260727-052352_dsrl_b03_XS_bins6_rr0p0625` (arm1), `20260727-052358_dsrl_b03_XS_bins6_rr0p25` (arm2)
+- **Hierarchical-encoder arms** (current tail) — `20260728-060740_dsrl_b03_XS_bins6_rr0p25_hier_heads`, `20260728-060745_dsrl_b03_XS_bins6_rr0p25_hier_mirror`, `20260728-193935_dsrl_curric123_hier_mirror` (3 runs)
+
 ### Thread 4 — Interoceptive behavior-measure & probe platform
 **Arc:** Grew out of the hypervigilance work when mean distances proved too blunt. The toolkit-v1
 (M1/M2/M5/M7 event measures) shipped in May and immediately paid off (event-level sameProp
@@ -156,6 +186,10 @@ live `Probe/*` behaviour curves to WandB at every checkpoint. **Current state:**
 project's main scientific instrument; the statistics tutorial warns against deterministic-probe
 significance inflation.
 
+**Training runs** (WandB-matchable — `date-time_tag`, under `results/JAX_RecurrentPPO/`): this is largely an *instrument* thread — the toolkit + probes run offline on frozen checkpoints drawn from Threads 1, 3 and 5 (see those blocks), so it owns few trainable runs of its own. The trainable capstone is **eval-during-training**:
+- **Probe-eval verification run** — `20260724-004100_rppo_b04_probeeval_128env_100M_n110` (first live `Probe/*` series in WandB, 2026-07-24)
+- **Config-layer `--eval-config` relaunch** — `20260725-003631_rppo_b04_experimenteval_128env_100M_n110` (clean-restructure relaunch, 2026-07-25)
+
 ### Thread 5 — Environment & curriculum engineering
 **Arc:** The v2.0 unified-animal refactor (late May) enabled per-episode distributional sampling; June
 added per-episode entity-count variance, per-episode predator params, the predator jump/pounce, and the
@@ -164,6 +198,14 @@ levels **over-train-collapse** to entropy≈0, and the **continual curriculum un
 (loss-of-plasticity, not budget). rPPO is recompile-immune to per-episode variance; Dreamer needed
 fixed-width masked resets. **Current state:** ladder + variants are the workhorse; the predator-count
 mixture is a known survival-metric confound awaiting a conditioned metric.
+
+**Training runs** (WandB-matchable — `date-time_tag`, under `results/JAX_RecurrentPPO/`; the Dreamer basic-ladder runs are in Thread 3's block):
+- **basic ladder from-scratch** — predator-named batch `20260619-004318_rppo_basic00_forage_n113` … +4; static/slow/fast/rabbit/farsight batch `20260619-172721_rppo_basic00_static_n113` … +4 (14 dirs total incl. relaunches)
+- **basic continual curriculum** — `20260620-164444_rppo_basic_curriculum_n106`, `20260622-170153_rppo_basic_curriculum_n106`, `20260623-220259_rppo_basic_curriculum_longL4` (3 runs)
+- **basic05/06/07 noise + jump ladder** — `20260627-014045_rppo_basic05_randinit_n112`, `20260702-004738_rppo_basic05v5_allnoise_n110`, `20260703-151938_rppo_basic06_noise_n110`, `20260703-025113_rppo_basic07_jump_n113` … (21 dirs, 2026-06-27→07-04)
+- **128-env relaunch** — 6-run ladder `20260708-193852_rppo_basic04_jump_128env_n106` … (2026-07-08), 100M variants `20260709-183655_rppo_basic04_jump_128env_100M_n106` … (25 dirs total)
+- **Model-size sweeps** — basic03 `20260713-184956_rppo_b03_sz128_n107` … +5 sizes (2026-07-13); basic04 `20260714-153648_rppo_b04_sz128_n107` … (17 dirs)
+- **basic04 difficulty variants + GAE** — `20260721-044210_rppo_b04v01_slowmove_128env_n111` … (9 variants, 2026-07-21); GAE arm `20260722-200143_rppo_b03_gae_128env_n106`, `20260722-200240_rppo_b04_gae_128env_n106`
 
 ### Thread 6 — Config-system correctness & cluster/agent tooling
 **Arc:** The v3.0 `extends:` layering overhaul (June) was elegant but hid a **severe latent bug** — the
@@ -176,6 +218,11 @@ registry + change-log guardrail wired into 5 agents. Two Fable "fresh-eyes" diag
 dependency map, heterogeneous-GPU tooling (`gpu-status`), and the run_command.py launch discipline.
 **Current state:** the governance scaffolding now exists precisely because these silent drifts each
 invalidated a batch of runs.
+
+**Training runs** (WandB-matchable — `date-time_tag`): this is a *platform-correctness* thread — its runs are the **clean relaunches** each fix forced (shared with Threads 2, 3 and 5). The corrected-`decay_power`-1.0 relaunch of 2026-07-26 is the concrete artifact:
+- **rPPO plain dp1 ladder** (`results/JAX_RecurrentPPO/`) — `20260726-053721_rppo_b01_mc_dp1_n107`, `20260726-053746_rppo_b02_mc_dp1_n107`, `20260726-051209_rppo_b03_mc_dp1_n110`, `20260726-051300_rppo_b04_mc_dp1_n110` (4 runs) + the 4 NMN dp1 arms (Thread 2)
+- **Dreamer dp1 2×2 grid** (`results/JAX_DreamerSRL/`) — the four `20260726-042618_dsrl_b03_M_dp1` … dirs (Thread 3)
+- The **`extends:` drop** and **128-env CLI shadow** bugs were found by auditing the basic05/06/07 + ladder6 + 128-env dirs listed in Thread 5 (those runs are the *evidence*, not new launches).
 
 ---
 
