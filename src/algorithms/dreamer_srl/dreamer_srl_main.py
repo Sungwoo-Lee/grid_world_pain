@@ -664,6 +664,44 @@ def main() -> None:
     viz_enabled           = env_cfg.get_mandatory('visualization.enabled')
     viz_fps               = env_cfg.get_mandatory('visualization.fps', int)
     auto_render           = env_cfg.get_mandatory('testing.auto_render_after_eval')
+
+    # ------------------------------------------------------------------
+    # Curriculum checkpoint-retention guard.
+    #
+    # The continual schedule owns checkpoint FREQUENCY (per stage); retention
+    # is a DIFFERENT config layer (training.max_checkpoints_to_keep, read just
+    # above). Nothing validates the combination, so a dense per-stage cadence
+    # plus a small retention cap forms a rolling window that silently deletes
+    # the STAGE-BOUNDARY checkpoints -- exactly the artifacts used to measure
+    # transfer, and unrecoverable once rotated out.
+    #
+    # Real incident (2026-07-28, dsrl_curric123_hier_mirror): keep=20 at a
+    # 1000-episode cadence == a 20,000-episode window, and stage 0 was exactly
+    # 20,000 episodes long, so its boundary checkpoint was destroyed at the
+    # moment stage 1 began. WandB curves were unaffected; the probe artifact
+    # was not. Hence this guard.
+    # ------------------------------------------------------------------
+    if schedule is not None:
+        _retain_window = max_checkpoints_keep * min(schedule.checkpoint_frequencies)
+        _total_eps = schedule.episode_boundaries[-1]
+        _doomed = [b for b in schedule.episode_boundaries[:-1]
+                   if (_total_eps - b) > _retain_window]
+        if _doomed:
+            print("=" * 72, flush=True)
+            print("[dreamer-srl] WARNING: curriculum stage-boundary checkpoints will "
+                  "be ROTATED AWAY.", flush=True)
+            print(f"  max_checkpoints_to_keep={max_checkpoints_keep} x min cadence "
+                  f"{min(schedule.checkpoint_frequencies)} = a {_retain_window:,}-episode "
+                  f"retention window,", flush=True)
+            print(f"  but the run spans {_total_eps:,} episodes. Boundaries that will NOT "
+                  f"survive: {[f'{b:,}' for b in _doomed]}.", flush=True)
+            print("  These are the artifacts that measure transfer, and they are "
+                  "unrecoverable once deleted.", flush=True)
+            print("  FIX: set training.max_checkpoints_to_keep: 1000000 (keep all) in the "
+                  "agent/env config.", flush=True)
+            print("  (WandB metrics are unaffected -- this costs only the ability to probe "
+                  "those checkpoints.)", flush=True)
+            print("=" * 72, flush=True)
     # Eval seed — the EXISTING evaluation-config key (configs/evaluation/default.yaml
     # `testing.seed`), the same one the standalone evaluator honours (evaluation.py:250).
     # Previously the checkpoint eval re-used args.seed (the TRAINING seed), which made
