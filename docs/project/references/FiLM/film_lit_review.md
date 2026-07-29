@@ -5,6 +5,7 @@ status: curated
 last_updated: 2026-05-16
 related:
   - film_synthesis.md
+  - film_modulation_granularity_synthesis.md
   - archive/film_conditional_modulation_review.md
 scope: |
   Master index over 23 per-paper reviews in `reviews/` covering the FiLM
@@ -172,3 +173,15 @@ disagreement axes, the open questions this corpus poses for the project —
 see [`film_synthesis.md`](film_synthesis.md). That document is the
 reader-facing thematic synthesis; this index is the navigational table of
 contents.
+
+## Companion synthesis — modulation granularity and placement
+
+For the specific architectural question *"how many distinct γ/β values does
+each paper use, and at which layers does it inject them?"* — answered across
+this corpus **plus** the 8-paper Hypernetwork corpus, with a verdict on where
+this project's neuromodulator sits — see
+[`film_modulation_granularity_synthesis.md`](film_modulation_granularity_synthesis.md).
+Headline: the field's convention is per-channel (= per-unit in a dense layer)
+γ/β at many layers, driven by one shared generator with a separate head per
+site; the project's *grouped* granularity has no precedent in either corpus and
+one precedent in the neuromodulation sister corpus.
