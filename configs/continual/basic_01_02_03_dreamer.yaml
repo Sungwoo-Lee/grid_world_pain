@@ -25,4 +25,11 @@ continual:
   # Per-stage checkpoint+video cadence (episodes). 1000 matches the sibling runs
   # so checkpoints are directly comparable; async render (default ON for Dreamer)
   # keeps the cadence cheap.
-  checkpoint_frequencies: [1000, 1000, 1000]
+  # PER-STAGE cadence: short early stages get a denser cadence so the boundary
+  # is well sampled; the unbounded final stage uses the standard 5000.
+  # Stage lengths are 20k / 60k / ~100M -> ~10 / ~12 / many checkpoints.
+  # NOTE: the schedule controls FREQUENCY only. Retention comes from
+  # training.max_checkpoints_to_keep (now 1000000 = keep all in
+  # configs/train/dreamer_srl.yaml) — a small cap here silently rotates away
+  # the stage-boundary checkpoints.
+  checkpoint_frequencies: [2000, 5000, 5000]

@@ -39,8 +39,20 @@ training:
   # is passed, which silently switches it to an env-step cap (that is what ended
   # dsrl_b04_M_128env_n114 at exactly 50M env-steps). Do NOT pass --total-steps.
   episodes: 100000000
-  checkpoint_frequency: 10000   # checkpoint + eval video every 10,000 episodes
-  max_checkpoints_to_keep: 20   # rotate; keep the 20 most recent
+  # Cadence chosen 2026-07-29 for the disk/resolution balance (measured: one
+  # checkpoint is 44-50 MB since D-017 added Adam optimizer state). At the
+  # ~2.8-6.9k episodes/h these runs sustain, 5000 gives ~1-1.5 GB/day/run and
+  # caps crash loss at well under an hour. 1000 was ~7 GB/day; 10000 lost curve
+  # resolution. Curriculum runs may override PER STAGE via the schedule's
+  # continual.checkpoint_frequencies (short early stages want a denser cadence).
+  checkpoint_frequency: 5000
+  # KEEP ALL. Rotation silently deletes the OLDEST checkpoints, which are the
+  # most informative (take-off) and, in curriculum runs, the stage-boundary
+  # artifacts used to measure transfer. A 20-deep cap at a 1000-episode cadence
+  # is only a 20,000-episode rolling window — it destroyed the stage-0 boundary
+  # of dsrl_curric123_hier_mirror. 1000000 (not null) because the dreamer driver
+  # reads this with get_mandatory, which rejects a declared null.
+  max_checkpoints_to_keep: 1000000
   # Async checkpoint-video render (src/utils/async_render.py; docs/develop/active/
   # refactors/ASYNC_CHECKPOINT_VIDEO_RENDER.md). true is the FIX for the measured
   # 10.7-44% wall-clock lost to blocking renders — the MP4 render becomes a
