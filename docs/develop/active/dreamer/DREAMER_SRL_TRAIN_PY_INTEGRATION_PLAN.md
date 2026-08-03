@@ -325,3 +325,17 @@ Grep confirms **no `.sh` file in the repo currently invokes `dreamer_srl_main.py
 ## Verification Report
 
 *(to be filled by `senior-developer` after each phase)*
+
+## Feedback from plan-reviewer (round 3 — rev-4 delta, 2026-08-03)
+
+Verdict: **NOT READY** — one 🔴 Critical in the new Gate 1c spec; full report in `docs/reviews/plan_dreamer_integration_rev4.md`.
+
+1. 🔴 **Gate 1c can pass vacuously.** The episode budget is *absolute* (`while total_episodes_completed < episodes`, dreamer_srl_main.py:1606) and §12b restores `total_episodes_completed = 20`; "resume at `--load-episode 20` for a further 20-episode budget" implemented as `--episodes 20` exits the loop instantly — empty telemetry on both sides satisfies every pass criterion, so the resume gate goes green having exercised neither the `train_start_iter` refill gate nor any resumed training. Fix: state the absolute-budget semantics, pin `--episodes 40`, and add a non-vacuity pass criterion (≥1 post-`train_start_iter` iteration with `last_losses` updated; non-empty arrays). This also makes an Adam-restore divergence observable (Adam state is never directly checksummed; it surfaces only through post-resume parameter updates).
+2. 🟡 Curriculum resume (§12c, :1437 — `schedule is not None`) never fires in any gate: Gate 1c is single-config, and the retargeted `test_continual_resume_rebuild.py` bypasses train.py's schedule+resume plumbing in combination. Recommend a cheap 1c variant on the 1b fixture resuming into stage 2 (`--load-episode 40 --episodes 60`, reusing the 1b run dir).
+3. 🟡 Live-run tension: Phase 1 rewrites `main()` in the very file a crash-relaunch of the live run would execute; no gate compares refactored-legacy vs pre-refactor legacy (Gate 1 compares two refactored sides). Either defer landing that file's edit, or state that crash-relaunch-on-refactored-code is accepted with Checkpoint 1 as the sole guard.
+4. 🟢 Stale anchors from accretion: R7 cites the wandb label lines as "829/865" (correct: :944/:980); Verification-checklist bullet 2 says "line 577 retained" (correct: :593).
+5. 🟢 Commit attribution: resume flags landed in `166f261` (e834ec1 added only §12c + RollingWindow); the `testing.seed` switch is `b228117`, not ad8929a. `10000af`/`0030c04` also touched the file in the window — verified no CLI-flag or below-seam `args.*` impact, so no spec change needed.
+
+Verified clean: every rev-4 renumbered anchor spot-checked against HEAD (all correct); the 4-site `args.seed` sweep confirmed exhaustive; config-freeze list complete for the plan's steps (fixtures under `tests/`, `extends:` parents untouched); Gate 1b fixture shape matches `fb54bc0`/`90cd4c0` on disk; C13↔C20↔spec↔shim mutually consistent. Exit condition: fix finding 1 → SOUND WITH CONCERNS.
+
+Reviewed by: plan-reviewer
