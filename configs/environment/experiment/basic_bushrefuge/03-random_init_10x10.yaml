@@ -1,0 +1,133 @@
+# ============================================================================
+# BUSH-REFUGE VARIANT of the basic ladder.
+# Identical to the sibling configs/environment/experiment/basic/<same name>.yaml
+# EXCEPT the bush obstacle carries `blocks_animals: true` — predators and the
+# wandering rabbit can no longer move INTO a bush cell, while the agent still
+# enters freely and is still concealed there (`hides_agent: true`).
+# The bush therefore becomes a physical refuge, not merely a detection-breaker.
+# Verified: resolving this file vs. its basic/ sibling differs in exactly one
+# key — environment.obstacles[0].blocks_animals.
+# Caveat (Phase 1, docs/develop/active/refactors/BUSH_BLOCKS_ANIMALS.md):
+# movement blocking only — animals may still SPAWN on a bush cell at reset,
+# and per-episode-inactive bushes stay transparent to animals.
+# ============================================================================
+# Basic curriculum — 03-random_init_10x10
+# "Proper random init" + ALL predator-pressure factors folded in (was random-init only; variant-04 merged 2026-07-02).
+#   - body start: random nutrition [0,100] + random injury [0,100] (hungry/injured starts visited)
+#   - scene counts redrawn each episode: predator 0-2, rabbit 0-2, hiding_predator 2-12,
+#     food 1-4, bush 4-10, rock 6-12  (count_high slots allocated, extras inactive off-grid)
+#   - full-grid spawn + random_start_pos (positions redrawn each episode)
+# Smell kept CLEAN (properties_std 0) — this stage tests scene/body-state generalisation,
+#   NOT olfactory ambiguity. obs_dim=27 / sensor fingerprint unchanged (count ranges &
+#   random init do not alter obs layout), so the continual dim/fingerprint guard still passes.
+# Sparse override of configs/environment/default.yaml (extends:); sensory/noise/behavior_measures inherited.
+extends: environment/default
+
+environment:
+  height: 10
+  width: 10
+  start_pos: [5, 5]
+  random_start_pos: true
+  location_areas:
+    - type: "grass"
+      area: [[1, 1], [10, 10]]
+    - type: "sand"
+      area: [[0, 0], [0, 0]]
+  resources:
+    - name: "food"
+      type: "food"
+      count_low: 1
+      count_high: 4
+      spawn_area: [[1, 1], [10, 10]]
+      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 1, 0, 0, 0, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      max_consumption: 12
+      regeneration_delay: 0
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+    - name: "hiding_predator"
+      type: "hiding_predator"
+      count_low: 2
+      count_high: 12     # ALL-COMBINED: more ambush predators, running is risky (was 4)
+      spawn_area: [[1, 1], [10, 10]]
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 1, 0, 0, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      max_consumption: -1
+      regeneration_delay: 20
+      damage: [15.0, 45.0]
+      nociception_intensity: 0.9
+  entities:
+    - class: "predator"
+      behaviour: "hunt"
+      tag: "pred"
+      count_low: 0
+      count_high: 2
+      properties: [0.0, 0.7, 0.5, 0.0, 0.0]
+      properties_std: [0.0, 0.3, 0.3, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 1, 0, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      move_interval: [1, 1]      # ALL-COMBINED: always full-speed (was [1,3])
+      damage: [15.0, 120.0]
+      attack_delay: [1, 3]        # per-episode range: attack windup
+      nociception_intensity: 0.9
+      spawn_area: [[1, 1], [10, 10]]
+      patrol_area: [[1, 1], [10, 10]]
+      detection_range: [1, 7]    # per-episode range: near(1) <-> far(7) threat sensing
+      max_stamina: [30, 150]             # ALL-COMBINED: relentless, can chase toward starvation (was [30,30])
+      stamina_recovery_rate: [1, 1]      # fixed (degenerate range form)
+      hunt_stamina_threshold: [0.7, 0.7] # fixed (degenerate range form)
+      lose_interest_multiplier: [1.5, 1.5] # fixed (degenerate range form)
+      attack_range: [0, 0]           # explicit: no jump/pounce at this level (policy: no implicit defaults)
+      attack_success_rate: 0.0       # explicit: no jump/pounce at this level (policy: no implicit defaults)
+    - class: "neutral"
+      behaviour: "wander"
+      tag: "rabbit"
+      count_low: 0
+      count_high: 2
+      properties: [0.0, 0.5, 0.7, 0.0, 0.0]
+      properties_std: [0.0, 0.3, 0.3, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 0, 0, 1]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      move_interval: [1, 1]              # fixed (degenerate range form)
+      damage: [0.0, 0.0]
+      attack_delay: [0, 0]               # fixed (degenerate range form)
+      nociception_intensity: 0.1
+      spawn_area: [[1, 1], [10, 10]]
+      patrol_area: [[1, 1], [10, 10]]
+  obstacles:
+    - name: "bush"
+      count_low: 4
+      count_high: 10
+      area: [[1, 1], [10, 10]]
+      blocking: false
+      hides_agent: true
+      blocks_animals: true  # BUSH-REFUGE VARIANT: animals cannot enter; agent still can
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+      properties: [0.0, 0.0, 0.0, 1.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 0, 1, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+    - name: "rock"
+      count_low: 6
+      count_high: 12
+      area: [[1, 1], [10, 10]]
+      blocking: false
+      damage: [1, 5]
+      nociception_intensity: 0.9
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 0, 1, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+
+body:
+  random_start_nutrition: true
+  start_nutrition_low: 0
+  start_nutrition_high: 100
+  random_start_injury: true
+  start_injury_low: 0
+  start_injury_high: 100

@@ -1,0 +1,76 @@
+# ============================================================================
+# BUSH-REFUGE VARIANT of the basic ladder.
+# Identical to the sibling configs/environment/experiment/basic/<same name>.yaml
+# EXCEPT the bush obstacle carries `blocks_animals: true` — predators and the
+# wandering rabbit can no longer move INTO a bush cell, while the agent still
+# enters freely and is still concealed there (`hides_agent: true`).
+# The bush therefore becomes a physical refuge, not merely a detection-breaker.
+# Verified: resolving this file vs. its basic/ sibling differs in exactly one
+# key — environment.obstacles[0].blocks_animals.
+# Caveat (Phase 1, docs/develop/active/refactors/BUSH_BLOCKS_ANIMALS.md):
+# movement blocking only — animals may still SPAWN on a bush cell at reset,
+# and per-episode-inactive bushes stay transparent to animals.
+# ============================================================================
+# Basic curriculum — 04-jump_attack_10x10
+# ---------------------------------------------------------------------------
+# PURPOSE (plain language): the JUMP level. It takes level 03 (random-init, all-combined
+# predator pressure) and ADDS the predator JUMP/POUNCE — but NO sensory noise yet (noise is
+# the next and hardest level, 05, which stacks on top of this one). Because a normal predator
+# moves only 1 cell/step, an agent could survive by just running around the map forever and
+# never need the bush. The jump breaks that: when a HUNTING predator is within attack_range of
+# an UN-hidden agent (and its cooldown is up), it pounces — teleporting onto the agent (a hit,
+# prob=attack_success_rate) or onto a random adjacent cell (a miss). So roaming near a predator
+# is now genuinely risky, and diving into a bush (which blocks the jump, same as it blocks
+# chase-detection) becomes the only reliable refuge.
+#
+# Limiters keep it survivable: attack_delay (inherited [1,3]) is the jump cooldown; the
+# success rate makes hits stochastic (a miss lands the predator beside the agent, giving a
+# chance to reach a bush).
+#
+# extends basic/03-random_init DIRECTLY (which extends default), so it inherits ALL of:
+#   all-combined predator pressure (hiding 2-12, max_stamina [30,150], move_interval [1,1]),
+#   random init (predator/rabbit 0-2, random start nutrition/injury, detection [1,7],
+#   attack_delay [1,3], damage [15,120]). NO perceptual noise in this chain (that arrives at 05).
+# It only REDECLARES `entities` to add the two new jump knobs to the predator (list-replace
+# footgun: the whole entities list must be restated). Rabbit unchanged.
+extends: environment/experiment/basic_bushrefuge/03-random_init_10x10
+
+environment:
+  entities:
+    - class: "predator"
+      behaviour: "hunt"
+      tag: "pred"
+      count_low: 0
+      count_high: 2
+      properties: [0.0, 0.7, 0.5, 0.0, 0.0]
+      properties_std: [0.0, 0.3, 0.3, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 1, 0, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      move_interval: [1, 1]
+      damage: [15.0, 120.0]
+      attack_delay: [1, 3]
+      nociception_intensity: 0.9
+      spawn_area: [[1, 1], [10, 10]]
+      patrol_area: [[1, 1], [10, 10]]
+      detection_range: [1, 7]
+      max_stamina: [30, 150]
+      stamina_recovery_rate: [1, 1]
+      hunt_stamina_threshold: [0.7, 0.7]
+      lose_interest_multiplier: [1.5, 1.5]
+      attack_range: [2, 3]           # NEW: per-episode pounce reach 2 OR 3 cells (inclusive-int sampling -> {2,3})
+      attack_success_rate: 0.5       # NEW: 50% of pounces hit; a miss lands the predator adjacent
+    - class: "neutral"
+      behaviour: "wander"
+      tag: "rabbit"
+      count_low: 0
+      count_high: 2
+      properties: [0.0, 0.5, 0.7, 0.0, 0.0]
+      properties_std: [0.0, 0.3, 0.3, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 0, 0, 1]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      move_interval: [1, 1]
+      damage: [0.0, 0.0]
+      attack_delay: [0, 0]
+      nociception_intensity: 0.1
+      spawn_area: [[1, 1], [10, 10]]
+      patrol_area: [[1, 1], [10, 10]]
