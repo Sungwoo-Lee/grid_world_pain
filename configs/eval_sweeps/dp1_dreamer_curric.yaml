@@ -1,0 +1,22 @@
+# Behavior-probe sweep for the FINISHED 3-stage curriculum Dreamer run
+# dsrl_curric123_hier_mirror (launched 2026-07-28, node 114; last ckpt 762000
+# on 2026-08-03). Curriculum: slow-pred 5x5 -> pred+rabbit 10x10 -> random-init
+# 10x10 (final). Hierarchical-mirror encoder, twohot +/-6, decay_power 1.0
+# (verified). Only the final-stage tail survived on disk (20 ckpts, 743k-762k) —
+# earlier-stage checkpoints were pruned. Same seed-0 / 12-condition pipeline as
+# the other dp1 arms -> directly comparable at matched ~760k episodes.
+#
+# Run: python scripts/eval/dwell_sweep/run_sweep.py configs/eval_sweeps/dp1_dreamer_curric.yaml
+# Node 114 only (per user); its NAS mount was remounted before this run.
+name: dp1_dreamer_curric
+algo: dreamer
+output_dir: results/eval/avoidance/dp1/dreamer_curric
+probe: clean
+conditions: all
+episodes: 30
+nodes: [114]
+npar: 5
+x_axis: episodes
+plot_measures: [bush_dwell, spatial_spread, survival_steps]
+runs:
+  - {label: curric123_hier_mirror, path: results/JAX_DreamerSRL/20260728-193935_dsrl_curric123_hier_mirror}
