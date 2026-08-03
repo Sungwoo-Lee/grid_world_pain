@@ -1794,10 +1794,89 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 #   --wandb-name rppo_nmn_g32_b01_mc_dp1_n108 --tag rppo_nmn_g32_b01_mc_dp1_n108
 #
 # Run 4: rppo_nmn_g32_b02_mc_dp1_n108 — LAUNCHED (node 108, cuda:1, PID 4009895)
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/02-predator_and_rabbit_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g32_screen.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:1 --log-interval 50 \
+#   --wandb-group rppo_baseline_dp1 --wandb-job-type prod \
+#   --wandb-name rppo_nmn_g32_b02_mc_dp1_n108 --tag rppo_nmn_g32_b02_mc_dp1_n108
+
+# ---------------------------------------------------------------------------
+# rppo_bushrefuge — 4-run bush-as-physical-refuge ladder — 2026-08-04
+# ---------------------------------------------------------------------------
+# WHAT THIS TESTS (plain language): the bush in this project has always concealed the
+# agent from predator detection, but predators could still walk THROUGH a bush cell.
+# The new configs/environment/experiment/basic_bushrefuge/ ladder (commit 76711de) is a
+# byte-for-byte sibling of configs/environment/experiment/basic/ with exactly ONE key
+# changed — the bush obstacle now carries `blocks_animals: true`, so predators and the
+# wandering rabbit cannot MOVE INTO a bush cell while the agent still enters freely and
+# stays concealed. The bush becomes a true physical refuge. Question: does that change
+# hiding behaviour?
+#
+# Plain rPPO (unmodulated, modulation.type: null), single-config from scratch
+# (standalone, NOT continual). Settings deliberately identical to the 2026-07-26
+# `rppo_baseline_dp1` batch so the two families are directly comparable:
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 --log-interval 50
+#   seed: config default 42 (NOT overridden on the CLI)
+#
+# NEW vs. the 2026-07-26 batch: --eval-config configs/evaluation/experiment_on.yaml
+#   turns on the during-training behaviour probe so Experiment/bush_dwell and
+#   Experiment/survival_steps plot live on WandB. A bush-refuge manipulation with no
+#   bush-dwell curve is not worth running, so this flag is mandatory on all four runs.
+#
+# Deviations flagged to the user pre-launch:
+#   - --checkpoint-frequency 100000 overrides the rPPO config-owned 200000
+#     (configs/train/recurrent_ppo.yaml) — intentional, for baseline comparability.
+#   - --num-envs 128 is redundant (config-owned value is already 128) but passed
+#     explicitly to mirror the baseline batch's command line exactly.
+#
+# Pre-flight: nodes 102 + 113 both NAS-mounted (71T free), JAX 0.9.0.1 GPU-compile
+# check passed on both, all four RTX 4090 GPUs idle. sensory.decay_power resolves to
+# 1.0 = registry canonical (docs/environment/CONFIG_CRITICAL_SETTINGS.md).
+# wandb-group: rppo_bushrefuge, job-type: prod
+# CIFS-bypass: launched via /tmp scripts — this file is the audit record.
+# ---------------------------------------------------------------------------
+# Run 1: rppo_bushrefuge_b01_n102 — node 102, cuda:0 — 5x5, slow predator (move_interval 3)
+# LAUNCHED 2026-08-04, PID 3514180, launcher log logs/20260804_040530.log
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic_bushrefuge/01-slow_predator_5x5.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --eval-config configs/evaluation/experiment_on.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:0 --log-interval 50 \
+#   --wandb-group rppo_bushrefuge --wandb-job-type prod \
+#   --wandb-name rppo_bushrefuge_b01_n102 --tag rppo_bushrefuge_b01_n102
+#
+# Run 2: rppo_bushrefuge_b02_n102 — node 102, cuda:1 — 10x10, fast predator + wandering rabbit
+# LAUNCHED 2026-08-04, PID 3514932, launcher log logs/20260804_040708.log
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic_bushrefuge/02-predator_and_rabbit_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --eval-config configs/evaluation/experiment_on.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:1 --log-interval 50 \
+#   --wandb-group rppo_bushrefuge --wandb-job-type prod \
+#   --wandb-name rppo_bushrefuge_b02_n102 --tag rppo_bushrefuge_b02_n102
+#
+# Run 3: rppo_bushrefuge_b03_n113 — node 113, cuda:0 — 10x10 random-init + all-combined pressure
+# LAUNCHED 2026-08-04, PID 1315, launcher log logs/20260804_040843.log
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic_bushrefuge/03-random_init_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --eval-config configs/evaluation/experiment_on.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:0 --log-interval 50 \
+#   --wandb-group rppo_bushrefuge --wandb-job-type prod \
+#   --wandb-name rppo_bushrefuge_b03_n113 --tag rppo_bushrefuge_b03_n113
+#
+# Run 4: rppo_bushrefuge_b04_n113 — node 113, cuda:1 — 10x10 jump/pounce (attack_range [2,3], 50% hit)
+# LAUNCHED 2026-08-04, PID 1692, launcher log logs/20260804_041012.log
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-  --config configs/environment/experiment/basic/02-predator_and_rabbit_10x10.yaml \
-  --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g32_screen.yaml \
+  --config configs/environment/experiment/basic_bushrefuge/04-jump_attack_10x10.yaml \
+  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+  --eval-config configs/evaluation/experiment_on.yaml \
   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
   --device cuda:1 --log-interval 50 \
-  --wandb-group rppo_baseline_dp1 --wandb-job-type prod \
-  --wandb-name rppo_nmn_g32_b02_mc_dp1_n108 --tag rppo_nmn_g32_b02_mc_dp1_n108
+  --wandb-group rppo_bushrefuge --wandb-job-type prod \
+  --wandb-name rppo_bushrefuge_b04_n113 --tag rppo_bushrefuge_b04_n113
