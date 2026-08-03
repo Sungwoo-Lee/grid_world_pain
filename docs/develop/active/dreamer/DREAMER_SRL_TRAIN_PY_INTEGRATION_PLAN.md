@@ -350,3 +350,17 @@ Verdict: **NOT READY** — one 🔴 Critical in the new Gate 1c spec; full repor
 Verified clean: every rev-4 renumbered anchor spot-checked against HEAD (all correct); the 4-site `args.seed` sweep confirmed exhaustive; config-freeze list complete for the plan's steps (fixtures under `tests/`, `extends:` parents untouched); Gate 1b fixture shape matches `fb54bc0`/`90cd4c0` on disk; C13↔C20↔spec↔shim mutually consistent. Exit condition: fix finding 1 → SOUND WITH CONCERNS.
 
 Reviewed by: plan-reviewer
+
+### Closure check on rev 5 (2026-08-04, commit `c0f0a28`)
+
+Verdict flips to **SOUND WITH CONCERNS**. All five round-3 findings are resolved:
+
+1. 🔴 F1 **resolved** — absolute-budget semantics stated with the :1606 cite, 1c-single pinned to `--load-episode 20 --episodes 40`, and pass criterion 4 (non-empty telemetry + ≥1 post-`train_start_iter` loss-updating iteration, instant-exit = FAIL) makes the gate non-vacuous and self-enforcing (a fixture whose resumed segment never trains now fails instead of green-lighting).
+2. 🟡 F2 **resolved** — 1c-curriculum resumes into the 1b fixture's second stage; arithmetic verified: 1b checkpoints land at 10/20/30 (stage-0 cadence 10) and 40/60 (stage-1 cadence 20), so `--load-episode 40` exists; `stage_for_episode(40)` → stage index 1; schedule-driven budget `episode_boundaries[-1] = 60` gives a real 20-episode segment — and the correction to the reviewer's sketch is right, legacy curriculum mode rejects budget flags, so no `--episodes 60`. §12c (:1437, re-verified) now fires through train.py's schedule+resume plumbing in combination; criterion 2 adds the resumed stage index.
+3. 🟡 F3 **resolved** — option (a) defer-the-merge recorded as a reversible default with fallback (b) documented (pinned pre-refactor worktree relaunch procedure). One residual wording nit (🟢, non-blocking): the older "Config edits wait" bullet still reads "Phase 1's code changes may proceed" — under (a) that now means *proceed on the feature branch*, and the v3.0 code merge is deferred too; worth one clarifying clause at next touch.
+4. 🟢 F4 **resolved** — R7 reads :944/:980; checklist keep-line reads :593.
+5. 🟢 F5 **resolved** — attributions corrected (resume = `166f261`, §12c + RollingWindow = `e834ec1`, `testing.seed` = `b228117`, retention guard = `ad8929a`; `10000af`/`0030c04` acknowledged as no-spec-impact); C20 and Binding-decision status updated consistently.
+
+Remaining concerns (carried, all user-acceptable): the decision-5 resume delta still awaits user confirmation at approval; Gate 1c stays a parity gate (a seam-introduced restore regression hits both sides identically — guarded by the byte-diff checklist + retargeted resume tests, correctly scoped in R12); the F3 residual wording nit above.
+
+Reviewed by: plan-reviewer (closure, round 3)
