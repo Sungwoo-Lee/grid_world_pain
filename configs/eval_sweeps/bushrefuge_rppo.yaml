@@ -1,0 +1,24 @@
+# Behavior-probe sweep for the 4 bush-refuge rPPO agents (launched 2026-08-04,
+# nodes 102/113; still training). BUSH-REFUGE = the basic ladder with the bush
+# obstacle blocking animals (predators/rabbit cannot enter; agent still hides).
+# Probed against the BUSH-REFUGE-MATCHED battery (avoidance_bushrefuge/, which
+# adds blocks_animals:true to the bush) so the probe matches the training regime
+# — NOT the standard clean battery, which would remove the refuge and understate
+# avoidance. decay_power 1.0 (inherited). Snapshot of still-training runs.
+#
+# Run: python scripts/eval/dwell_sweep/run_sweep.py configs/eval_sweeps/bushrefuge_rppo.yaml
+# Node 114 only (per user); verify its NAS mount is live first.
+name: bushrefuge_rppo
+algo: rppo
+output_dir: results/eval/avoidance/bushrefuge/rppo
+probe: configs/environment/experiment/behavior_probes/core/avoidance_bushrefuge
+conditions: all
+episodes: 30
+nodes: [114]
+x_axis: steps
+plot_measures: [bush_dwell, spatial_spread, survival_steps]
+runs:
+  - {label: b01_slowpred_5x5,   path: results/JAX_RecurrentPPO/20260804-040533_rppo_bushrefuge_b01_n102}
+  - {label: b02_predrabbit_10x10, path: results/JAX_RecurrentPPO/20260804-040711_rppo_bushrefuge_b02_n102}
+  - {label: b03_randinit_10x10, path: results/JAX_RecurrentPPO/20260804-040846_rppo_bushrefuge_b03_n113}
+  - {label: b04_jump_10x10,     path: results/JAX_RecurrentPPO/20260804-041014_rppo_bushrefuge_b04_n113}

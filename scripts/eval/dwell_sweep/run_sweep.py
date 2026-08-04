@@ -129,9 +129,19 @@ def default_agent_config(run_dir):
 
 
 def probe_dir(probe):
-    if probe not in ("clean", "noise"):
-        raise ValueError(f"spec.probe must be 'clean' or 'noise', got {probe!r}")
-    return CLEAN_PROBE_DIR if probe == "clean" else NOISE_PROBE_DIR
+    # Named presets, or any repo-relative path to a directory of probe configs
+    # (e.g. a bush-refuge-matched battery). Backward compatible: "clean"/"noise"
+    # keep their meaning; anything else is treated as a repo-relative dir path.
+    if probe == "clean":
+        return CLEAN_PROBE_DIR
+    if probe == "noise":
+        return NOISE_PROBE_DIR
+    cand = REPO_ROOT / probe
+    if cand.is_dir():
+        return cand
+    raise ValueError(
+        f"spec.probe must be 'clean', 'noise', or a repo-relative probe-dir "
+        f"path; got {probe!r} (resolved {cand}, not a directory)")
 
 
 def resolve_conditions(spec):
