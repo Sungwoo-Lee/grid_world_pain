@@ -44,4 +44,5 @@ When wiring the fast `eval_rollout.py --batched` path into a distributed Dreamer
 ## Backlinks
 - [[20260721_0422_batched_dreamer_eval_rng_and_unify]] (dreamer_diagnosis, 2026-07-21) — Unified Dreamer eval into eval_rollout.py (one script, both algorithms) and adde
 - [[20260726_0417_dwell_sweep_rerun_silent_skip_traps]] (behavior_measures, 2026-07-26) — The dwell/behavior sweep pipeline has two silent-skip traps on incremental re-ru
+- [[20260805_0119_render_recordings_output_path_collision]] (behavior_measures, 2026-08-05) — render_recordings.py derives its output dir as rec_dir.parent.parent/videos/rec_
 <!-- END BACKLINKS -->

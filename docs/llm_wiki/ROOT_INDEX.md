@@ -6,7 +6,7 @@
 
 **Last updated**: 2026-07-28
 **Active folders**: 10
-**Total insights**: 193
+**Total insights**: 197
 **Last audit**: (none)
 
 ---
@@ -19,12 +19,12 @@
 | `subagent_engineering` | Subagent + worktree usage gotchas | 22 | 2026-07-28 | [meta, learned_lesson, worktree, subagent, decision, design] |
 | `nmn_diagnosis` | NMN performance diagnosis findings | 17 | 2026-07-23 | [nmn, hypervigilance, film, learned_lesson, design, meta, training_runner, refutation, decision, config] |
 | `dreamer_diagnosis` | DreamerV3 failure investigation | 28 | 2026-07-27 | [dreamer, decision, learned_lesson, refutation, meta, design, rl] |
-| `cluster_ops` | Lab cluster ops and env mgmt | 41 | 2026-07-28 | [meta, training_runner, learned_lesson, decision, design, dreamer] |
+| `cluster_ops` | Lab cluster ops and env mgmt | 42 | 2026-08-05 | [meta, training_runner, learned_lesson, decision, design, dreamer] |
 | `hypervigilance` | Hypervigilance experiments | 28 | 2026-07-27 | [hypervigilance, dreamer, design, learned_lesson, decision, refutation, meta, noise, rl] |
 | `env_entities` | Env entity architecture decisions | 17 | 2026-07-03 | [design, decision, learned_lesson, meta, config, dreamer] |
 | `config_system` | Config loader/layering/schema | 10 | 2026-07-27 | [config, design, decision, meta, learned_lesson] |
 | `curriculum_learning` | Curriculum/continual training | 3 | 2026-06-24 | [learned_lesson, decision, refutation] |
-| `behavior_measures` | Behavior-measure platform & probes | 13 | 2026-07-26 | [design, decision, meta, learned_lesson, hypervigilance, refutation, noise, dreamer] |
+| `behavior_measures` | Behavior-measure platform & probes | 16 | 2026-08-05 | [design, decision, meta, learned_lesson, hypervigilance, refutation, noise, dreamer] |
 
 ---
 
@@ -55,6 +55,7 @@ Surface a merge proposal to the user when:
 ---
 
 ## Change history
+- 2026-08-05: Captured 4 insights from the results-generation-battery session (dp1 arms + curriculum + bush-refuge): 3 into `behavior_measures` (`20260805_0117_bushrefuge_survives_by_evasion_not_refuge` - bush-refuge rPPO agents survive by EVASION not refuge use, bush_dwell ~0 (mean <0.5 steps, 0% of 100-253 ckpts >5 steps) despite surviving to the 501 cap; `20260805_0118_regime_matched_probe_and_run_sweep_probe_dir` - regime-matched probe (avoidance_bushrefuge/ w/ blocks_animals) + run_sweep probe-dir-path support, af46e99; `20260805_0119_render_recordings_output_path_collision` - render_recordings.py derives video_dir from rec_dir.parent.parent, collides in batch video jobs (4th recurrence), needs --output-dir), 1 into `cluster_ops` (`20260805_0120_node114_nas_hang_sustained_io` - node 114 NAS reads OK but HANGS long video-eval on sustained I/O; gpu_status --free lists it while NAS writes fail). All tags reused (design, decision, learned_lesson, refutation, config, training_runner, meta). No new tags, no new folders.
 - 2026-07-28: Captured 4 insights from the LLM Wiki rename + consult-gate session: 3 into `wiki_system_design` (`20260728_1642_llm_wiki_rename_ends_memory_collision` - docs/memory/ -> docs/llm_wiki/, /memorize -> /wiki-write, /recall -> /wiki-read, tag `memory` -> `wiki`, entry IDs left immutable; `20260728_1643_bulk_rename_component_path_and_domain_term_traps` - component-built paths are invisible to a string sed, and domain-term corpora must be excluded from a prose sweep; `20260728_1644_wiki_pull_gate_widened_before_any_task` - consult gate widened from 'on request' to 'before any non-trivial task', ROOT_INDEX table 2 KB vs file 52 KB), 1 into `subagent_engineering` (`20260728_1645_wiki_search_subagent_rejected_on_economics` - wiki-search sub-agent rejected: ~36 KB boot floor vs 12.5 KB mean entry gives a ~3-entry crossover, plus sub-agents have no Agent tool). All tags reused (wiki, design, decision, meta, learned_lesson, subagent). No new tags, no new folders.
 - 2026-07-28: Captured 5 insights from the agent-team maintenance session: 4 into `subagent_engineering` (`20260728_1643_subagents_cannot_delegate_dead_instructions` - only senior-developer holds the Agent tool, so "consult bug-curator" was a dead instruction in 4 profiles, caught from a live plan-reviewer report; `20260728_1644_plan_reviewer_and_analysis_verdict_gate` - new adversarial reviewer for plans AND analysis verdicts, closing the unreviewed-conclusion hole before pi; `20260728_1645_agent_model_tiering_fable_reviewers_no_sonnet` - 10 Fable / 11 Opus, Sonnet retired, model: alias is a tier not a pinned version; `20260728_1647_agent_jargon_rename_vs_gloss_drift_check` - plain-language sweep + the rename-vs-gloss drift rule based on occurrence counts in written output), 1 into `cluster_ops` (`20260728_1646_git_commit_pathspec_prevents_cross_session_sweep` - explicit pathspec on commit is the structural fix for cross-session index sweeps; lock contention is normal on this NAS, retry rather than pre-check). All tags reused (subagent, meta, decision, design, learned_lesson) - no new tags promoted.
 - 2026-07-27: Captured 6 insights from the Fable fresh-eyes Dreamer investigation + bins±6 launch session: 3 into `dreamer_diagnosis` (`20260727_0537_dreamer_five_perspective_investigation_verdict` - implementation clean, XS≈M, rr premise inverted, value-pathway binding constraint; `20260727_0538_critic_twohot_bin_resolution_bottleneck` - 1 bin ≈ 52 survival-steps at ±20, D-017 configurable range, bins±6 arms launched; `20260727_0539_task_different_in_kind_reward_algebra` - near-potential-based reward, death only controllable signal, ceiling unmeasured), 1 into `hypervigilance` (`20260727_0540_rppo_gamma095_myopic_survival_surrogate` - baselines optimize a myopic surrogate, gamma sweep queued), 1 into `cluster_ops` (`20260727_0541_total_steps_footgun_dreamer_resume_path` - env-step-cap footgun + resume path shipped), 1 into `config_system` (`20260727_0542_eval_seed_testing_seed_config_owned_flags` - testing.seed fix, 12x eval swing, CLI-flag discipline). All tags reused; added `rl` to dreamer_diagnosis + hypervigilance top-tags.

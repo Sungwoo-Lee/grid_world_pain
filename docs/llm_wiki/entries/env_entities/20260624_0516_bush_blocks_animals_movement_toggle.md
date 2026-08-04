@@ -57,4 +57,5 @@ None.
 - [[20260624_0517_bush_spawn_exclusion_free_via_overlap_resolution]] (env_entities, 2026-06-24) — A planned 'Phase 2' to keep animals from SPAWNING on bush cells needed NO implem
 - [[20260703_0343_predator_jump_pounce_mechanism]] (env_entities, 2026-07-03) — Added an opt-in predator JUMP/POUNCE: a hunting predator within a sampled Manhat
 - [[20260703_0352_blocking_obstacle_felt_not_seen]] (env_entities, 2026-07-03) — A blocking obstacle (rock with blocking:true) genuinely stops the agent's move (
+- [[20260805_0118_regime_matched_probe_and_run_sweep_probe_dir]] (behavior_measures, 2026-08-05) — A regime-specific agent must be probed with regime-MATCHED conditions or the sta
 <!-- END BACKLINKS -->
