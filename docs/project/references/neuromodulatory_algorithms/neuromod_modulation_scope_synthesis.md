@@ -928,3 +928,29 @@ regime is the one where flatness has been reported.**
   rewrite.
 - **`literature-reviewer`** — no new pull is needed. The corpus is saturated on Axes 1–3.
   The Axis-4 gap (learned grouping) is a gap in the *field*.
+
+---
+
+## Update from `modulation_in_rl` — literature-reviewer, 2026-08-05
+
+Ten 2024–2026 FiLM-family papers were reviewed in
+[`../modulation_in_rl/modulation_in_rl_lit_review.md`](../modulation_in_rl/modulation_in_rl_lit_review.md),
+using the taxonomy this document shares with `../FiLM/film_modulation_granularity_synthesis.md`.
+Two points bear on the conclusions here.
+
+**Cell (c) — grouped modulation — is no longer unattested in the deep-learning corpus.**
+EquAct's `iFiLM` (Zhu et al. 2025) shares one scalar gain across a $(2l+1)$-dimensional
+irreducible-representation block. **But the mechanism is the opposite of this corpus's
+volume-transmission story**: there, grouping arises because a chemical reaches a whole
+population; in EquAct it arises because Schur's lemma forbids a per-component gain from
+commuting with a rotation. Both produce block-shared gains; neither chose the grouping
+for capacity reasons. The neuroscience corpus therefore remains the only place where
+coarse modulation is a *substantive claim about how modulation should work* rather than
+a consequence of another constraint.
+
+**§8.2's conclusion about our modulator's input is further supported.** Across all ten
+reviewed papers, conditioner dimensionality runs from 1 (a denoising timestep) to 32
+(two 16-D context latents); the modal case is a handful of numbers. **No reviewed paper
+conditions on a full raw observation**, and three separate the conditioner from the
+observation deliberately. Our 16-unit GRU reading the entire observation vector is
+outside the range the modulation literature occupies.

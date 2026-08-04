@@ -685,3 +685,38 @@ parent session owns downloading.**
   §9.2's regime argument (all large modulation gains in RL come from many-task
   settings; the one paper that tests an easy single-behaviour benchmark ties)
   should be weighed against the screen's pre-registration.
+
+---
+
+## Update from `modulation_in_rl` — literature-reviewer, 2026-08-05
+
+Ten 2024–2026 FiLM-family papers were read end-to-end in
+[`../modulation_in_rl/modulation_in_rl_lit_review.md`](../modulation_in_rl/modulation_in_rl_lit_review.md).
+Three of this document's verdicts are affected.
+
+**§5's "gains come from task diversity" is refuted.** Four of the ten show modulation
+helping with **no task distribution at all**: PAPL (within-episode gait phase), Yuan
+2024 (8 independently trained tasks; moderator is *difficulty* — up to +62 points on
+hard tasks, ≈0 on easy), Marquis & Farhood (within-episode actuator fault; moderator is
+*distribution shift*), SplitAdapter (within-episode load; moderator is *load beyond
+the training range*). The replacement rule: modulation pays when the conditioning
+variable carries **within-episode structure** the network can exploit, on a problem hard
+enough or shifted enough for that structure to matter.
+
+**§7's "no failure mode matches ours" survives, with a new instrument.** Gain blow-up
+is still unattested across ten further papers. The instabilities that *are* reported
+cluster on mixture-of-experts isolation (FLOWER NaN, PAPL expert collapse, MoE-ACT
+anti-collapse losses) and on capacity hyperparameters (Marquis's LoRA rank 48). But
+**Marquis & Farhood 2026 §V-C is directly usable**: it estimates a modulator's
+**Lipschitz bound** as the product of its weight matrices' spectral norms, shows it
+tracks performance across six configurations, and recommends **spectral normalisation**.
+Our $G{=}1$ crash was characterised by ballooning gain variance — which is what that
+quantity measures — and the bound is computable on checkpoints we already hold.
+
+**Axis 5 (self-conditioning) — the position sharpens.** No reviewed paper conditions a
+modulator on the same raw, high-dimensional observation as the stream it modulates.
+PAPL is the nearest positive precedent (its 2-D phase embedding is both the FiLM
+conditioner *and* a direct network input, making `No-FiLM` a pure routing comparison),
+and HyperMARL's `w/o GD` ablation is the direct negative. Vecoven et al. 2020's
+principle survives in refined form: **keep the conditioning path low-dimensional and
+its gradient path separate.**

@@ -553,3 +553,34 @@ Two further transfer caveats specific to us:
 - **`literature-reviewer`** — no new pull is needed for this question. The corpus is
   saturated on Axes 1–3; the gap on Axis 4 is a gap in the *field*, not in our
   coverage of it.
+
+---
+
+## Update from `modulation_in_rl` — literature-reviewer, 2026-08-05
+
+A new topic folder,
+[`../modulation_in_rl/modulation_in_rl_lit_review.md`](../modulation_in_rl/modulation_in_rl_lit_review.md),
+full-text reviews ten 2024–2026 papers implementing FiLM-style scale-and-shift
+modulation in RL / robot policy learning. Two findings bear directly on this document.
+
+**§3.3 and §7.3 are superseded on cell (c).** This synthesis concluded that grouped
+modulation — one $(\gamma,\beta)$ shared across a block of units — is *"unattested in
+both corpora"*. It is now attested once: **EquAct's `iFiLM` layer** (Zhu et al. 2025,
+§4.3, Eqs. 7–9) scales an entire $(2l+1)$-dimensional irreducible-representation block
+with a single scalar $\alpha_l$, giving block sizes 1, 3, 5, 7 at $L_{\max}=3$.
+
+**The essential qualifier:** the grouping is **forced by Schur's lemma** under an
+SE(3)-equivariance constraint, not chosen as a coarsening. Group boundaries are fixed
+by representation theory and cannot be swept, and the paper never frames it as grouping
+or parameter saving. A second paper (GEAR, Guo et al. 2026) substitutes iFiLM for
+ordinary FiLM in an RL policy and finds the constrained version **worse** (mean success
+95.46 % vs 98.85 %) where the symmetry is only approximate. Net rule: *grouping pays
+if and only if the tied units are genuinely interchangeable under a structure the task
+respects.*
+
+**Axis 3 gains a counter-instance, with a confound.** FLOWER's Global-AdaLN-Zero
+(CoRL 2025) shares one modulation weight set across all 18 transformer layers, against
+this document's "shared generator + per-site heads" convention. But full text shows the
+lost per-layer capacity is **restored by per-layer LoRA adapters that are never
+ablated** — there is no `− LoRA` row anywhere — so it is evidence about
+*parameterisation*, not about *capacity redundancy*. See §7.3 of the new review.

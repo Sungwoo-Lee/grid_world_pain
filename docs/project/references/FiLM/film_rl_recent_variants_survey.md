@@ -543,3 +543,46 @@ Ordered by decision-relevance to the project, not by prestige.
   to mixture-of-experts. If we intend to publish this as an RL contribution, the
   positioning question (is this an RL paper, a neuro-AI paper, or a robot-learning
   paper?) is now a portfolio-level call with evidence attached.
+
+---
+
+## Full-text verification of this survey — literature-reviewer, 2026-08-05
+
+Seventeen PDFs from §7's download list were acquired; the ten implementing
+scale-and-shift modulation were read end-to-end and reviewed in
+[`../modulation_in_rl/modulation_in_rl_lit_review.md`](../modulation_in_rl/modulation_in_rl_lit_review.md).
+That review's §5 records every claim confirmed, corrected or refined. Summary of the
+**corrections** that affect this document:
+
+- **§5.3 superseded.** Grouped modulation is now attested — EquAct's `iFiLM` shares one
+  scalar across a $(2l+1)$-unit irrep block — though as a **by-product of Schur's
+  lemma**, and GEAR's independent RL test finds the constraint *harmful* where the
+  symmetry is approximate.
+- **§5.3 / §5.5 on FLOWER.** Two corrections. (i) The "−20 % parameters at no cost"
+  result is confounded: **per-layer LoRA adapters compensate for the coarsening and are
+  never ablated**, so it is parameterisation evidence, not capacity-redundancy
+  evidence. (ii) The 20 % is of the **action head**, and the counterfactual parameter
+  count is not published.
+- **§5.5's NaN attribution corrected.** FLOWER's NaN losses came from a
+  **mixture-of-experts** design (App. A.1's own heading), not from an affine-modulation
+  design. Correctly stated the finding is *more* favourable to coarse modulation: the
+  simpler, coarser modulation was the stable fallback. **Gain blow-up remains
+  unattested across all ten papers** — but Marquis & Farhood 2026 now supplies a
+  *measurement* (Lipschitz bound as the product of spectral norms, correlating with
+  performance across six configurations) and a *remedy* (spectral normalisation).
+- **§3.1's EquAct row.** Granularity is not *"(b) restricted to type-0 features"*.
+  Modulation reaches **every** type $l$; what is restricted is the form — shared scalar
+  gain with no offset above $l=0$, full affine only at $l=0$.
+- **§3.1's CogVLA row.** "Modulation-as-routing" over-reads the mechanism. FiLM
+  conditions the representation; **separate learned routers** compute the aggregation
+  and pruning scores (Eqs. 11, 14). It is not a new role for $(\gamma,\beta)$.
+- **§5.6 strengthened.** Single-task gains now rest on **four** reviewed papers — PAPL,
+  Yuan 2024, Marquis, SplitAdapter — two of which this survey had not classified that
+  way. The moderators are difficulty (Yuan), distribution shift (Marquis) and load
+  beyond training range (SplitAdapter).
+- **§5.4's net verdict stands and sharpens.** No reviewed paper conditions on a full
+  raw observation; corpus-wide conditioner dimensionality is 1–32.
+- **Venue provenance.** EquAct's held PDF says *"Preprint. Under review."* and PAPL's
+  has no venue line, so the ICLR 2026 / ICRA 2026 attributions are external
+  (OpenReview record, arXiv comments) rather than PDF-verifiable. GEAR's "98.85 %" is
+  a correct aggregate of four per-task rates, reconstructed rather than quoted.
