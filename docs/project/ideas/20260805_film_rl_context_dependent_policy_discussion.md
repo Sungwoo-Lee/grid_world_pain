@@ -52,14 +52,14 @@ once the papers were read in full; those corrections are marked.
 ## 2. The mechanism, written out
 
 FiLM (Perez et al., AAAI 2018). Given a hidden activation vector
-$h \in \mathbb{R}^{d}$ and a conditioning input $c$:
+h ∈ ℝ^d and a conditioning input c:
 
 $$
 \mathrm{FiLM}(h \mid c) \;=\; \gamma(c) \odot h \;+\; \beta(c),
 $$
 
-where $\gamma(c), \beta(c) \in \mathbb{R}^{d}$ come from a *generator*
-sub-network and $\odot$ is the element-wise (Hadamard) product. In words: the
+where γ(c), β(c) ∈ ℝ^d come from a *generator*
+sub-network and ⊙ is the element-wise (Hadamard) product. In words: the
 context independently rescales and shifts every feature.
 
 Three design axes recur throughout this document, and the whole literature can
@@ -67,7 +67,7 @@ be filed against them:
 
 | Axis | Question | Cells |
 |---|---|---|
-| **1 — Granularity** | how many distinct $(\gamma,\beta)$ values exist per modulated tensor | (a) per-unit · (b) per-channel · (c) grouped · (d) one scalar per layer · (e) one signal for the whole network |
+| **1 — Granularity** | how many distinct (γ,β) values exist per modulated tensor | (a) per-unit · (b) per-channel · (c) grouped · (d) one scalar per layer · (e) one signal for the whole network |
 | **2 — Placement** | which layers are modulated, how many sites | — |
 | **3 — Parameterisation** | do sites share a generator, share parameters, or have their own | — |
 
@@ -97,7 +97,7 @@ as a chemical broadcast over a region, so one scalar is the default.
   as one shared generator with a separate output head per site. Chauhan's survey
   names the pattern `generate-multiple`.
 
-**On grouping.** Sharing one $(\gamma,\beta)$ across a *block of units* is
+**On grouping.** Sharing one (γ,β) across a *block of units* is
 essentially absent: one instance in ~100 papers. Where the literature does share
 parameters, it ties the **generator** (rank-1 factorisation, chunked generation,
 tiled kernels) while the emitted signal stays per-unit. The motivation is always
@@ -114,24 +114,24 @@ Never contiguous-by-index.
 ## 4. Where our implementation sits
 
 Our neuromodulator (`src/models/neuromodulator.py`, class `NeuromodulatorRNN`)
-is one shared GRU with $16$ hidden units that reads the **raw observation** and
+is one shared GRU with 16 hidden units that reads the **raw observation** and
 feeds six linear heads:
 
 | Head | Target | Injection site |
 |---|---|---|
-| $\gamma,\beta$ (unimodal) | encoder stage 1 output | after the per-sensor MLPs |
-| $\gamma,\beta$ (multimodal) | encoder stage 2 output | after the fusion hub |
+| γ,β (unimodal) | encoder stage 1 output | after the per-sensor MLPs |
+| γ,β (multimodal) | encoder stage 2 output | after the fusion hub |
 | memory | task-GRU update gate | inside the recurrent cell |
-| temperature (scalar) | policy logits | $\mathrm{logits}/T$ |
+| temperature (scalar) | policy logits | logits / T |
 
-Each non-scalar head emits $\lceil 128/G \rceil$ raw values, expanded to the
+Each non-scalar head emits ⌈ 128/G ⌉ raw values, expanded to the
 128-unit target by repeating each value across a contiguous block:
 
 $$
 \mathrm{sig} \;=\; \underbrace{\texttt{repeat}(\mathrm{raw},\, G)[:128]}_{\text{grouped dynamic part}} \;+\; \underbrace{b}_{\substack{\text{per-neuron learned}\\ \text{baseline},\ b \in \mathbb{R}^{128}}}
 $$
 
-with $G$ = `grouping_size` swept $1 \to 128$.
+with G = `grouping_size` swept 1 → 128.
 
 ### 4.1 Scorecard against the conventions
 
@@ -150,8 +150,8 @@ the last three — and **grouping is not the most consequential of them.**
 
 ### 4.2 An interpretation hazard in the grouping sweep
 
-Because a full 128-dimensional per-neuron baseline $b$ is added at every $G$,
-each neuron retains full *static* freedom regardless of $G$. Therefore
+Because a full 128-dimensional per-neuron baseline b is added at every G,
+each neuron retains full *static* freedom regardless of G. Therefore
 `grouping_size` controls **dynamic resolution only, not total modulation
 capacity.** A null result from the grouping sweep cannot distinguish
 "grouping is inert" from "the baseline absorbed the modulation".
@@ -168,7 +168,7 @@ design is not novel — it reproduces the cited paper — but the confound stand
 
 **A refereed precedent now exists, but it does not support us.** EquAct's
 `iFiLM` layer ties an entire block of features to one scalar. Given a
-spherical-Fourier feature block of degree $l$,
+spherical-Fourier feature block of degree l,
 
 $$
 c_l = \bigl[c_l^{-l}, \dots, c_l^{l}\bigr] \in \mathbb{R}^{2l+1},
@@ -176,9 +176,9 @@ c_l = \bigl[c_l^{-l}, \dots, c_l^{l}\bigr] \in \mathbb{R}^{2l+1},
 c_l' = \alpha_l(k)\, c_l ,
 $$
 
-one gain $\alpha_l$ multiplies all $2l+1$ components (block sizes $1,3,5,7$),
-with **no additive offset** for $l>0$; full affine survives only on the
-invariant $l=0$ channels.
+one gain α_l multiplies all 2l+1 components (block sizes 1,3,5,7),
+with **no additive offset** for l>0; full affine survives only on the
+invariant l=0 channels.
 
 But the grouping is **forced by Schur's lemma**, not designed: a per-component
 gain commutes with the rotation matrix only if all its entries are equal. Group
@@ -193,7 +193,7 @@ Roll 87.70 vs 99.71.
 > interchangeable. EquAct's are — they are components of one irreducible
 > representation. Our contiguous-index blocks have no such justification.
 
-Add AlKilany's own $G$-sweep, which came out **flat**, and there are three
+Add AlKilany's own G-sweep, which came out **flat**, and there are three
 independent reasons to doubt the grouping axis.
 
 ### 5.2 Self-conditioning — the evidence turned negative
@@ -202,9 +202,9 @@ Earlier in this discussion it was said that the Diffusion Policy component study
 was a precedent for conditioning a modulator on the observation it modulates.
 **Full-text reading corrected this.** Its two arms are:
 
-- **FiLM arm** — denoiser input is the noisy action chunk alone, $x = A^k$; the
-  observation enters *only* through $\mathrm{FiLM}(x; O)$.
-- **Direct-input arm** — $x = [A^k, O]$, no modulation.
+- **FiLM arm** — denoiser input is the noisy action chunk alone, x = A^k; the
+  observation enters *only* through FiLM(x  O).
+- **Direct-input arm** — x = [A^k, O], no modulation.
 
 Both arms give the denoiser identical information, so it is a **pure routing
 comparison**. But the modulated stream has *no other route* to the observation,
@@ -227,14 +227,14 @@ conditioner cannot be a redundant copy of the encoder.
 that FLOWER reported NaN losses from modulation was **corrected**: FLOWER's own
 appendix heading is *"Mixture-of-Experts Approaches"* — the failing design was
 expert MLPs, not affine gain. Instabilities in this corpus cluster on
-mixture-of-experts isolation and capacity knobs, not on $\gamma/\beta$.
+mixture-of-experts isolation and capacity knobs, not on γ/β.
 
 Two tools from Marquis & Farhood are computable on runs we already have:
 
 1. A **Lipschitz bound** — the product of layer spectral norms — which tracked
-   performance across six configurations ($28.38 \to 3.73$), with **spectral
+   performance across six configurations (28.38 → 3.73), with **spectral
    normalisation** recommended as the remedy.
-2. A **gain-damping parameterisation**, $p_{\text{scale}} = 1 + 0.1\,p_h$.
+2. A **gain-damping parameterisation**, p_scale = 1 + 0.1 p_h.
 
 ---
 
@@ -279,11 +279,11 @@ forward pass. Encoders are **not** modulated.
 | conditioner = injury level (low-dim, internal, varies within episode) | conditioner = gait phase (2-dim, internal, varies within episode) |
 | one environment, behaviour varies by internal state | one skill, behaviour varies by phase |
 | hiding is worth more when injured | reward is phase-conditioned |
-| the same signal also reaches the policy | $\Phi_t$ is *also* a direct network input |
+| the same signal also reaches the policy | Φ_t is *also* a direct network input |
 
 ### 6.1 Three things PAPL gives us
 
-1. **It licenses a conditioner drawn from the observation.** $\Phi_t$ enters each
+1. **It licenses a conditioner drawn from the observation.** Φ_t enters each
    network twice — as raw input features and as the FiLM conditioner. So the
    `No-FiLM` ablation is *not* "with vs. without phase information"; it is a
    **pure routing comparison**, and the multiplicative route wins.
@@ -349,7 +349,7 @@ Dabney, Ostrovski, Silver & Munos, **ICML 2018**.
 Standard RL learns the **expected** return. Distributional RL learns the whole
 **distribution** of returns. IQN represents it *implicitly*: rather than a fixed
 set of quantiles, it learns a function mapping any quantile level
-$\tau \in [0,1]$ to its return value.
+τ ∈ [0,1] to its return value.
 
 $$
 Z_\tau(s,a) := F^{-1}_{Z(s,a)}(\tau),
@@ -357,18 +357,18 @@ Z_\tau(s,a) := F^{-1}_{Z(s,a)}(\tau),
 Z_\tau(s,a) \;\approx\; f\bigl(\psi(s) \odot \phi(\tau)\bigr)_a ,
 $$
 
-with $\psi : \mathcal S \to \mathbb{R}^d$ the state embedding (a convolutional
-trunk), $\phi : [0,1] \to \mathbb{R}^d$ the $\tau$-embedding, and
-$f : \mathbb{R}^d \to \mathbb{R}^{|\mathcal A|}$ a small head.
+with ψ : 𝒮 → ℝ^d the state embedding (a convolutional
+trunk), φ : [0,1] → ℝ^d the τ-embedding, and
+f : ℝ^d → ℝ^|𝒜| a small head.
 
-Because $\tau$ is sampled randomly during training, the network learns to be
-**all quantiles at once**. At acting time, the choice of $\tau$ *is* a risk
-preference: low $\tau$ acts on the pessimistic tail (risk-averse), high $\tau$
+Because τ is sampled randomly during training, the network learns to be
+**all quantiles at once**. At acting time, the choice of τ *is* a risk
+preference: low τ acts on the pessimistic tail (risk-averse), high τ
 on the optimistic tail.
 
 ### 8.2 This is FiLM
 
-Set $h = \psi(s)$, $c = \tau$, $\gamma(\tau) = \phi(\tau)$, $\beta(\tau) = 0$:
+Set h = ψ(s), c = τ, γ(τ) = φ(τ), β(τ) = 0:
 
 $$
 \mathrm{FiLM}\bigl(\psi(s) \mid \tau\bigr) = \phi(\tau) \odot \psi(s),
@@ -378,9 +378,9 @@ which is IQN's equation exactly. **IQN is FiLM with no shift term and a
 cosine-basis generator**, published at ICML 2018 and validated at Atari-57
 scale. It predates the term in the RL literature.
 
-Note $\phi$ maps into the **same dimension $d$ as the state embedding** — a
+Note φ maps into the **same dimension d as the state embedding** — a
 single scalar expands to a full-width per-unit gain vector, the same shape as
-our $G=1$ setting.
+our G=1 setting.
 
 ### 8.3 The cosine embedding, and why the Fourier basis matters
 
@@ -390,25 +390,25 @@ $$
 $$
 
 **The problem it solves.** Feed a scalar straight into a linear layer and each
-gain is $\gamma_j(\tau) = w_j\tau + b_j$ — a straight line. Add a ReLU and you
+gain is γ_j(τ) = w_jτ + b_j — a straight line. Add a ReLU and you
 get one kink; still monotone. Behaviours like *"flat until a threshold, then
 rise"* or *"high at both extremes, low in the middle"* are unrepresentable.
 
-**The fix.** Expand $\tau$ first through fixed non-linear functions
-$\{\cos(\pi i \tau)\}_{i=0}^{63}$. Over $\tau \in [0,1]$, term $i$ completes
-$i/2$ periods — $i=0$ is constant, $i=1$ is monotone $1 \to -1$, $i=2$ is one
-full period, $i=63$ oscillates ~31 times. A *single linear layer* over these
+**The fix.** Expand τ first through fixed non-linear functions
+{cos(πiτ)} for i = 0…63. Over τ ∈ [0,1], term i completes
+i/2 periods — i=0 is constant, i=1 is monotone 1 → -1, i=2 is one
+full period, i=63 oscillates ~31 times. A *single linear layer* over these
 features then produces
 
 $$
 \gamma_j(\tau) = \sum_{i=0}^{63} w_{ij}\cos(\pi i \tau) + b_j ,
 $$
 
-a **truncated Fourier cosine series**. Any reasonably smooth function on $[0,1]$
+a **truncated Fourier cosine series**. Any reasonably smooth function on [0,1]
 is approximable this way.
 
-**The key property:** this is non-linear and non-monotone *in $\tau$*, yet
-linear *in the learnable weights* $w$. Rich conditioning shapes, easy
+**The key property:** this is non-linear and non-monotone *in τ*, yet
+linear *in the learnable weights* w. Rich conditioning shapes, easy
 optimisation.
 
 **Why this matters more than it sounds.** Neural networks have a documented bias
@@ -425,27 +425,27 @@ or three low-frequency terms.
 
 A further detail: the trailing **ReLU forces gains to be non-negative**, so
 modulation can suppress or amplify a feature but never invert its sign. We do
-not impose this — our $\gamma$ may go negative — and that is one plausible
-contributor to the $G=1$ instability.
+not impose this — our γ may go negative — and that is one plausible
+contributor to the G=1 instability.
 
 ### 8.4 IQN ablated the combination rule — our third routing vote
 
 | Form | Result |
 |---|---|
-| $\psi(s) \odot \phi(\tau)$ — Hadamard | **robust, slightly preferred — chosen** |
-| $[\psi(s); \phi(\tau)]$ — concatenation | worse |
-| $\psi(s) \odot (1 + \phi(\tau))$ — residual | worse |
+| ψ(s) ⊙ φ(τ) — Hadamard | **robust, slightly preferred — chosen** |
+| [ψ(s)  φ(τ)] — concatenation | worse |
+| ψ(s) ⊙ (1 + φ(τ)) — residual | worse |
 
 Multiplicative beat concatenation for a **third** time (after Yuan's Table 5 and
 PAPL's `No-FiLM`), in a different algorithm and setting.
 
-The second row also qualifies earlier advice: $\psi \odot (1+\phi)$ is exactly
+The second row also qualifies earlier advice: ψ ⊙ (1+φ) is exactly
 CogVLA's identity-centred form, and IQN found plain Hadamard slightly better. So
 "always centre modulation at identity" is **contested, not universal**.
 
 ### 8.5 The training-scheme alternative — the most interesting idea in this log
 
-IQN samples $\tau$ at **training** time and applies the risk distortion only at
+IQN samples τ at **training** time and applies the risk distortion only at
 **acting** time. The value head learns every quantile; the modulator merely
 *selects* among them afterwards.
 
@@ -459,7 +459,7 @@ This is attractive for three separate reasons:
    gradient-interference problem HyperMARL identified.
 2. It **removes the gain-blow-up failure mode**, because nothing multiplicative
    is trained through.
-3. It gives "high injury $\to$ act risk-aversely" a **literal implementation**
+3. It gives "high injury → act risk-aversely" a **literal implementation**
    rather than a metaphor — the exact behaviour we want (hide when injured) is
    the definitional consequence of sampling a low quantile.
 
@@ -482,7 +482,7 @@ distributional-PPO variant. That is real work, not a config change.
    modulation?** PAPL's criterion says our critic-side case is unproven.
 4. **Fourier expansion of the conditioner** — untested here, cheap, and
    addresses a documented failure mode.
-5. **Non-negative gains** — should $\gamma$ be constrained $\geq 0$?
+5. **Non-negative gains** — should γ be constrained ≥ 0?
 6. **Is the grouping sweep worth continuing** given three independent negatives
    and the baseline-absorption confound?
 7. **e-nmRNN** (NeurIPS 2025, OpenReview `S9Y89poypx`) remains unread — the last
@@ -500,7 +500,7 @@ distributional-PPO variant. That is real work, not a config change.
   evaluation-episode counts; its bibliography is broken (reference [1], cited as
   the ACT paper, is a 1970 networking paper). Cite as *suggestive single-preprint
   evidence*.
-- **FLOWER's** $-20\%$ parameter result is confounded: per-layer LoRA adapters
+- **FLOWER's** -20% parameter result is confounded: per-layer LoRA adapters
   compensate for the removed per-layer modulation and are **never ablated**.
 - **AAAI was effectively not surveyed** in the recent-variants search (not on
   OpenReview; Semantic Scholar rate-limited; dblp timed out).
