@@ -3,16 +3,16 @@ title: "Gate 2 A/B analysis — dreamer_srl legacy entry point vs. integrated tr
 topic: dreamer_integration
 status: active
 created: 2026-08-05
-last_updated: 2026-08-05
-phase: "Gate 2 (of 3) — real GPU A/B"
+last_updated: 2026-08-06
+phase: "Gate 2 (of 3) — real GPU A/B — PASSED"
 wandb_tag: "dsrl_gate2*"
 develop_link: docs/develop/active/dreamer/DREAMER_SRL_TRAIN_PY_INTEGRATION_PLAN.md
 ---
 
 # Gate 2 A/B Analysis — Dreamer legacy entry point vs. integrated train.py dispatch
 
-> **Status**: ANALYZING — **statistical leg FINALIZED (criterion 1 PASS against the completed noise-floor pair); overall Gate-2 verdict REMAINS PROVISIONAL** pending the node-114 deterministic trio (running, ~70%, determinism holding at 14 matched checkpoints as of 2026-08-05).
-> **Date**: 2026-08-05
+> **Status**: COMPLETE — **GATE 2 PASS.** Both legs green: the statistical leg (production-noise A/B inside the measured noise-floor envelope, §4.5) and the deterministic leg (three pinned-environment runs bit-identical end to end at full 20,000-episode scale, §4.6 — every one of 20,000 episode records, every checkpoint, the gradient-step count, the final losses, and every module of the final checkpoint down to the PRNG key and optimizer states).
+> **Date**: 2026-08-05 (A/B + noise floor) / 2026-08-06 (deterministic leg, finalization)
 > **Author**: `experiment-analyzer`
 > **Related**: [[DREAMER_SRL_TRAIN_PY_INTEGRATION_PLAN]] (Gate 2 section = authoritative pass criteria; worktree copy carries all amendments) · [[DREAMER_SRL_EVAL_TELEMETRY_FIX]] (Track C semantics checked here) · [[DREAMER_SRL_TRAIN_PY_DIVERGENCE_MATRIX]]
 
@@ -22,7 +22,7 @@ develop_link: docs/develop/active/dreamer/DREAMER_SRL_TRAIN_PY_INTEGRATION_PLAN.
 
 The project is retiring the Dreamer world-model agent's private launch script and folding it into the shared training entry point (`train.py`) that every other algorithm already uses. Before anyone's launch scripts change, the integration must pass three gates; this document is the analysis for **Gate 2** — one real GPU training run launched each way, compared end to end. The question is simple: **does a full-length Dreamer training run launched through the new integrated entry point behave the same as one launched through the old legacy script — same learning curves, same world-model convergence, same speed, with all the recently fixed evaluation telemetry (videos, eval metrics on the right step clock) intact and its checkpoints restorable for offline evaluation?**
 
-A crucial piece of context shapes what "the same" can mean: **same-seed Dreamer runs are not reproducible on this stack** (the replay-buffer sampler is unseeded — a registered known issue — and GPU float nondeterminism feeds back into episode lengths and thus the whole trajectory). Two identical invocations of the *same* entry point diverge. The comparison is therefore **statistical, not exact**: the two runs must overlap within same-seed run-to-run noise. To measure that noise directly, a dedicated **noise-floor pair** — the legacy entry point launched twice with the identical command — was run alongside; its inter-run divergence is the yardstick against which the A/B difference was finalized (§4.5). A separate deterministic (pinned-environment, bit-identity) leg on node 114 carries the remaining burden of proof and keeps the overall gate verdict provisional.
+A crucial piece of context shapes what "the same" can mean: **same-seed Dreamer runs are not reproducible on this stack** (the replay-buffer sampler is unseeded — a registered known issue — and GPU float nondeterminism feeds back into episode lengths and thus the whole trajectory). Two identical invocations of the *same* entry point diverge. The comparison is therefore **statistical, not exact**: the two runs must overlap within same-seed run-to-run noise. To measure that noise directly, a dedicated **noise-floor pair** — the legacy entry point launched twice with the identical command — was run alongside; its inter-run divergence is the yardstick against which the A/B difference was finalized (§4.5). A separate deterministic leg — three runs in a pinned bit-deterministic environment with the replay-sampler seeding fix on both trees, where "the same" *can* mean bit-identical — carried the remaining burden of proof and closed it (§4.6): the legacy and integrated entry points produced literally the same 20,000-episode training, record for record, weight for weight.
 
 **Formal hypothesis:**
 
@@ -64,8 +64,13 @@ Runs were launched by `training-runner` (no pre-registered designer manifest; th
 | B | completed | train.py entry | `dsrl_gate2B_trainpy_b04M_s42_n106` | 42 | 106:1 | 2026-08-04T05:24 | `1zbgtsxp` | `logs/20260804_052330.log` |
 | N1 | completed | noise floor 1/2 (legacy twice) | `dsrl_gate2N1_legacy_b04M_s42_n106` | 42 | 106:0 | 2026-08-05T00:06 | `u2156tb7` | `logs/20260805_000604.log` |
 | N2 | completed | noise floor 2/2 (legacy twice) | `dsrl_gate2N2_legacy_b04M_s42_n106` | 42 | 106:1 | 2026-08-05T00:06 | `breewovl` | `logs/20260805_000606.log` |
+| detA | completed | det leg — legacy, pre-seam tree + fix-set | `dsrl_gate2detA_b04M_s42_n114` | 42 | 114:0 | 2026-08-05T01:30 | `6wk4pgra` | `logs/20260805_013008.log` |
+| detA2 | completed | det leg — identical repeat of detA (cross-GPU control) | `dsrl_gate2detA2_b04M_s42_n114` | 42 | 114:1 | 2026-08-05T01:30 | `3ilbzb8d` | `logs/20260805_013012.log` |
+| detB | completed | det leg — integrated train.py + fix-set | `dsrl_gate2detB_b04M_s42_n114` | 42 | 114:2 | 2026-08-05T01:30 | `dhxel4br` | `logs/20260805_013014.log` |
 
 N1/N2 results dirs: `results/JAX_DreamerSRL/20260805-000639_dsrl_gate2N1_legacy_b04M_s42_n106` and `…000642_…N2…` (main tree); local WandB dirs under the worktree `wandb/` (`run-20260805_000638-u2156tb7`, `run-20260805_000641-breewovl`). Extracted histories: `tmp/gate2_analysis_20260805/histN{1,2}.json`.
+
+Deterministic-trio results dirs: detA `results/JAX_DreamerSRL/20260805-013030_dsrl_gate2detA_b04M_s42_n114`, detA2 `…013033_…detA2…` (main tree), detB `.claude/worktrees/agent-a18eeb59fa7ffffeb/results/JAX_DreamerSRL/20260805-013017_dsrl_gate2detB_b04M_s42_n114` (worktree tree). Deterministic environment per the signed plan amendment: `XLA_FLAGS=--xla_gpu_deterministic_ops=true`, `XLA_PYTHON_CLIENT_PREALLOCATE=false`, per-process `CUDA_VISIBLE_DEVICES` pinning, node 114 (RTX 6000 Ada, three distinct GPUs), seeded replay-sampler fix-set applied identically on both trees. Comparison artifacts: `tmp/gate2_analysis_20260805/cmp_det_logs.py`, `det_ckpt_checksums.json`.
 
 Artifacts: run A results `results/JAX_DreamerSRL/20260804-052357_dsrl_gate2A_legacy_b04M_s42_n106` (main tree); run B results `.claude/worktrees/agent-a18eeb59fa7ffffeb/results/JAX_DreamerSRL/20260804-052333_dsrl_gate2B_trainpy_b04M_s42_n106` (worktree tree). Both local WandB dirs live under the worktree's `wandb/` (`run-20260804_052355-3wsfk1ca`, `run-20260804_052404-1zbgtsxp`). Analysis used **local WandB datastore files only** (no web API); parser + extracted history in `tmp/gate2_analysis_20260805/`, working notes in `tmp/20260805_000000_gate2_ab_analysis.md`.
 
@@ -84,7 +89,7 @@ Headline metric is **survival steps** (`Episode/Steps`, window-averaged, on the 
 | 5 | Run-B dir passes `eval_rollout.py` checkpoint-restore smoke | Final checkpoint (episode 20 000) restored on CPU from the worktree checkout and evaluated: 5 episodes, mean survival 43.0 steps (consistent with B's training-end ≈43.8). Control on A from the main checkout: mean 42.8 (training-end ≈41.6) | **PASS** (A control also pass) |
 | 6 | No anomalies in logs/metrics | Both runs completed 20 000 episodes and exited cleanly; identical metric schemas; no errors/NaN/gaps; only the long-known orbax `CheckpointManager` deprecation warning. Two benign, *expected* config-dump deltas (§Appendix B) and one display artifact (§5.3) | **PASS** |
 
-> **Verdict on H₀ (integration transparent): SUPPORTED on the statistical leg — all six checklist criteria now PASS.** The survival-curve criterion was finalized on 2026-08-05 against the completed A-vs-A noise-floor pair per the pre-registered §6.1 decision rule: the A/B divergence profile sits inside (peak, end-of-run, per-window max) or marginally above (run-mean, 1.6× a single noise draw) the pure-noise envelope, and every qualitative marker that had motivated caution — sign-consistency in particular — is reproduced by two byte-identical legacy launches. **The overall Gate 2 verdict nonetheless REMAINS PROVISIONAL** pending the node-114 deterministic trio (pinned-environment bit-identity leg; ~70% complete, determinism holding at 14 matched checkpoints), which closes the remaining possibility that a small systematic difference hides under the large stochastic noise floor.
+> **Verdict on H₀ (integration transparent): SUPPORTED — GATE 2 PASS, both legs.** *Statistical leg* (finalized 2026-08-05): all six checklist criteria pass; the A/B divergence profile sits inside the measured pure-noise envelope per the pre-registered §6.1 decision rule, and every qualitative marker that had motivated caution — sign-consistency in particular — is reproduced by two byte-identical legacy launches. *Deterministic leg* (finalized 2026-08-06, §4.6): with the stack's known nondeterminism sources pinned, the legacy and integrated entry points are **bit-identical at full 20,000-episode production scale** — every episode record, checkpoint boundary, gradient-step count, final loss, and every module of the final checkpoint including the PRNG key and optimizer states. The deterministic leg upgrades the conclusion from "no detectable difference" to "the same computation".
 
 ### 4.2 Secondary Metrics
 
@@ -139,6 +144,27 @@ Corroborating evidence from the other two quantitative criteria:
 
 **Decision (pre-registered rule, §6.1):** the A/B profile is *not clearly outside* the noise envelope — it exceeds it on exactly one statistic (run-mean, 1.6×, against a yardstick that is itself a single noisy draw) while sitting at or below it on peak, end-of-run delta, per-window max, and pointwise sd, with the loss and SPS evidence pointing the same way. **Criterion 1: PASS (statistical leg).** Residual ambiguity about a small systematic offset hiding under this large noise floor is assigned to the deterministic (bit-identity) leg on node 114, not to further stochastic replication.
 
+### 4.6 Deterministic Leg (detA / detA2 / detB) — Bit-Identity at Full Scale
+
+Per the signed plan amendment ("Gate 2 criterion 1 (amended)"): three 20,000-episode runs in a pinned bit-deterministic environment with the seeded replay-sampler fix-set on both trees — detA (legacy entry point, pre-seam throwaway tree + fix), detA2 (byte-identical repeat of detA on a different GPU — the replication + cross-GPU-determinism control), detB (integrated train.py, this branch + the same fix). Pass rule: detA ≡ detA2 AND detA ≡ detB, bit-identical on the full common log-stream telemetry. All three exited cleanly.
+
+**(a) Log-stream channel** (wrapper logs, tqdm carriage returns stripped; extraction per the cross-tree-triage method):
+
+| Channel | detA vs detA2 | detA vs detB |
+|---|---|---|
+| Per-episode records `[iter N] episode done: env/ep_len/ep_rew` | **20,000/20,000 IDENTICAL** | **20,000/20,000 IDENTICAL** |
+| Checkpoint (episode, iteration) pairs | IDENTICAL — (5001, 9762), (10000, 22339), (15000, 35288), (20000, 48902) | IDENTICAL (same four) |
+| Periodic `[ep N]` lines (policy_step, world_model_loss, moments_invscale) | 489/489 IDENTICAL | 489/489 IDENTICAL |
+| Per-iteration progress tuples (step, wm loss, invscale) | 482/482 iterations IDENTICAL | 482/482 IDENTICAL |
+| Cumulative `grad_steps` | 781,424 == 781,424 | 781,424 == 781,424 |
+| Final-losses dict (39 keys, 6 decimal places) | IDENTICAL | IDENTICAL |
+
+**(b) Final-loss dicts:** detA2's block equals detA's (all 39 entries; detA vs detB likewise — both directions verified in the same comparison; final `world_model_loss` 1.797300 on all three).
+
+**(c) Final-checkpoint per-module parameter checksums** (episode-20000 checkpoint, restored on CPU as raw arrays; SHA-256 over every leaf's dtype+shape+bytes, aggregated per top-level module — 268 leaves, 14 modules): **all 14 modules identical across detA / detA2 / detB** — the four networks (`world_model`, `actor`, `critic`, `target_critic`), all three Adam optimizer states (`wm_opt`, `actor_opt`, `critic_opt`), the return-normalizer `moments`, the training counters (`policy_step`, `iter_num`, `cumulative_grad_steps`, `total_episodes_completed`, `stage`), and the **PRNG key** itself. Checksum table: `tmp/gate2_analysis_20260805/det_ckpt_checksums.json`.
+
+**Verdict: deterministic leg PASS.** detA ≡ detA2 proves the pinned environment is genuinely deterministic across distinct GPUs (the control the amendment pre-registered); detA ≡ detB then proves the two entry points are **exactly equivalent** at production scale — not statistically similar but the same computation. This closes the §4.5 residual (a small systematic offset hiding under the stochastic noise floor is now excluded: any such offset would have produced a first divergence somewhere in 20,000 episode records or 781,424 gradient steps, and none exists).
+
 ## 5. Analysis
 
 ### 5.1 Key Findings
@@ -177,12 +203,14 @@ None observed in training. Two non-pathologies worth naming so future readers do
 - The pre-registered decision rule was applied on 2026-08-05 when the noise-floor pair completed (§4.5): A/B exceeds the single noise draw on run-mean only (1.6×), while peak, end-of-run delta, per-window max, and pointwise sd are at or below the noise envelope, and the noise pair reproduces the sign-consistency. Not clearly outside → PASS.
 - Track C (the eval-telemetry fix) is confirmed working through the integrated path — videos on the right clock, no dropped rows, correct estimator split — so risk R3 did not materialize.
 - Offline evaluability (risk R4) confirmed on both trees: `eval_rollout.py` restores and evaluates both runs' final checkpoints on CPU.
-- **Overall Gate 2 verdict: REMAINS PROVISIONAL.** A large stochastic noise floor is exactly the condition under which a *small* systematic entry-point difference could hide; that residual question is assigned to the node-114 deterministic trio (pinned-environment bit-identity leg), currently ~70% complete with determinism holding at 14 matched checkpoints. Gate 2 goes green — and Phase 4 (shim + flip) is unblocked — only when that leg reports.
+- **Deterministic leg: PASS — and with it, overall GATE 2: PASS.** The node-114 trio under the pinned deterministic environment is bit-identical end to end (§4.6): detA ≡ detA2 validates cross-GPU determinism (the pre-registered control), detA ≡ detB proves entry-point equivalence exactly — 20,000/20,000 episode records, identical checkpoint boundaries, 781,424 gradient steps on all three, 39-entry final-loss dicts equal at 6 decimals, and all 14 final-checkpoint modules SHA-256-identical including the PRNG key and the three Adam states. The residual "small systematic offset under the noise floor" question is closed.
+- **Phase 4 (deprecation shim + launch-script flip) is unblocked** per the plan's gating: Gate 1 (CPU bit-identity incl. curriculum + resume), Gate 2 statistical leg, and Gate 2 deterministic leg are all green. Remaining Phase-4-side checks (shim smoke, GPU shim smoke) are the developer's, not this analysis's.
 
 ### 6.2 Limitations & Open Questions
 
 - One seed, one config, one node — by design (plan accepts this; Gate 1 carries the config-resolution coverage).
-- A two-run noise estimate is one draw, so the criterion-1 judgment is a plausibility check, not a significance test: A/B run-mean divergence at 1.6× the noise draw is called "inside" because every other statistic overlaps — a second noise pair could shift that reading. The project deliberately routes the residual question to the deterministic bit-identity leg instead of more stochastic pairs, which is the stronger instrument.
+- A two-run noise estimate is one draw, so the criterion-1 judgment is a plausibility check, not a significance test: A/B run-mean divergence at 1.6× the noise draw is called "inside" because every other statistic overlaps. The project deliberately routed the residual question to the deterministic bit-identity leg instead of more stochastic pairs — the stronger instrument — and that leg subsequently returned exact equivalence (§4.6), retiring this limitation.
+- The deterministic leg's equivalence proof holds for the pinned environment + seeded-sampler fix-set as run; production runs (no determinism flag) remain individually nondeterministic — that is a property of the stack, not of either entry point, and the statistical leg covers real-conditions behavior.
 - `Eval/MeanLength` at N=3 is too noisy to compare across runs; the survival curve carries the verdict.
 - The two noise runs also remind us how large this stack's run-to-run spread is (final console world-model loss 1.753 vs 1.819 for byte-identical launches) — worth remembering when any future single-run Dreamer comparison is proposed.
 
@@ -190,9 +218,10 @@ None observed in training. Two non-pathologies worth naming so future readers do
 
 | Priority | Experiment | Rationale | Effort |
 |----------|-----------|-----------|--------|
-| 1 (blocking) | Analyze the node-114 deterministic trio when it completes (bit-identity leg) | The only item keeping the overall Gate 2 verdict provisional; closes the small-systematic-offset-under-noise question | Analysis only |
+| 1 (done 2026-08-06) | ~~Analyze the node-114 deterministic trio~~ | Completed — §4.6; deterministic leg PASS, Gate 2 green | — |
 | 2 (done 2026-08-05) | ~~Finalize criterion 1 against noise-floor pair N1/N2~~ | Completed — §4.5; criterion 1 PASS | — |
-| 3 | Optional post-flip: spot-check `Time/sps_env` on early production integrated runs | Slot-matched Gate-2 data already shows ≈0 entry-point cost; this is belt-and-suspenders only | Free (passive) |
+| 3 | Proceed to Phase 4 (shim + flip) per the integration plan | All gates green; hand-off to `developer` via the plan's Phase 4 section | Dev work (out of this doc's scope) |
+| 4 | Optional post-flip: spot-check `Time/sps_env` on early production integrated runs | Slot-matched Gate-2 data already shows ≈0 entry-point cost; belt-and-suspenders only | Free (passive) |
 
 ---
 
@@ -213,3 +242,4 @@ Local WandB datastore parsing only (project convention — no web API): `tmp/gat
 |------|--------|--------|
 | 2026-08-05 | Initial analysis; provisional verdict pending noise-floor pair N1/N2 | `experiment-analyzer` |
 | 2026-08-05 | Noise-floor pair N1/N2 completed and analyzed (§4.5): criterion 1 finalized PASS (statistical leg), SPS delta attributed to GPU slot, loss gap 7× under noise. Overall verdict remains provisional pending node-114 deterministic trio | `experiment-analyzer` |
+| 2026-08-06 | Deterministic trio detA/detA2/detB analyzed (§4.6): bit-identical on all log-stream channels + all 14 final-checkpoint module checksums. Deterministic leg PASS → **overall Gate 2 PASS**; doc finalized | `experiment-analyzer` |
