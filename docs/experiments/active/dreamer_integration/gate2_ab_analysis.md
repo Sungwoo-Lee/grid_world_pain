@@ -243,3 +243,20 @@ Local WandB datastore parsing only (project convention — no web API): `tmp/gat
 | 2026-08-05 | Initial analysis; provisional verdict pending noise-floor pair N1/N2 | `experiment-analyzer` |
 | 2026-08-05 | Noise-floor pair N1/N2 completed and analyzed (§4.5): criterion 1 finalized PASS (statistical leg), SPS delta attributed to GPU slot, loss gap 7× under noise. Overall verdict remains provisional pending node-114 deterministic trio | `experiment-analyzer` |
 | 2026-08-06 | Deterministic trio detA/detA2/detB analyzed (§4.6): bit-identical on all log-stream channels + all 14 final-checkpoint module checksums. Deterministic leg PASS → **overall Gate 2 PASS**; doc finalized | `experiment-analyzer` |
+
+---
+
+## Feedback from plan-reviewer
+
+**Verdict on this analysis: CONCLUSION SUPPORTED WITH CAVEATS** (adversarial verdict review, 2026-08-06). The evidence was re-checked against raw artifacts, not the doc's claims: the three deterministic-leg logs are distinct files (distinct md5sums) with the correct provenance banners (detA/detA2 launched from the `gate2-preseam-throwaway` tree via the legacy entry point; detB through the integration worktree's train.py config chain — wandb IDs match the manifest); the comparator `tmp/gate2_analysis_20260805/cmp_det_logs.py` was re-run and is non-vacuous (20,000/489/482/39 record counts reproduced, first-divergence reporting logic sound); and the final-checkpoint identity was **independently recomputed from the raw orbax checkpoints** at finer (sub-module) granularity — all groups identical across detA/detA2/detB, and the single-leaf hashes (PRNG `key`, all counters) match the archived JSON exactly. The Gate 2 PASS conclusion is supported.
+
+Caveats (owner: `experiment-analyzer` for the doc wording; nothing blocks Phase 4):
+
+1. 🟡 **The deterministic leg's operating point is undisclosed and "production scale" overstates it.** The det trio ran **16 parallel envs with the CPU replay buffer** (log banners: `num_envs=16`, detB CLI `buffer_device='cpu'`), while the statistical A/B ran 128 envs — §2.2's "128 envs" reads as covering all runs, and §4.6/§6.1's "bit-identical at full 20,000-episode production scale" is true only of the episode count. Entry-point equivalence at 128 envs/GPU conditions rests on the statistical leg + the identical resolved-config dumps (Appendix B), not on the bit-identity proof. One disclosing sentence in §4.6 and §6.2 fixes this.
+2. 🟢 The retained `ckpt_checksums.py` is not the exact version that produced `det_ckpt_checksums.json` (it aggregates at sub-module depth and does not run unmodified under the current orbax; the JSON has 14 top-level groups). Substance independently confirmed, but the artifact/script mismatch is worth knowing before anyone re-runs it.
+3. ❓ The determinism env flags (`XLA_FLAGS=--xla_gpu_deterministic_ops=true` etc.) are not recorded in the run logs themselves. Accepted as self-certified: detA ≡ detA2 across two distinct GPUs over 20,000 episodes is effectively impossible without the pinned environment (the triage's A-vs-A control diverged by iteration count without it).
+4. On the statistical leg: the pre-registered rule (rev `6c539ff` §6.1) is asymmetric — "within the envelope" passes, "clearly exceeds" fails — and the A/B run-mean at 1.6× the single noise draw sits in the rule's undefined middle. Calling it "not clearly outside" is a defensible reading of the rule as written, the doc discloses the softness (§6.2), and the deterministic leg carries the equivalence burden regardless.
+
+Cost if wrong: a 128-env-specific entry-point difference surviving both legs would surface post-flip as subtly different production training — bounded within the measured noise envelope by the statistical leg, so the exposure is one production re-comparison, not data loss or a wrong paper claim.
+
+Reviewed by: plan-reviewer
