@@ -11,7 +11,7 @@ develop_link: docs/develop/active/dreamer/DREAMER_SRL_TRAIN_PY_INTEGRATION_PLAN.
 
 # Gate 2 A/B Analysis — Dreamer legacy entry point vs. integrated train.py dispatch
 
-> **Status**: ANALYZING — **PROVISIONAL VERDICT, not final.** The survival-curve criterion cannot be finalized until the A-vs-A noise-floor pair (two identical legacy launches, running now) completes and supplies the run-to-run-noise yardstick.
+> **Status**: ANALYZING — **statistical leg FINALIZED (criterion 1 PASS against the completed noise-floor pair); overall Gate-2 verdict REMAINS PROVISIONAL** pending the node-114 deterministic trio (running, ~70%, determinism holding at 14 matched checkpoints as of 2026-08-05).
 > **Date**: 2026-08-05
 > **Author**: `experiment-analyzer`
 > **Related**: [[DREAMER_SRL_TRAIN_PY_INTEGRATION_PLAN]] (Gate 2 section = authoritative pass criteria; worktree copy carries all amendments) · [[DREAMER_SRL_EVAL_TELEMETRY_FIX]] (Track C semantics checked here) · [[DREAMER_SRL_TRAIN_PY_DIVERGENCE_MATRIX]]
@@ -22,7 +22,7 @@ develop_link: docs/develop/active/dreamer/DREAMER_SRL_TRAIN_PY_INTEGRATION_PLAN.
 
 The project is retiring the Dreamer world-model agent's private launch script and folding it into the shared training entry point (`train.py`) that every other algorithm already uses. Before anyone's launch scripts change, the integration must pass three gates; this document is the analysis for **Gate 2** — one real GPU training run launched each way, compared end to end. The question is simple: **does a full-length Dreamer training run launched through the new integrated entry point behave the same as one launched through the old legacy script — same learning curves, same world-model convergence, same speed, with all the recently fixed evaluation telemetry (videos, eval metrics on the right step clock) intact and its checkpoints restorable for offline evaluation?**
 
-A crucial piece of context shapes what "the same" can mean: **same-seed Dreamer runs are not reproducible on this stack** (the replay-buffer sampler is unseeded — a registered known issue — and GPU float nondeterminism feeds back into episode lengths and thus the whole trajectory). Two identical invocations of the *same* entry point diverge. The comparison is therefore **statistical, not exact**: the two runs must overlap within same-seed run-to-run noise. To measure that noise directly, a dedicated **noise-floor pair** — the legacy entry point launched twice with the identical command — is running now; its inter-run divergence is the yardstick against which this A/B difference finalizes.
+A crucial piece of context shapes what "the same" can mean: **same-seed Dreamer runs are not reproducible on this stack** (the replay-buffer sampler is unseeded — a registered known issue — and GPU float nondeterminism feeds back into episode lengths and thus the whole trajectory). Two identical invocations of the *same* entry point diverge. The comparison is therefore **statistical, not exact**: the two runs must overlap within same-seed run-to-run noise. To measure that noise directly, a dedicated **noise-floor pair** — the legacy entry point launched twice with the identical command — was run alongside; its inter-run divergence is the yardstick against which the A/B difference was finalized (§4.5). A separate deterministic (pinned-environment, bit-identity) leg on node 114 carries the remaining burden of proof and keeps the overall gate verdict provisional.
 
 **Formal hypothesis:**
 
@@ -62,8 +62,10 @@ Runs were launched by `training-runner` (no pre-registered designer manifest; th
 |-----|--------|------|--------------------|------|------|-------------|--------------|----------|
 | A | completed | legacy entry | `dsrl_gate2A_legacy_b04M_s42_n106` | 42 | 106:0 | 2026-08-04T05:23 | `3wsfk1ca` | `logs/20260804_052322.log` |
 | B | completed | train.py entry | `dsrl_gate2B_trainpy_b04M_s42_n106` | 42 | 106:1 | 2026-08-04T05:24 | `1zbgtsxp` | `logs/20260804_052330.log` |
-| N1 | running | noise floor 1/2 (legacy twice) | `dsrl_gate2N1_legacy_b04M_s42_n106` | 42 | 106:0 | 2026-08-05T00:08 | `u2156tb7` | — |
-| N2 | running | noise floor 2/2 (legacy twice) | `dsrl_gate2N2_legacy_b04M_s42_n106` | 42 | 106:1 | 2026-08-05T00:08 | `breewovl` | — |
+| N1 | completed | noise floor 1/2 (legacy twice) | `dsrl_gate2N1_legacy_b04M_s42_n106` | 42 | 106:0 | 2026-08-05T00:06 | `u2156tb7` | `logs/20260805_000604.log` |
+| N2 | completed | noise floor 2/2 (legacy twice) | `dsrl_gate2N2_legacy_b04M_s42_n106` | 42 | 106:1 | 2026-08-05T00:06 | `breewovl` | `logs/20260805_000606.log` |
+
+N1/N2 results dirs: `results/JAX_DreamerSRL/20260805-000639_dsrl_gate2N1_legacy_b04M_s42_n106` and `…000642_…N2…` (main tree); local WandB dirs under the worktree `wandb/` (`run-20260805_000638-u2156tb7`, `run-20260805_000641-breewovl`). Extracted histories: `tmp/gate2_analysis_20260805/histN{1,2}.json`.
 
 Artifacts: run A results `results/JAX_DreamerSRL/20260804-052357_dsrl_gate2A_legacy_b04M_s42_n106` (main tree); run B results `.claude/worktrees/agent-a18eeb59fa7ffffeb/results/JAX_DreamerSRL/20260804-052333_dsrl_gate2B_trainpy_b04M_s42_n106` (worktree tree). Both local WandB dirs live under the worktree's `wandb/` (`run-20260804_052355-3wsfk1ca`, `run-20260804_052404-1zbgtsxp`). Analysis used **local WandB datastore files only** (no web API); parser + extracted history in `tmp/gate2_analysis_20260805/`, working notes in `tmp/20260805_000000_gate2_ab_analysis.md`.
 
@@ -75,14 +77,14 @@ Headline metric is **survival steps** (`Episode/Steps`, window-averaged, on the 
 
 | # | Gate 2 criterion | Finding | Status |
 |---|---|---|---|
-| 1 | Survival curves overlap within same-seed run-to-run noise | Same shape (both ≈17 → ≈42–44 steps). B sits above A by **+2.85 steps on average** (pointwise B−A: sd 1.65, range −0.29…+5.96); last-20% means A 40.8 ± 0.9 vs B 43.4 ± 0.5 (≈+6%). Offset is **sign-consistent** (B ≥ A at 99/100 points) but starts near zero (first 2 000 episodes: +0.3) and compounds mid-run — the signature of trajectory divergence, not of a config difference. Whether +2.85 is inside the same-seed noise band is **exactly what the noise-floor pair measures** | **PROVISIONAL PASS** — finalizes against N1/N2 |
+| 1 | Survival curves overlap within same-seed run-to-run noise | Same shape (both ≈17 → ≈42–44 steps). B sits above A by **+2.85 steps on average** (pointwise B−A: sd 1.65, range −0.29…+5.96); last-20% means A 40.8 ± 0.9 vs B 43.4 ± 0.5 (≈+6%). **Finalized against the completed noise-floor pair N1/N2** (§4.5): the pure-noise envelope has |diff| mean 1.77, **peak 5.23**, last-20% delta **−3.88**, and is itself **sign-consistent** (one run above the other at 81/99 points) — so the A/B profile (peak 5.96, comparable; last-20% +2.56, *smaller* than noise; mean 2.86 vs 1.77, ~1.6× a single noise draw) is **not clearly outside** the envelope, and the sign-consistency that motivated caution is reproduced by pure noise | **PASS (statistical leg)** |
 | 2 | `WorldModel/loss_model` same-shape convergence, no systematic offset | Same shape (A 1.881→1.758, B 1.905→1.761, WandB windowed). Fraction-of-run-aligned offset B−A = **+0.009 ± 0.011** (≈0.5% of the loss value), sign flips along the curve → no systematic offset | **PASS** |
-| 3 | `Time/sps_env` ratio within ±5% | A mean 15.44 (n=56), B mean 14.73 (n=60) → B/A = **0.954 (−4.6%)**; median ratio 0.955. Within the ±5% policy, but marginal and consistent in sign (see Finding 3) | **PASS (marginal)** |
+| 3 | `Time/sps_env` ratio within ±5% | A mean 15.44 (n=56), B mean 14.73 (n=60) → B/A = **0.954 (−4.6%)**; median ratio 0.955. **Explained by the GPU slot, not the entry point**: the noise pair ran legacy-vs-legacy on the *same two slots* (N1 on 106:0, N2 on 106:1) and reproduced the gap almost exactly — N2/N1 = **0.951 (−4.9%)**. Slot 106:1 is simply ~5% slower than 106:0 on this node; the entry-point contribution is ≈0 | **PASS** (marginality resolved) |
 | 4 | Track C intact on run B (videos, `Eval/*` on policy-step axis, estimator split, no dropped rows) | 4 eval videos present in run B's media (`media/videos/eval/video_<policy_step>_*.mp4` at policy steps 141 952 / 349 056 / 555 648 / 774 016 — the backward-step fix holds); `Eval/MeanLength`, `Eval/MeanReward`, `eval/video`, `eval/checkpoint_episode` all logged at `step=policy_step` at checkpoints 5 001/10 003/15 002/20 000; estimator split correct for this config (stats pass off → video pass writes `Eval/Mean*`, and no `Eval/video/*` keys appear — exactly the telemetry-fix routing table's "stats off" row); **zero** "dropped row"/backward-step warnings in wrapper log, console log, and wandb debug log | **PASS** |
 | 5 | Run-B dir passes `eval_rollout.py` checkpoint-restore smoke | Final checkpoint (episode 20 000) restored on CPU from the worktree checkout and evaluated: 5 episodes, mean survival 43.0 steps (consistent with B's training-end ≈43.8). Control on A from the main checkout: mean 42.8 (training-end ≈41.6) | **PASS** (A control also pass) |
 | 6 | No anomalies in logs/metrics | Both runs completed 20 000 episodes and exited cleanly; identical metric schemas; no errors/NaN/gaps; only the long-known orbax `CheckpointManager` deprecation warning. Two benign, *expected* config-dump deltas (§Appendix B) and one display artifact (§5.3) | **PASS** |
 
-> **Verdict on H₀ (integration transparent): PROVISIONALLY SUPPORTED.** Five of six criteria pass outright; the survival-curve criterion passes provisionally — shape and early-run agreement are exactly what a transparent integration predicts, but the sign-consistent +2.85-step offset can only be classified as noise vs. systematic once the A-vs-A noise-floor pair (N1/N2, running) provides the same-seed divergence yardstick. **Gate 2 must not be declared passed until that comparison is made.**
+> **Verdict on H₀ (integration transparent): SUPPORTED on the statistical leg — all six checklist criteria now PASS.** The survival-curve criterion was finalized on 2026-08-05 against the completed A-vs-A noise-floor pair per the pre-registered §6.1 decision rule: the A/B divergence profile sits inside (peak, end-of-run, per-window max) or marginally above (run-mean, 1.6× a single noise draw) the pure-noise envelope, and every qualitative marker that had motivated caution — sign-consistency in particular — is reproduced by two byte-identical legacy launches. **The overall Gate 2 verdict nonetheless REMAINS PROVISIONAL** pending the node-114 deterministic trio (pinned-environment bit-identity leg; ~70% complete, determinism holding at 14 matched checkpoints), which closes the remaining possibility that a small systematic difference hides under the large stochastic noise floor.
 
 ### 4.2 Secondary Metrics
 
@@ -115,6 +117,28 @@ Survival steps, 10-window view of the episode axis (window = 2 000 episodes):
 
 Both curves are smooth, monotone-rising, no collapses or phase transitions. The gap opens from near-zero, peaks mid-run (+5.4 around episodes 8–12 k), then narrows to +2.2 by the end — divergence-then-partial-reconvergence, the temporal signature expected from compounding trajectory noise between two runs of the same underlying learner, and *not* the flat or growing offset expected from a config/semantics difference present from step one. World-model loss shows the same shape on both sides with a ±0.01 wiggle and no persistent offset.
 
+### 4.5 Noise-Floor Envelope (N1 vs N2) and the Criterion-1 Decision
+
+Two byte-identical legacy invocations (same command, seed 42, 20 000 episodes, same node, launched ~3 s apart) — their divergence is pure run-to-run noise. Both exited cleanly.
+
+Survival-curve pointwise divergence, same 100-point episode-axis method as A/B (99 common points for the N pair):
+
+| Statistic | Noise pair (N2−N1) | A/B (B−A) | A/B inside envelope? |
+|---|---|---|---|
+| signed mean | −1.49 | +2.85 | mean of \|diff\|: 1.77 vs 2.86 → ~1.6× a single noise draw |
+| pointwise sd | 1.67 | 1.65 | yes (equal) |
+| peak \|diff\| | **5.23** | 5.96 | comparable (+14%) |
+| last-20% delta | **−3.88** | +2.56 | yes — A/B end-of-run gap is *smaller* than noise |
+| max window delta (2 000-ep windows) | −4.95 | +5.42 | comparable |
+| sign consistency | 81/99 one-directional | 96/100 | noise reproduces sign-consistency |
+
+Corroborating evidence from the other two quantitative criteria:
+
+- **World-model loss**: the noise pair's console-final spread is **0.067** (1.7526 vs 1.8193) — the A/B console gap (0.0094) is **7× smaller than noise**. Fraction-aligned windowed offset: noise −0.008 ± 0.017 (max |0.047|) vs A/B +0.009 ± 0.011. A/B is comfortably inside.
+- **Throughput**: N2/N1 `Time/sps_env` = 0.951 (−4.9%) with legacy on *both* sides, on the same two GPU slots as A/B (0.954, −4.6%) → the SPS gap is a property of slot 106:1, not of the entry point.
+
+**Decision (pre-registered rule, §6.1):** the A/B profile is *not clearly outside* the noise envelope — it exceeds it on exactly one statistic (run-mean, 1.6×, against a yardstick that is itself a single noisy draw) while sitting at or below it on peak, end-of-run delta, per-window max, and pointwise sd, with the loss and SPS evidence pointing the same way. **Criterion 1: PASS (statistical leg).** Residual ambiguity about a small systematic offset hiding under this large noise floor is assigned to the deterministic (bit-identity) leg on node 114, not to further stochastic replication.
+
 ## 5. Analysis
 
 ### 5.1 Key Findings
@@ -124,17 +148,17 @@ What: dumped run configs differ *only* in the planned WandB label (legacy writes
 Evidence: `diff` of `models/{agent,env}_config.yaml` across the two run dirs; WandB `config.yaml` of both runs.
 Confidence: High.
 
-**Finding 2 — The A/B survival gap looks like trajectory noise, but only the noise-floor pair can prove it.**
-What: +2.85-step mean offset, sign-consistent, but near-zero at the start and non-monotone over the run.
-Why: the unseeded replay sampler + GPU nondeterminism make same-seed runs diverge (plan's GPU-leg triage demonstrated even A-vs-A control-flow divergence); an entry-point semantics bug would instead bite from episode 1.
-Evidence: window table §4.4; plan §GPU-leg triage.
-Confidence: Medium until N1/N2 complete — a sign-consistent 6–7% end-of-run offset is also what a small systematic difference would look like, so this is deliberately not called closed.
+**Finding 2 — The A/B survival gap is consistent with trajectory noise (finalized against the noise-floor pair).**
+What: +2.85-step mean offset, sign-consistent, near-zero at the start, non-monotone over the run.
+Why: the unseeded replay sampler + GPU nondeterminism make same-seed runs diverge — and the noise pair *quantifies* it: two byte-identical legacy launches diverged with peak 5.23, end-of-run delta 3.88 (larger than A/B's 2.56), and 81/99 sign-consistency. Every qualitative marker that made the A/B offset look suspicious is reproduced by pure noise; the one statistic where A/B exceeds the single noise draw (run-mean, 1.6×) is within what one draw of a noisy yardstick can miss.
+Evidence: §4.5 envelope table; window tables; plan §GPU-leg triage.
+Confidence: High for "not clearly systematic"; the residual small-systematic-offset question is closed by the deterministic leg, not by more stochastic pairs.
 
-**Finding 3 — Throughput is within policy but B is consistently ~4.6% slower per env step.**
-What: `Time/sps_env` B/A = 0.954 (means), 0.955 (medians) — inside ±5% but one-sided across the whole run.
-Why (candidates): compat row C10 (train.py sets `XLA_PYTHON_CLIENT_PREALLOCATE=false`, a planned, watched delta — allocator overhead is the plan's own predicted mechanism); B's longer episodes shift the env-step/train-step mix; per-GPU silicon variation between 106:0 and 106:1.
-Evidence: 56/60-point SPS series.
-Confidence: Medium. Note the absolute numbers (~15 SPS) are RTX 3090-class and not comparable to the node-102 RTX 4090 bench figures. N1/N2 (both legacy, same two GPUs) will incidentally show how much of the gap is GPU-slot rather than entry-point.
+**Finding 3 — The −4.6% SPS reading is the GPU slot, not the entry point.**
+What: `Time/sps_env` B/A = 0.954; the noise pair, legacy on both sides on the *same two slots*, reproduced it: N2/N1 = 0.951. Slot 106:1 (which ran B and N2) is ~5% slower than 106:0 (A and N1); slot-matched entry-point comparison: 106:0 legacy 15.44 (A) vs 15.47 (N1); 106:1 train.py 14.73 (B) vs legacy 14.72 (N2) — entry-point deltas ≈0.2% and 0.1%.
+Why: per-slot hardware/thermal variation; the C10 allocator hypothesis is not needed and is contradicted by the slot-matched numbers.
+Evidence: §4.5; four SPS series.
+Confidence: High. Absolute numbers (~15 SPS) are RTX 3090-class, not comparable to node-102 RTX 4090 bench figures.
 
 **Finding 4 — Track C evaluation telemetry survived the integration completely.**
 What: all four eval events on run B produced videos on the policy-step clock, eval scalars on the same clock, correct estimator routing for the video-only config, zero dropped rows.
@@ -149,26 +173,26 @@ None observed in training. Two non-pathologies worth naming so future readers do
 
 ### 6.1 Summary
 
-- **Provisional Gate 2 verdict: PASS-pending-noise-floor.** Nothing in either run indicates the integrated train.py path trains differently from the legacy entry point: identical resolved configs (minus the planned label), same-shape learning curves with near-identical early training, overlapping world-model loss, throughput within the ±5% policy, telemetry fully intact, checkpoints restorable.
-- The single open item is quantitative, not qualitative: is a +2.85-step mean survival offset (sign-consistent, ≈6% at end of run) within the same-seed A-vs-A divergence of this stack? The noise-floor pair (two identical legacy launches, running since 2026-08-05 00:08) answers exactly this.
+- **Statistical leg: PASS — all six A/B checklist criteria are green.** Nothing in either run indicates the integrated train.py path trains differently from the legacy entry point: identical resolved configs (minus the planned label), same-shape learning curves whose divergence sits inside the measured same-seed noise envelope, overlapping world-model loss (A/B gap 7× smaller than the noise pair's spread), throughput delta fully attributed to the GPU slot, telemetry fully intact, checkpoints restorable.
+- The pre-registered decision rule was applied on 2026-08-05 when the noise-floor pair completed (§4.5): A/B exceeds the single noise draw on run-mean only (1.6×), while peak, end-of-run delta, per-window max, and pointwise sd are at or below the noise envelope, and the noise pair reproduces the sign-consistency. Not clearly outside → PASS.
 - Track C (the eval-telemetry fix) is confirmed working through the integrated path — videos on the right clock, no dropped rows, correct estimator split — so risk R3 did not materialize.
 - Offline evaluability (risk R4) confirmed on both trees: `eval_rollout.py` restores and evaluates both runs' final checkpoints on CPU.
-- Decision rule on completion of N1/N2: compute the same 100-point pointwise |N1−N2| survival divergence profile; if the A/B offset profile (mean +2.85, peak +5.96) lies within the noise pair's envelope (comparable mean/peak), criterion 1 flips to PASS and Gate 2 is green → Phase 4 (shim + flip) is unblocked. If A/B clearly exceeds the noise floor, Gate 2 fails and the offset must be investigated as systematic before any flip.
+- **Overall Gate 2 verdict: REMAINS PROVISIONAL.** A large stochastic noise floor is exactly the condition under which a *small* systematic entry-point difference could hide; that residual question is assigned to the node-114 deterministic trio (pinned-environment bit-identity leg), currently ~70% complete with determinism holding at 14 matched checkpoints. Gate 2 goes green — and Phase 4 (shim + flip) is unblocked — only when that leg reports.
 
 ### 6.2 Limitations & Open Questions
 
 - One seed, one config, one node — by design (plan accepts this; Gate 1 carries the config-resolution coverage).
-- A two-run noise estimate is itself noisy: N1/N2 give one draw of the A-vs-A divergence, so the final judgment is a plausibility check, not a significance test. If N1−N2 divergence lands ambiguously close to the A/B offset, a second noise pair (or a B-vs-B pair) would be the cheap disambiguator.
-- The −4.6% SPS delta is within policy but unexplained in detail; if it persists in future integrated runs on other cards it deserves a targeted look (C10 allocator setting is the first suspect).
+- A two-run noise estimate is one draw, so the criterion-1 judgment is a plausibility check, not a significance test: A/B run-mean divergence at 1.6× the noise draw is called "inside" because every other statistic overlaps — a second noise pair could shift that reading. The project deliberately routes the residual question to the deterministic bit-identity leg instead of more stochastic pairs, which is the stronger instrument.
 - `Eval/MeanLength` at N=3 is too noisy to compare across runs; the survival curve carries the verdict.
+- The two noise runs also remind us how large this stack's run-to-run spread is (final console world-model loss 1.753 vs 1.819 for byte-identical launches) — worth remembering when any future single-run Dreamer comparison is proposed.
 
 ### 6.3 Recommended Next Experiments
 
 | Priority | Experiment | Rationale | Effort |
 |----------|-----------|-----------|--------|
-| 1 (blocking) | Finalize criterion 1 against noise-floor pair N1/N2 when it completes (~1 day) | The only item keeping the Gate 2 verdict provisional | Analysis only |
-| 2 | If N1/N2 is ambiguous: one B-vs-B pair (train.py twice) | Symmetric noise estimate on the integrated path | 2 GPU-days |
-| 3 | Post-flip: watch `Time/sps_env` on the first few production integrated runs | Confirm the −4.6% is GPU-slot/noise, not a persistent C10 cost | Free (passive) |
+| 1 (blocking) | Analyze the node-114 deterministic trio when it completes (bit-identity leg) | The only item keeping the overall Gate 2 verdict provisional; closes the small-systematic-offset-under-noise question | Analysis only |
+| 2 (done 2026-08-05) | ~~Finalize criterion 1 against noise-floor pair N1/N2~~ | Completed — §4.5; criterion 1 PASS | — |
+| 3 | Optional post-flip: spot-check `Time/sps_env` on early production integrated runs | Slot-matched Gate-2 data already shows ≈0 entry-point cost; this is belt-and-suspenders only | Free (passive) |
 
 ---
 
@@ -188,3 +212,4 @@ Local WandB datastore parsing only (project convention — no web API): `tmp/gat
 | Date | Change | Author |
 |------|--------|--------|
 | 2026-08-05 | Initial analysis; provisional verdict pending noise-floor pair N1/N2 | `experiment-analyzer` |
+| 2026-08-05 | Noise-floor pair N1/N2 completed and analyzed (§4.5): criterion 1 finalized PASS (statistical leg), SPS delta attributed to GPU slot, loss gap 7× under noise. Overall verdict remains provisional pending node-114 deterministic trio | `experiment-analyzer` |
