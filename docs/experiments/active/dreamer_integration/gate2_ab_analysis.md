@@ -148,6 +148,8 @@ Corroborating evidence from the other two quantitative criteria:
 
 Per the signed plan amendment ("Gate 2 criterion 1 (amended)"): three 20,000-episode runs in a pinned bit-deterministic environment with the seeded replay-sampler fix-set on both trees — detA (legacy entry point, pre-seam throwaway tree + fix), detA2 (byte-identical repeat of detA on a different GPU — the replication + cross-GPU-determinism control), detB (integrated train.py, this branch + the same fix). Pass rule: detA ≡ detA2 AND detA ≡ detB, bit-identical on the full common log-stream telemetry. All three exited cleanly.
 
+**Operating-point disclosure (per plan-reviewer caveat 1):** the deterministic trio ran at **`num_envs=16` with the CPU replay buffer (`buffer_device=cpu`)** — the validated parity configuration — not the 128-env/GPU-buffer production configuration used by the statistical A/B. "Production scale" in this section therefore refers to the **20,000-episode budget only**. Entry-point equivalence under 128-env/GPU-buffer conditions rests on the statistical leg (which ran the true production configuration, §4.1–4.5) plus the identical resolved-config dumps (Appendix B), not on this bit-identity proof.
+
 **(a) Log-stream channel** (wrapper logs, tqdm carriage returns stripped; extraction per the cross-tree-triage method):
 
 | Channel | detA vs detA2 | detA vs detB |
@@ -211,6 +213,7 @@ None observed in training. Two non-pathologies worth naming so future readers do
 - One seed, one config, one node — by design (plan accepts this; Gate 1 carries the config-resolution coverage).
 - A two-run noise estimate is one draw, so the criterion-1 judgment is a plausibility check, not a significance test: A/B run-mean divergence at 1.6× the noise draw is called "inside" because every other statistic overlaps. The project deliberately routed the residual question to the deterministic bit-identity leg instead of more stochastic pairs — the stronger instrument — and that leg subsequently returned exact equivalence (§4.6), retiring this limitation.
 - The deterministic leg's equivalence proof holds for the pinned environment + seeded-sampler fix-set as run; production runs (no determinism flag) remain individually nondeterministic — that is a property of the stack, not of either entry point, and the statistical leg covers real-conditions behavior.
+- **The deterministic leg's bit-identity proof was obtained at `num_envs=16` with the CPU replay buffer** (the validated parity configuration); its "production scale" is the 20,000-episode budget, not the production 128-env/GPU-buffer operating point. Coverage of the 128-env/GPU-buffer configuration comes from the statistical leg (run at exactly that configuration) together with the identical resolved-config dumps — a 128-env-specific entry-point difference is bounded within the measured noise envelope, not excluded bit-exactly.
 - `Eval/MeanLength` at N=3 is too noisy to compare across runs; the survival curve carries the verdict.
 - The two noise runs also remind us how large this stack's run-to-run spread is (final console world-model loss 1.753 vs 1.819 for byte-identical launches) — worth remembering when any future single-run Dreamer comparison is proposed.
 
@@ -231,6 +234,8 @@ None observed in training. Two non-pathologies worth naming so future readers do
 
 Local WandB datastore parsing only (project convention — no web API): `tmp/gate2_analysis_20260805/parse_wandb.py` scans `run-*.wandb` protobuf records (`history` records, `nested_key` field, wandb 0.24.0) → `histA.json` (157 rows) / `histB.json` (159 rows). Both files retained with the aggregation notes in `tmp/20260805_000000_gate2_ab_analysis.md`. Eval smoke outputs under `tmp/gate2_analysis_20260805/eval_smoke_{A,B}/`.
 
+**Checksum-script provenance caveat (plan-reviewer caveat 2):** the retained `tmp/gate2_analysis_20260805/ckpt_checksums.py` is **not the exact version that produced `det_ckpt_checksums.json`** (the archived script aggregates at sub-module depth and does not run unmodified under the current orbax; the final comparison was executed as an inline heredoc aggregating at the 14 top-level modules). The identity result does not rest on that script: plan-reviewer **independently recomputed the checksums from the raw orbax checkpoints at finer sub-module granularity** and confirmed all groups identical across detA/detA2/detB, with single-leaf hashes (PRNG `key`, counters) matching the archived JSON exactly (see the signed feedback section below). Anyone re-running should regenerate from the JSON's 14-module granularity rather than the retained script.
+
 ### B. Config Diffs
 
 `diff` of A vs B dumped `models/agent_config.yaml`: single line — `agent.algorithm: DreamerV3` (A) vs `dreamer_srl` (B). Legacy `main()` hardcodes the old label for WandB-filter continuity (`dreamer_srl_main.py:760`; source config declares `dreamer_srl` in both runs); train.py writes the spec-driven label. This is compat row C7 / risk R7 behaving exactly as the plan specifies — the legacy label disappears with the legacy path at Phase 4.
@@ -243,6 +248,7 @@ Local WandB datastore parsing only (project convention — no web API): `tmp/gat
 | 2026-08-05 | Initial analysis; provisional verdict pending noise-floor pair N1/N2 | `experiment-analyzer` |
 | 2026-08-05 | Noise-floor pair N1/N2 completed and analyzed (§4.5): criterion 1 finalized PASS (statistical leg), SPS delta attributed to GPU slot, loss gap 7× under noise. Overall verdict remains provisional pending node-114 deterministic trio | `experiment-analyzer` |
 | 2026-08-06 | Deterministic trio detA/detA2/detB analyzed (§4.6): bit-identical on all log-stream channels + all 14 final-checkpoint module checksums. Deterministic leg PASS → **overall Gate 2 PASS**; doc finalized | `experiment-analyzer` |
+| 2026-08-06 | Plan-reviewer caveats addressed: det-leg operating-point disclosure (16 envs, CPU buffer — "production scale" = episode budget only) added to §4.6 + §6.2; checksum-script provenance caveat + reviewer's independent recomputation cited in Appendix A | `experiment-analyzer` |
 
 ---
 
