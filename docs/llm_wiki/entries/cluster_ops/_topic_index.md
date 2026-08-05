@@ -6,8 +6,8 @@
 > To improve a row, set a `headline:` field on the entry itself.
 
 **Folder definition**: Lab cluster ops and env mgmt
-**Insights**: 42
-**Last updated**: 2026-08-05
+**Insights**: 43
+**Last updated**: 2026-08-06
 
 ---
 
@@ -15,6 +15,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-08-06 | 03:06 | [20260806_0306_gpu_claim_and_nas_git_lock_protocol](20260806_0306_gpu_claim_and_nas_git_lock_protocol.md) | Three cluster-ops rules from the Dreamer Gate-2 arc: a free-looking GPU can already be claimed by a run still in its CPU phase (check proce… |
 | 2026-08-05 | 01:20 | [20260805_0120_node114_nas_hang_sustained_io](20260805_0120_node114_nas_hang_sustained_io.md) | Node 114's NAS mount is intermittently unusable and 'reads OK' is not enough: it passed a df/mkdir NAS check and ran a 100s probe sweep fin… |
 | 2026-07-28 | 16:46 | [20260728_1646_git_commit_pathspec_prevents_cross_session_sweep](20260728_1646_git_commit_pathspec_prevents_cross_session_sweep.md) | The prevention the 2026-05-28 contamination insight lacked: commit with an explicit pathspec (`git commit -F msg -- <files>`), because a ba… |
 | 2026-07-27 | 05:41 | [20260727_0541_total_steps_footgun_dreamer_resume_path](20260727_0541_total_steps_footgun_dreamer_resume_path.md) | dsrl_b04_M_128env 'crash' was actually clean completion: --total-steps silently switches Dreamer's dual-mode loop OUT of episode-based term… |

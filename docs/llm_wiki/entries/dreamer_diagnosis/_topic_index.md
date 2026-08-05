@@ -6,8 +6,8 @@
 > To improve a row, set a `headline:` field on the entry itself.
 
 **Folder definition**: DreamerV3 failure investigation
-**Insights**: 28
-**Last updated**: 2026-07-27
+**Insights**: 30
+**Last updated**: 2026-08-06
 
 ---
 
@@ -15,6 +15,8 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-08-06 | 03:05 | [20260806_0305_equivalence_testing_noise_floor_and_det_trio](20260806_0305_equivalence_testing_noise_floor_and_det_trio.md) | Reusable recipe for proving a refactor did not change a working training system: audit and seed every entropy source first, measure the noi… |
+| 2026-08-06 | 03:04 | [20260806_0304_dreamer_sampler_seeding_full_determinism_recipe](20260806_0304_dreamer_sampler_seeding_full_determinism_recipe.md) | Dreamer runs were never same-seed reproducible because the replay sampler drew batches from an unseeded random generator; seeding it from t… |
 | 2026-07-27 | 05:39 | [20260727_0539_task_different_in_kind_reward_algebra](20260727_0539_task_different_in_kind_reward_algebra.md) | Task-difficulty verdict vs the DreamerV3 suite: 'different in kind' — conventionally simpler (~90%) but harder on axes the suite never test… |
 | 2026-07-27 | 05:38 | [20260727_0538_critic_twohot_bin_resolution_bottleneck](20260727_0538_critic_twohot_bin_resolution_bottleneck.md) | DreamerV3's two-hot critic at symlog ±20 gives 1 bin ≈ 52 survival-steps on our task: the whole task spans ~10 of 255 bins, total learning-… |
 | 2026-07-27 | 05:37 | [20260727_0537_dreamer_five_perspective_investigation_verdict](20260727_0537_dreamer_five_perspective_investigation_verdict.md) | 5-perspective fresh-eyes investigation: dreamer_srl implementation CLEAN (0 red), learning healthy-but-slow (throughput-bound), XS(3.17M)≈M… |
