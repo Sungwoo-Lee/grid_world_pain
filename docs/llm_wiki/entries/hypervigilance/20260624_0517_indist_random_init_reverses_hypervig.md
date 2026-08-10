@@ -50,4 +50,5 @@ The earlier "hg10 is hypervigilant / fails to eat" conclusion was an **off-distr
 - [[20260630_1629_injury_gated_olfactory_noise_hypervig]] (hypervigilance, 2026-06-30) — Basic level 06 design: induce hypervigilance via INJURY-GATED OLFACTORY perceptu
 - [[20260630_1715_behavior_measure_study_method_and_tooling]] (behavior_measures, 2026-06-30) — Interoceptive behavior-measure study: discover MEASURES of foraging/avoidance vs
 - [[20260630_1717_avoidance_reflex_needs_motion_and_olfaction]] (behavior_measures, 2026-06-30) — Avoidance probe (predator/rabbit + bush): the flee-to-cover reflex requires BOTH
+- [[20260810_1753_bushrefuge_injury_suppresses_bush_use_heal_by_rest]] (behavior_measures, 2026-08-10) — Bush-refuge rPPO agents DO hide heavily (predator 34-42%, rabbit-chase 26-32%, r
 <!-- END BACKLINKS -->
