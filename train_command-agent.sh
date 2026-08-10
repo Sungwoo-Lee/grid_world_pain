@@ -2002,29 +2002,39 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 #   --wandb-group rppo_restprem --wandb-job-type prod \
 #   --wandb-name rppo_restprem_a06_n108 --tag rppo_restprem_a06_n108
 #
-# Arm a07: rppo_restprem_a07_n109 — node 109, cuda:0 — *** NOT LAUNCHED ***
-# BLOCKED 2026-08-10: node 109 has no nas01 CIFS mount (only nas02 + nas03 present;
-# /media/nas01 is an empty directory), so the project tree is unreachable there.
-# Reassignment is the caller's call — the runner does not pick nodes.
-# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-#   --config configs/environment/experiment/basic_bushrefuge_restpremium/04-restprem_a07.yaml \
-#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
-#   --eval-config configs/evaluation/experiment_on.yaml \
-#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
-#   --device cuda:0 --log-interval 50 \
-#   --wandb-group rppo_restprem --wandb-job-type prod \
-#   --wandb-name rppo_restprem_a07_n109 --tag rppo_restprem_a07_n109
+# Arms a07 + a08 — REASSIGNED node 109 -> node 111 by the user, 2026-08-10.
+# The original 109 assignment was BLOCKED: node 109 has no nas01 CIFS mount (only
+# nas02 + nas03 present; /media/nas01 is an empty directory), so the project tree is
+# unreachable there. Node 111 re-verified at reassignment time: nas01 mounted (67T
+# free), both RTX 3090s idle (28 / 196 MiB, 0% util), no train.py running.
+# Tags renamed _n109 -> _n111 to reflect the actual node.
+# Launched SEQUENTIALLY with a ~60 s gap: the first 8 arms ran 8 cold JIT compiles
+# concurrently over CIFS, which is why they took ~45 min to reach the first step;
+# staggering avoids compounding that. Each got an EXPLICIT --log path via
+# run_command.py --log, so neither collides with the other's launcher log.
 #
-# Arm a08: rppo_restprem_a08_n109 — node 109, cuda:1 — *** NOT LAUNCHED ***
-# BLOCKED 2026-08-10: same node-109 nas01 mount failure as a07.
-# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-#   --config configs/environment/experiment/basic_bushrefuge_restpremium/04-restprem_a08.yaml \
-#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
-#   --eval-config configs/evaluation/experiment_on.yaml \
-#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
-#   --device cuda:1 --log-interval 50 \
-#   --wandb-group rppo_restprem --wandb-job-type prod \
-#   --wandb-name rppo_restprem_a08_n109 --tag rppo_restprem_a08_n109
+# Arm a07: rppo_restprem_a07_n111 — node 111, cuda:0
+# LAUNCHED 2026-08-10 20:24, PID 1971, launcher log logs/20260810_restprem_a07_n111.log, WandB 70erj7yy
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+  --config configs/environment/experiment/basic_bushrefuge_restpremium/04-restprem_a07.yaml \
+  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+  --eval-config configs/evaluation/experiment_on.yaml \
+  --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+  --device cuda:0 --log-interval 50 \
+  --wandb-group rppo_restprem --wandb-job-type prod \
+  --wandb-name rppo_restprem_a07_n111 --tag rppo_restprem_a07_n111
+#
+# Arm a08: rppo_restprem_a08_n111 — node 111, cuda:1
+# LAUNCHED 2026-08-10 20:25 (~60 s after a07, staggered), PID 2187,
+# launcher log logs/20260810_restprem_a08_n111.log, WandB wezpfd69
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+  --config configs/environment/experiment/basic_bushrefuge_restpremium/04-restprem_a08.yaml \
+  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+  --eval-config configs/evaluation/experiment_on.yaml \
+  --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+  --device cuda:1 --log-interval 50 \
+  --wandb-group rppo_restprem --wandb-job-type prod \
+  --wandb-name rppo_restprem_a08_n111 --tag rppo_restprem_a08_n111
 #
 # Arm a09: rppo_restprem_a09_n110 — node 110, cuda:0 — 19683x (base 2.9e-05) WATCH ITEM
 # LAUNCHED 2026-08-10, PID 1017751, launcher log logs/20260810_185754.log (SHARED/garbled), WandB evrn1amy
@@ -2053,11 +2063,12 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 #    results/eval tree over CIFS before the first GPU step. At T+23 min all 8 procs were
 #    alive with CPU time climbing and the directory walk visibly advancing, but GPU util
 #    was still 0%. Expected-slow, not a hang.
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-  --config configs/environment/experiment/basic_bushrefuge_restpremium/04-restprem_a10.yaml \
-  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
-  --eval-config configs/evaluation/experiment_on.yaml \
-  --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
-  --device cuda:1 --log-interval 50 \
-  --wandb-group rppo_restprem --wandb-job-type prod \
-  --wandb-name rppo_restprem_a10_n110 --tag rppo_restprem_a10_n110
+# (commented 2026-08-10: the live block is now the a07/a08 node-111 pair above)
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic_bushrefuge_restpremium/04-restprem_a10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --eval-config configs/evaluation/experiment_on.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:1 --log-interval 50 \
+#   --wandb-group rppo_restprem --wandb-job-type prod \
+#   --wandb-name rppo_restprem_a10_n110 --tag rppo_restprem_a10_n110
