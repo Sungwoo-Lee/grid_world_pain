@@ -1872,11 +1872,192 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 #
 # Run 4: rppo_bushrefuge_b04_n113 — node 113, cuda:1 — 10x10 jump/pounce (attack_range [2,3], 50% hit)
 # LAUNCHED 2026-08-04, PID 1692, launcher log logs/20260804_041012.log
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic_bushrefuge/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --eval-config configs/evaluation/experiment_on.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:1 --log-interval 50 \
+#   --wandb-group rppo_bushrefuge --wandb-job-type prod \
+#   --wandb-name rppo_bushrefuge_b04_n113 --tag rppo_bushrefuge_b04_n113
+
+# ---------------------------------------------------------------------------
+# rppo_restprem — 10-arm REST-PREMIUM sweep — 2026-08-10
+# ---------------------------------------------------------------------------
+# WHAT THIS TESTS (plain language): in this project injury heals ONLY when the agent
+# takes the Rest action, so an injured agent freezes and heals wherever it happens to
+# be standing — it does NOT travel to cover first. Measured on the bush-refuge runs:
+# while injured the agent rests ~86% of the time but sits in a bush only 1-3% of it.
+# This sweep asks whether making an UNINTERRUPTED rest streak valuable is enough to
+# push an injured agent to walk to the refuge bush (which predators cannot enter) and
+# complete the heal somewhere safe — i.e. whether injury can be made to INCREASE cover
+# use instead of suppressing it.
+#
+# THE SINGLE VARIABLE is the "streak premium": how much more healing you get on the
+# 10th consecutive Rest than on the 1st Rest after an interruption.
+#   recovery = recovery_base_rate * (1 + recovery_accel_rate)^(rest_streak - 1)
+# The 10 arms sweep that premium log-spaced from 1x (flat, no continuity incentive)
+# to 129962x. recovery_base_rate is SOLVED per arm so every arm still sheds injury 70
+# in ~13-15 rest steps — the injured window is matched, only the continuity gradient
+# differs. a01 = the zero-premium anchor; a03 (38x) reproduces the current default.
+#
+#   arm  premium      base        accel
+#   a01  1x           5.0         0.0
+#   a02  ~2x          ...         ...
+#   a03  38x          0.12        0.5     <- current/default regime
+#   a04-a08  (log-spaced between)
+#   a09  19683x       2.9e-05     2.0     <- WATCH: very small base rate
+#   a10  129962x      2.1e-06     2.7     <- WATCH: very small base rate
+#
+# Base task: configs/environment/experiment/basic_bushrefuge/04-jump_attack_10x10
+# (bush blocks_animals, jump/pounce predator attack_range [2,3]) — each arm `extends:`
+# it and overrides ONLY body.recovery_base_rate + body.recovery_accel_rate.
+# Configs committed at 5e170a1; the agent did not modify them.
+#
+# Plain rPPO (unmodulated), single-config from scratch (standalone, NOT continual).
+# Flags deliberately IDENTICAL to the 2026-08-04 rppo_bushrefuge batch so the
+# restpremium arms are directly comparable to that ladder:
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 --log-interval 50
+#   --eval-config configs/evaluation/experiment_on.yaml   (bush_dwell / survival probe)
+#   seed: config default 42 (NOT overridden on the CLI)
+#
+# Deviations flagged to the user pre-launch (inherited from the bushrefuge precedent):
+#   - --checkpoint-frequency 100000 overrides the rPPO config-owned 200000
+#     (configs/train/recurrent_ppo.yaml) — intentional, for cross-batch comparability.
+#   - --num-envs 128 is redundant (config-owned value is already 128) but passed
+#     explicitly to mirror the bushrefuge batch's command line exactly.
+#
+# Pre-flight 2026-08-10: nodes 106/107/108/110 NAS-mounted (nas01, 68T free), all 8
+# RTX 3090 GPUs idle (<=58 MiB, no compute procs), JAX 0.9.0.1 GPU-compile check passed
+# on all four. sensory.decay_power resolves to 1.0 = registry canonical
+# (docs/environment/CONFIG_CRITICAL_SETTINGS.md).
+# NODE 109 FAILED PRE-FLIGHT: reachable, but nas01 is NOT mounted (only nas02 + nas03;
+# /media/nas01 empty). Arms a07 + a08 were therefore NOT launched — see block below.
+# wandb-group: rppo_restprem, job-type: prod
+# CIFS-bypass: launched via /tmp scripts — this file is the audit record.
+# ---------------------------------------------------------------------------
+# Arm a01: rppo_restprem_a01_n106 — node 106, cuda:0 — premium 1x (base 5.0, accel 0.0)
+# LAUNCHED 2026-08-10, PID 3906803, launcher log logs/20260810_185746.log, WandB szje7o9w
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic_bushrefuge_restpremium/04-restprem_a01.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --eval-config configs/evaluation/experiment_on.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:0 --log-interval 50 \
+#   --wandb-group rppo_restprem --wandb-job-type prod \
+#   --wandb-name rppo_restprem_a01_n106 --tag rppo_restprem_a01_n106
+#
+# Arm a02: rppo_restprem_a02_n106 — node 106, cuda:1
+# LAUNCHED 2026-08-10, PID 3906972, launcher log logs/20260810_185754.log (SHARED/garbled — see note), WandB 96xmquu3
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic_bushrefuge_restpremium/04-restprem_a02.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --eval-config configs/evaluation/experiment_on.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:1 --log-interval 50 \
+#   --wandb-group rppo_restprem --wandb-job-type prod \
+#   --wandb-name rppo_restprem_a02_n106 --tag rppo_restprem_a02_n106
+#
+# Arm a03: rppo_restprem_a03_n107 — node 107, cuda:0 — 38x, reproduces current default
+# LAUNCHED 2026-08-10, PID 3560982, launcher log logs/20260810_185754.log (SHARED/garbled), WandB 2na5mqbl
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic_bushrefuge_restpremium/04-restprem_a03.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --eval-config configs/evaluation/experiment_on.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:0 --log-interval 50 \
+#   --wandb-group rppo_restprem --wandb-job-type prod \
+#   --wandb-name rppo_restprem_a03_n107 --tag rppo_restprem_a03_n107
+#
+# Arm a04: rppo_restprem_a04_n107 — node 107, cuda:1
+# LAUNCHED 2026-08-10, PID 3561022, launcher log logs/20260810_185754.log (SHARED/garbled), WandB idv8vkjl
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic_bushrefuge_restpremium/04-restprem_a04.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --eval-config configs/evaluation/experiment_on.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:1 --log-interval 50 \
+#   --wandb-group rppo_restprem --wandb-job-type prod \
+#   --wandb-name rppo_restprem_a04_n107 --tag rppo_restprem_a04_n107
+#
+# Arm a05: rppo_restprem_a05_n108 — node 108, cuda:0
+# LAUNCHED 2026-08-10, PID 1521914, launcher log logs/20260810_185754.log (SHARED/garbled), WandB f6u0z3mo
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic_bushrefuge_restpremium/04-restprem_a05.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --eval-config configs/evaluation/experiment_on.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:0 --log-interval 50 \
+#   --wandb-group rppo_restprem --wandb-job-type prod \
+#   --wandb-name rppo_restprem_a05_n108 --tag rppo_restprem_a05_n108
+#
+# Arm a06: rppo_restprem_a06_n108 — node 108, cuda:1
+# LAUNCHED 2026-08-10, PID 1521919, launcher log logs/20260810_185754.log (SHARED/garbled), WandB m7pm9xqm
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic_bushrefuge_restpremium/04-restprem_a06.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --eval-config configs/evaluation/experiment_on.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:1 --log-interval 50 \
+#   --wandb-group rppo_restprem --wandb-job-type prod \
+#   --wandb-name rppo_restprem_a06_n108 --tag rppo_restprem_a06_n108
+#
+# Arm a07: rppo_restprem_a07_n109 — node 109, cuda:0 — *** NOT LAUNCHED ***
+# BLOCKED 2026-08-10: node 109 has no nas01 CIFS mount (only nas02 + nas03 present;
+# /media/nas01 is an empty directory), so the project tree is unreachable there.
+# Reassignment is the caller's call — the runner does not pick nodes.
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic_bushrefuge_restpremium/04-restprem_a07.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --eval-config configs/evaluation/experiment_on.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:0 --log-interval 50 \
+#   --wandb-group rppo_restprem --wandb-job-type prod \
+#   --wandb-name rppo_restprem_a07_n109 --tag rppo_restprem_a07_n109
+#
+# Arm a08: rppo_restprem_a08_n109 — node 109, cuda:1 — *** NOT LAUNCHED ***
+# BLOCKED 2026-08-10: same node-109 nas01 mount failure as a07.
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic_bushrefuge_restpremium/04-restprem_a08.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --eval-config configs/evaluation/experiment_on.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:1 --log-interval 50 \
+#   --wandb-group rppo_restprem --wandb-job-type prod \
+#   --wandb-name rppo_restprem_a08_n109 --tag rppo_restprem_a08_n109
+#
+# Arm a09: rppo_restprem_a09_n110 — node 110, cuda:0 — 19683x (base 2.9e-05) WATCH ITEM
+# LAUNCHED 2026-08-10, PID 1017751, launcher log logs/20260810_185754.log (SHARED/garbled), WandB evrn1amy
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic_bushrefuge_restpremium/04-restprem_a09.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --eval-config configs/evaluation/experiment_on.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:0 --log-interval 50 \
+#   --wandb-group rppo_restprem --wandb-job-type prod \
+#   --wandb-name rppo_restprem_a09_n110 --tag rppo_restprem_a09_n110
+#
+# Arm a10: rppo_restprem_a10_n110 — node 110, cuda:1 — 129962x (base 2.1e-06) WATCH ITEM
+# LAUNCHED 2026-08-10, PID 1017791, launcher log logs/20260810_185755.log, WandB vauz72ni
+#
+# LAUNCH-TIME NOTES (2026-08-10):
+#  - LAUNCHER-LOG COLLISION: run_command.py names the log logs/<UTC-second>.log on the
+#    SHARED NAS. Six arms (a02..a06, a09) launched inside the same second and therefore
+#    all redirect into logs/20260810_185754.log, whose contents are interleaved/garbled.
+#    Training is unaffected (each run has its own WandB run + results dir), but that
+#    launcher log is not readable. Pass --log explicitly on future batch launches.
+#  - --log-interval 50 is IGNORED by these configs (they use the two-level `logging:`
+#    block: logging.episode.interval_episodes=4000, logging.step.interval_iters=50).
+#    Kept on the command line only to mirror the bushrefuge batch byte-for-byte.
+#  - SLOW STARTUP: with experiment.during_training enabled, startup walks the whole
+#    results/eval tree over CIFS before the first GPU step. At T+23 min all 8 procs were
+#    alive with CPU time climbing and the directory walk visibly advancing, but GPU util
+#    was still 0%. Expected-slow, not a hang.
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-  --config configs/environment/experiment/basic_bushrefuge/04-jump_attack_10x10.yaml \
+  --config configs/environment/experiment/basic_bushrefuge_restpremium/04-restprem_a10.yaml \
   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
   --eval-config configs/evaluation/experiment_on.yaml \
   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
   --device cuda:1 --log-interval 50 \
-  --wandb-group rppo_bushrefuge --wandb-job-type prod \
-  --wandb-name rppo_bushrefuge_b04_n113 --tag rppo_bushrefuge_b04_n113
+  --wandb-group rppo_restprem --wandb-job-type prod \
+  --wandb-name rppo_restprem_a10_n110 --tag rppo_restprem_a10_n110
