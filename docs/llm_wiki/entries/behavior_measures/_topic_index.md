@@ -6,8 +6,8 @@
 > To improve a row, set a `headline:` field on the entry itself.
 
 **Folder definition**: Behavior-measure platform & probes
-**Insights**: 16
-**Last updated**: 2026-08-05
+**Insights**: 17
+**Last updated**: 2026-08-10
 
 ---
 
@@ -15,9 +15,10 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-08-10 | 17:53 | [20260810_1753_bushrefuge_injury_suppresses_bush_use_heal_by_rest](20260810_1753_bushrefuge_injury_suppresses_bush_use_heal_by_rest.md) | Bush-refuge rPPO agents DO hide heavily (predator 34-42%, rabbit-chase 26-32%, rabbitwander 11-14% of episode; bush_dwell is a 0-1 FRACTION… |
 | 2026-08-05 | 01:19 | [20260805_0119_render_recordings_output_path_collision](20260805_0119_render_recordings_output_path_collision.md) | render_recordings.py derives its output dir as rec_dir.parent.parent/videos/rec_dir.name (no override flag), so multi-model / multi-conditi… |
 | 2026-08-05 | 01:18 | [20260805_0118_regime_matched_probe_and_run_sweep_probe_dir](20260805_0118_regime_matched_probe_and_run_sweep_probe_dir.md) | A regime-specific agent must be probed with regime-MATCHED conditions or the standard probe understates it: bush-refuge agents (bush blocks… |
-| 2026-08-05 | 01:17 | [20260805_0117_bushrefuge_survives_by_evasion_not_refuge](20260805_0117_bushrefuge_survives_by_evasion_not_refuge.md) | The 4 bush-refuge rPPO agents (bush blocks predators) survive predator encounters by EVASION, not by using the refuge: bush_dwell in predat… |
+| 2026-08-05 | 01:17 | [20260805_0117_bushrefuge_survives_by_evasion_not_refuge](20260805_0117_bushrefuge_survives_by_evasion_not_refuge.md) | **[superseded]** The 4 bush-refuge rPPO agents (bush blocks predators) survive predator encounters by EVASION, not by using the refuge: bush_dwell in predat… |
 | 2026-07-26 | 04:18 | [20260726_0418_dreamer_imagination_dream_strip_contact_anchor](20260726_0418_dreamer_imagination_dream_strip_contact_anchor.md) | scripts/dreamer/visualize_dream.py renders the Dreamer imagination 'dream-strip'; to test whether the world model predicts a collision, anc… |
 | 2026-07-26 | 04:17 | [20260726_0417_dwell_sweep_rerun_silent_skip_traps](20260726_0417_dwell_sweep_rerun_silent_skip_traps.md) | The dwell/behavior sweep pipeline has two silent-skip traps on incremental re-runs: (1) stale _run_markers/done_<node> files make poll_done… |
 | 2026-07-21 | 04:24 | [20260721_0424_dreamer_low_dwell_real_trajectory_verified](20260721_0424_dreamer_low_dwell_real_trajectory_verified.md) | The near-zero bush-dwell of the size-sweep Dreamer agents is a GENUINE 'not learned yet', not a pipeline/eval bug - verified by trajectory… |
