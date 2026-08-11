@@ -1,0 +1,36 @@
+# Behavior-probe sweep for the 10-arm REST-PREMIUM sweep (launched 2026-08-10,
+# nodes 106-111; STILL TRAINING - this is an incremental snapshot).
+#
+# Arms vary the injury-recovery streak premium (healing on the 10th consecutive
+# Rest vs the 1st after an interruption) while the INJURED WINDOW is held matched
+# at ~13-15 rest-steps, on bush-refuge basic04 (jump/pounce; the bush blocks the
+# pounce, so cover is the only true defence):
+#   a01 1x (zero-premium anchor) a02 11x  a03 38x (= default regime) a04 119x
+#   a05 323x  a06 512x  a07 1207x  a08 3815x  a09 19683x  a10 129962x
+#
+# Probed with the BUSH-REFUGE-MATCHED battery (avoidance_bushrefuge/, bush carries
+# blocks_animals:true) so the probe matches the training regime - the standard
+# clean battery would remove the refuge and mis-read these agents.
+#
+# Run: python scripts/eval/dwell_sweep/run_sweep.py configs/eval_sweeps/restprem_rppo.yaml
+# Eval nodes deliberately EXCLUDE 106-111 (those are training these arms).
+name: restprem_rppo
+algo: rppo
+output_dir: results/eval/avoidance/restprem
+probe: configs/environment/experiment/behavior_probes/core/avoidance_bushrefuge
+conditions: all
+episodes: 30
+nodes: [101, 102, 103, 105, 112, 113]
+x_axis: steps
+plot_measures: [bush_dwell, survival_steps, spatial_spread]
+runs:
+  - {label: a01_prem1,      path: results/JAX_RecurrentPPO/20260810-185749_rppo_restprem_a01_n106}
+  - {label: a02_prem11,     path: results/JAX_RecurrentPPO/20260810-185756_rppo_restprem_a02_n106}
+  - {label: a03_prem38,     path: results/JAX_RecurrentPPO/20260810-185757_rppo_restprem_a03_n107}
+  - {label: a04_prem119,    path: results/JAX_RecurrentPPO/20260810-185757_rppo_restprem_a04_n107}
+  - {label: a05_prem323,    path: results/JAX_RecurrentPPO/20260810-185757_rppo_restprem_a05_n108}
+  - {label: a06_prem512,    path: results/JAX_RecurrentPPO/20260810-185757_rppo_restprem_a06_n108}
+  - {label: a07_prem1207,   path: results/JAX_RecurrentPPO/20260810-202440_rppo_restprem_a07_n111}
+  - {label: a08_prem3815,   path: results/JAX_RecurrentPPO/20260810-202557_rppo_restprem_a08_n111}
+  - {label: a09_prem19683,  path: results/JAX_RecurrentPPO/20260810-185757_rppo_restprem_a09_n110}
+  - {label: a10_prem129962, path: results/JAX_RecurrentPPO/20260810-185757_rppo_restprem_a10_n110}
