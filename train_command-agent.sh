@@ -2015,26 +2015,29 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 #
 # Arm a07: rppo_restprem_a07_n111 — node 111, cuda:0
 # LAUNCHED 2026-08-10 20:24, PID 1971, launcher log logs/20260810_restprem_a07_n111.log, WandB 70erj7yy
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-  --config configs/environment/experiment/basic_bushrefuge_restpremium/04-restprem_a07.yaml \
-  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
-  --eval-config configs/evaluation/experiment_on.yaml \
-  --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
-  --device cuda:0 --log-interval 50 \
-  --wandb-group rppo_restprem --wandb-job-type prod \
-  --wandb-name rppo_restprem_a07_n111 --tag rppo_restprem_a07_n111
+# (commented 2026-08-16: still running on 111:1 lineage; superseded as the live block
+#  by the NO-HIDING-PREDATOR batch below)
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic_bushrefuge_restpremium/04-restprem_a07.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --eval-config configs/evaluation/experiment_on.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:0 --log-interval 50 \
+#   --wandb-group rppo_restprem --wandb-job-type prod \
+#   --wandb-name rppo_restprem_a07_n111 --tag rppo_restprem_a07_n111
 #
 # Arm a08: rppo_restprem_a08_n111 — node 111, cuda:1
 # LAUNCHED 2026-08-10 20:25 (~60 s after a07, staggered), PID 2187,
 # launcher log logs/20260810_restprem_a08_n111.log, WandB wezpfd69
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-  --config configs/environment/experiment/basic_bushrefuge_restpremium/04-restprem_a08.yaml \
-  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
-  --eval-config configs/evaluation/experiment_on.yaml \
-  --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
-  --device cuda:1 --log-interval 50 \
-  --wandb-group rppo_restprem --wandb-job-type prod \
-  --wandb-name rppo_restprem_a08_n111 --tag rppo_restprem_a08_n111
+# (commented 2026-08-16 — see note on a07 above)
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic_bushrefuge_restpremium/04-restprem_a08.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --eval-config configs/evaluation/experiment_on.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:1 --log-interval 50 \
+#   --wandb-group rppo_restprem --wandb-job-type prod \
+#   --wandb-name rppo_restprem_a08_n111 --tag rppo_restprem_a08_n111
 #
 # Arm a09: rppo_restprem_a09_n110 — node 110, cuda:0 — 19683x (base 2.9e-05) WATCH ITEM
 # LAUNCHED 2026-08-10, PID 1017751, launcher log logs/20260810_185754.log (SHARED/garbled), WandB evrn1amy
@@ -2072,3 +2075,142 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 #   --device cuda:1 --log-interval 50 \
 #   --wandb-group rppo_restprem --wandb-job-type prod \
 #   --wandb-name rppo_restprem_a10_n110 --tag rppo_restprem_a10_n110
+#
+# ===========================================================================
+# NO-HIDING-PREDATOR rest-premium sweep (10 arms) — LAUNCHED 2026-08-16
+# ---------------------------------------------------------------------------
+# Replicate of the 2026-08-10 rest-premium sweep with the 2-12 ambush
+# `hiding_predator` resources REMOVED (resources restated food-only). Tests
+# whether "moving is dangerous" is what stopped injured agents from travelling
+# to the refuge bush. WandB group: rppo_restpremNH (new group).
+#
+# Configs: configs/environment/experiment/basic_bushrefuge_restpremium_nohide/
+#          committed cfc0293, verified food-only; recovery curves, bush-refuge
+#          blocks_animals and jump/pounce all inherited from the parent arms.
+#
+# LAUNCH-TIME NOTES (2026-08-16):
+#  - EXPLICIT --log PER RUN this time: logs/20260816_restpremNH_<arm>_n<node>.log.
+#    The 2026-08-10 batch collided six runs into logs/20260810_185754.log because
+#    run_command.py defaults to logs/<UTC-second>.log on the shared NAS.
+#  - STAGGERED ~60 s apart. Eight concurrent cold JIT compiles took ~54 min on
+#    2026-08-10; staggering cut it to ~44 min.
+#  - GPUs 108:1 and 111:1 DELIBERATELY EXCLUDED — the 2026-08-10 arms a06/a08 were
+#    still finishing there (94.9M / 98.9M of 100M) at launch time.
+#  - DEVIATION FROM CONFIG-OWNS-VALUES: --num-envs 128 and --checkpoint-frequency
+#    100000 are passed explicitly to mirror the parent sweep byte-for-byte so the
+#    two sweeps stay comparable. Flagged to the user at launch.
+#  - --log-interval 50 is IGNORED by these configs (they use the two-level
+#    `logging:` block). Kept only to mirror the parent batch byte-for-byte.
+#  - Launched via the CIFS-bypass pattern: each block was mirrored to a unique
+#    /tmp script on its target node and run through run_command.py --no-tail.
+# ===========================================================================
+#
+# Arm a01: rppo_restpremNH_a01_n106 — node 106, cuda:0
+# LAUNCHED 2026-08-16, PID 1550979, launcher log logs/20260816_restpremNH_a01_n106.log, WandB oloh6yt3
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic_bushrefuge_restpremium_nohide/04-restprem_nohide_a01.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --eval-config configs/evaluation/experiment_on.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:0 --log-interval 50 \
+#   --wandb-group rppo_restpremNH --wandb-job-type prod \
+#   --wandb-name rppo_restpremNH_a01_n106 --tag rppo_restpremNH_a01_n106
+#
+# Arm a02: rppo_restpremNH_a02_n106 — node 106, cuda:1
+# LAUNCHED 2026-08-16, PID 1551189, launcher log logs/20260816_restpremNH_a02_n106.log, WandB o2ze4gji
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic_bushrefuge_restpremium_nohide/04-restprem_nohide_a02.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --eval-config configs/evaluation/experiment_on.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:1 --log-interval 50 \
+#   --wandb-group rppo_restpremNH --wandb-job-type prod \
+#   --wandb-name rppo_restpremNH_a02_n106 --tag rppo_restpremNH_a02_n106
+#
+# Arm a03: rppo_restpremNH_a03_n107 — node 107, cuda:0
+# LAUNCHED 2026-08-16, PID 1204293, launcher log logs/20260816_restpremNH_a03_n107.log, WandB ob3rkm8u
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic_bushrefuge_restpremium_nohide/04-restprem_nohide_a03.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --eval-config configs/evaluation/experiment_on.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:0 --log-interval 50 \
+#   --wandb-group rppo_restpremNH --wandb-job-type prod \
+#   --wandb-name rppo_restpremNH_a03_n107 --tag rppo_restpremNH_a03_n107
+#
+# Arm a04: rppo_restpremNH_a04_n107 — node 107, cuda:1
+# LAUNCHED 2026-08-16, PID 1204507, launcher log logs/20260816_restpremNH_a04_n107.log, WandB vk5upgay
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic_bushrefuge_restpremium_nohide/04-restprem_nohide_a04.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --eval-config configs/evaluation/experiment_on.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:1 --log-interval 50 \
+#   --wandb-group rppo_restpremNH --wandb-job-type prod \
+#   --wandb-name rppo_restpremNH_a04_n107 --tag rppo_restpremNH_a04_n107
+#
+# Arm a05: rppo_restpremNH_a05_n108 — node 108, cuda:0
+# LAUNCHED 2026-08-16, PID 3161807, launcher log logs/20260816_restpremNH_a05_n108.log, WandB 1atfgt5p
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic_bushrefuge_restpremium_nohide/04-restprem_nohide_a05.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --eval-config configs/evaluation/experiment_on.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:0 --log-interval 50 \
+#   --wandb-group rppo_restpremNH --wandb-job-type prod \
+#   --wandb-name rppo_restpremNH_a05_n108 --tag rppo_restpremNH_a05_n108
+#
+# Arm a06: rppo_restpremNH_a06_n110 — node 110, cuda:0
+# LAUNCHED 2026-08-16, PID 2838529, launcher log logs/20260816_restpremNH_a06_n110.log, WandB 7jgvntqe
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic_bushrefuge_restpremium_nohide/04-restprem_nohide_a06.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --eval-config configs/evaluation/experiment_on.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:0 --log-interval 50 \
+#   --wandb-group rppo_restpremNH --wandb-job-type prod \
+#   --wandb-name rppo_restpremNH_a06_n110 --tag rppo_restpremNH_a06_n110
+#
+# Arm a07: rppo_restpremNH_a07_n110 — node 110, cuda:1
+# LAUNCHED 2026-08-16, PID 2838740, launcher log logs/20260816_restpremNH_a07_n110.log, WandB 45jsidrg
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic_bushrefuge_restpremium_nohide/04-restprem_nohide_a07.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --eval-config configs/evaluation/experiment_on.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:1 --log-interval 50 \
+#   --wandb-group rppo_restpremNH --wandb-job-type prod \
+#   --wandb-name rppo_restpremNH_a07_n110 --tag rppo_restpremNH_a07_n110
+#
+# Arm a08: rppo_restpremNH_a08_n111 — node 111, cuda:0
+# LAUNCHED 2026-08-16, PID 1800371, launcher log logs/20260816_restpremNH_a08_n111.log, WandB edlxgeum
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic_bushrefuge_restpremium_nohide/04-restprem_nohide_a08.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --eval-config configs/evaluation/experiment_on.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:0 --log-interval 50 \
+#   --wandb-group rppo_restpremNH --wandb-job-type prod \
+#   --wandb-name rppo_restpremNH_a08_n111 --tag rppo_restpremNH_a08_n111
+#
+# Arm a09: rppo_restpremNH_a09_n112 — node 112, cuda:0 — recovery_base_rate 2.9e-05 WATCH ITEM
+# LAUNCHED 2026-08-16, PID 532510, launcher log logs/20260816_restpremNH_a09_n112.log, WandB neta4235
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic_bushrefuge_restpremium_nohide/04-restprem_nohide_a09.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --eval-config configs/evaluation/experiment_on.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:0 --log-interval 50 \
+#   --wandb-group rppo_restpremNH --wandb-job-type prod \
+#   --wandb-name rppo_restpremNH_a09_n112 --tag rppo_restpremNH_a09_n112
+#
+# Arm a10: rppo_restpremNH_a10_n112 — node 112, cuda:1 — recovery_base_rate 2.1e-06 WATCH ITEM
+# LAUNCHED 2026-08-16, PID 532722, launcher log logs/20260816_restpremNH_a10_n112.log, WandB ff0r7qrs
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic_bushrefuge_restpremium_nohide/04-restprem_nohide_a10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --eval-config configs/evaluation/experiment_on.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:1 --log-interval 50 \
+#   --wandb-group rppo_restpremNH --wandb-job-type prod \
+#   --wandb-name rppo_restpremNH_a10_n112 --tag rppo_restpremNH_a10_n112
