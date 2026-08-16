@@ -2214,3 +2214,30 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 #   --device cuda:1 --log-interval 50 \
 #   --wandb-group rppo_restpremNH --wandb-job-type prod \
 #   --wandb-name rppo_restpremNH_a10_n112 --tag rppo_restpremNH_a10_n112
+#
+# ---------------------------------------------------------------------------
+# POST-LAUNCH FINDING (2026-08-16, T+1h40m) — STARTUP EVAL-TREE WALK IS THE
+# DOMINANT STARTUP COST AND IS GROWING RUN-OVER-RUN.
+#
+# All 10 arms launched cleanly (1 PID each, distinct WandB run, no errors), but
+# at T+1h40m NONE had reached the first training step; GPU util 0% on all ten
+# with only a ~280 MiB CUDA context allocated. The processes are NOT hung:
+# CPU time climbs steadily (a01 05:29 -> 17:18) and `wchan` is `wait_for_response`
+# (CIFS network wait).
+#
+# Root cause: with experiment.during_training enabled, startup walks
+# results/eval/ before the first GPU step. That tree now contains
+#   results/eval/avoidance/metrics_history_rppo_gae/_scratch/{b03_gae,b04_gae}/
+# = 24 conditions x ~723 checkpoint dirs, each with nested
+# <ckpt>/models/<ckpt>/episodes/ levels -> O(1e5) directory entries to stat over
+# CIFS, from an UNRELATED July-22 experiment. Sampling /proc/<pid>/fd confirmed
+# the walk advancing (avoid_pred_inj70 -> avoid_rabbit_inj70 -> b03_gae/...).
+# Ten concurrent runs all walking the same CIFS tree compounds it.
+#
+# This is why 2026-08-10 took ~54 min and 2026-08-16 exceeds 1h40m: the cost
+# scales with accumulated eval scratch output, not with the run itself.
+#
+# NOT actioned here (out of training-runner scope, and results/ is gitignored
+# data that must not be casually deleted). Surfaced to the user for a decision:
+# prune/archive the _scratch tree, or bound the startup walk in code.
+# ---------------------------------------------------------------------------
