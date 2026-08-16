@@ -1,0 +1,38 @@
+# ============================================================================
+# NO-HIDING-PREDATOR replicate of rest-premium arm 06  (premium 512x)
+#
+# HYPOTHESIS UNDER TEST (user + collaborator, 2026-08-16): the parent sweep found
+# that raising the rest-streak premium did NOT drive an injured agent to the
+# refuge bush, and that injury still SUPPRESSES cover use
+# (llm_wiki 20260810_1753_bushrefuge_injury_suppresses_bush_use_heal_by_rest).
+# Candidate explanation: MOVING IS DANGEROUS. The scene spawns 2-12 ambush
+# "hiding_predator" resources (damage 15-45, nociception 0.9); the parent config's
+# own note reads "ALL-COMBINED: more ambush predators, running is risky". An
+# injured agent - one hit from death - may therefore rationally FREEZE instead of
+# crossing open ground to reach a bush. If that is the cause, removing the ambush
+# predators should free the injured agent to travel to cover, and the inj00>inj70
+# suppression should shrink or invert.
+#
+# CHANGE vs the parent arm: exactly ONE - `environment.resources` is restated with
+# FOOD ONLY, dropping the hiding_predator entry. (resources is a LIST, so it must
+# be restated in full - deep-merge does not remove list items.)
+# Inherited unchanged: bush-refuge blocks_animals, jump/pounce, random init,
+# entity ranges, clean smell, decay_power 1.0, and this arm's recovery curve.
+# ============================================================================
+extends: environment/experiment/basic_bushrefuge_restpremium/04-restprem_a06
+
+environment:
+  resources:
+    - name: "food"
+      type: "food"
+      count_low: 1
+      count_high: 4
+      spawn_area: [[1, 1], [10, 10]]
+      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 1, 0, 0, 0, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      max_consumption: 12
+      regeneration_delay: 0
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
