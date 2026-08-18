@@ -172,19 +172,30 @@ You: the pain corpus has 14 papers now — regroup it by theme and tell me
 
 ## Adapting Track A to your project
 
-Realistically 20 minutes of editing:
+The two agent profiles are prompts, so adapting them is editing prose. Point your Claude at
+`literature-reviewer.md` and `literature-curator.md` in this bundle, at your own repo, and ask it to
+write your versions. The specific things that must change:
 
-1. Change the path convention in both agent profiles if you do not want `docs/project/references/`.
-2. Delete the project-specific anchors in `literature-curator` — it currently ties syntheses back to my
-   project's gates, hypotheses, and phase plan. Replace with yours or drop the section.
-3. Remove the "three legacy filenames" paragraph in both profiles — that is my repo's history.
-4. Remove the two dangling references (`parallel-literature-review` skill, `literature-deepdive`
-   agent). Neither was ever built.
-5. In `academic-pdf-fetch`: your email, and be realistic about whether your machine has institutional
-   network access.
+1. **The path convention.** Both profiles derive every path from `docs/project/references/<topic>/`
+   with sources in `<topic>/sources/`. Any layout works, but both agents must agree on it, and the
+   profiles must state it explicitly — this is the single most common thing to get wrong, because a
+   reviewer that writes to a different folder than the curator reads from fails silently.
+2. **The project-specific anchors in `literature-curator`.** It currently ties every synthesis back to
+   my project's gates, hypotheses, and phase plan. Replace with yours, or drop the section — but
+   replacing is better: an anchor is what turns "here is what the field says" into "here is what the
+   field says *about the thing we are stuck on*".
+3. **The "three legacy filenames" paragraph** in both profiles — that is my repo's history.
+4. **The two dangling references** — `parallel-literature-review` (skill) and `literature-deepdive`
+   (agent). Neither was ever built.
+5. **In `academic-pdf-fetch`:** your email for the Unpaywall call, and a realistic assessment of
+   whether the machine Claude runs on has institutional network access. The profile also hard-codes
+   facts about our container (shell, browser, virtual-display tool, which PDF utilities exist) — it
+   tells Claude to re-verify these at runtime rather than trust them, which is the right instinct, but
+   the Tier 3 recipe is written for our machine.
 
 The 4-step backbone, the Phase 1/Phase 2 split, the appendix-retention rule, and the
-extraction/synthesis separation are domain-independent. Keep those as they are.
+extraction/synthesis separation are domain-independent. Keep those as they are — they are the part
+that makes the output trustworthy a year later.
 
 ---
 
@@ -278,23 +289,25 @@ usage and 2–4 hours of collaborative work. A `full` review alone is much less.
 | Check that your revisions landed | Track B — `academic-paper-reviewer` re-review mode |
 | Everything end to end | Track B — `academic-pipeline` |
 
-## Setup checklist
+## Getting it running
 
-```bash
-# Agents and skills into your project
-cp -r bundle/.claude/agents/literature-reviewer.md .claude/agents/
-cp -r bundle/.claude/agents/literature-curator.md  .claude/agents/
-cp -r bundle/.claude/skills/academic-pdf-fetch     .claude/skills/
-cp -r bundle/.claude/skills/academic-research-skills .claude/skills/
+Three moving parts, and it is worth knowing what each one needs:
 
-# Corpus folder
-mkdir -p docs/project/references/<your-topic>/sources
+- **The two agents** are self-contained Markdown. Once a file exists at `.claude/agents/<name>.md` in
+  your project and Claude Code has been restarted, they are live — `/agents` will list them. Adapt them
+  per the section above before first use, not after.
+- **The corpus folder** has to exist before the first run, with whatever layout your profiles declare.
+  The reviewer globs for PDFs at a path it derives from the topic folder name; if the folder is not
+  there, it has nothing to glob.
+- **`notebooklm` is the only piece with a real dependency** — the `notebooklm-py` Python package plus a
+  one-time Google OAuth login. Its `SKILL.md` carries the current install and auth commands; read them
+  from there rather than from me, since that package moves. Skip it entirely if your papers are PDFs.
 
-# Optional: NotebookLM source path
-pip install notebooklm-py && notebooklm login
-```
+The path of least resistance is to hand the whole thing to your own Claude:
 
-Then edit the two agent profiles per "Adapting Track A" above, and restart Claude Code.
+> Read `docs/PAPER_REVIEW_WORKFLOW.md` and the two literature agent profiles in this bundle. Set up
+> the equivalent in my project: adapted agent profiles using my layout, the corpus folder, and the
+> PDF-fetch skill with my email. Tell me what you changed and what you dropped before writing.
 
 ## Rough edges
 
@@ -302,10 +315,7 @@ Then edit the two agent profiles per "Adapting Track A" above, and restart Claud
   agent. **Neither exists.** Delete the mentions, or batch a large corpus by hand — spawn several
   reviewer instances yourself, each given an explicit slice of the PDFs and its own `tmp/` batch file.
 - Both profiles say "the five professors" and then list six. Cosmetic.
-- `academic-pdf-fetch` encodes facts about our specific container (egress IP, zsh, TigerVNC rather than
-  Xvfb, no `pdftotext` available). The profile tells Claude to re-verify these at runtime rather than
-  trust them, which is the right instinct — but the Tier 3 recipe is written for our machine.
-- The vendored pack is a **snapshot** with its `.git` removed. For updates, clone it fresh:
-  `git clone https://github.com/Imbad0202/academic-research-skills.git .claude/skills/academic-research-skills`
+- The vendored pack is a **snapshot** with its `.git` removed — clone it fresh from
+  `github.com/Imbad0202/academic-research-skills` if you want updates.
 - Track A's output is deliberately long. A 14-paper master review runs to hundreds of KB. That is the
   point — it is a reference document, not a summary — but do not paste one into a chat window.

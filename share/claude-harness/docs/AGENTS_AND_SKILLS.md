@@ -21,37 +21,19 @@ memory/diary skills are the transferable part**. The training, config, and GPU m
 
 ## 1. How the pieces fit together
 
-Claude reads three things:
+The mechanism — where Claude looks for these files, what each frontmatter field does, and why the
+`description` line matters more than the body — is in the bundle's [README](../README.md). The one-line
+version: `CLAUDE.md` is always loaded, an **agent** is a role with its own context window and its own
+refusals, a **skill** is a procedure the current Claude follows itself.
 
-1. **`CLAUDE.md`** — loaded into context on *every* turn. This is where the routing rules live: "for
-   any task involving 2+ agents, ask `agent-manager` for a plan first", "never measure performance by
-   reward", "never `git add -A`". Keep it short — everything in it is a tax you pay per message.
-2. **`.claude/agents/<name>.md`** — a role. Only loaded when that agent is spawned. Each one starts
-   with YAML frontmatter that Claude uses to decide *when* to call it:
+Two things worth repeating here, because they shape everything in the catalog below:
 
-   ```yaml
-   ---
-   name: literature-reviewer
-   description: Dedicated academic literature reviewer... Trigger phrases: "review these papers", ...
-   tools: Read, Grep, Glob, Write, Edit, Bash, WebFetch, Skill, ToolSearch
-   model: opus
-   ---
-   ```
-
-   The `description` is the *only* part the main Claude sees when deciding whether to delegate, so it
-   is written as a routing advertisement, not a summary. The `tools` line is a real permission
-   boundary — my `literature-reviewer` has no way to touch source code because `Bash` is granted but
-   the profile forbids writing outside `docs/project/`, and my `training-runner` genuinely cannot edit
-   config files. That containment is most of the value.
-
-   **Note on the `model:` field** — I use `opus` for agents that plan or synthesize and `fable` for
-   the reviewers (fast, cheap, and adversarial review does not need the biggest model). If a model
-   name is not available on your plan, change it to `sonnet` or delete the line to inherit the
-   session's model.
-
-3. **`.claude/skills/<name>/SKILL.md`** — a procedure. Same idea: a `description` line decides when it
-   fires, the body is the checklist. Skills can carry helper files (scripts, references, templates)
-   alongside the Markdown, and Claude only reads those when the procedure says to.
+- **`tools:` is a real permission boundary.** My `literature-reviewer` is granted `Bash` but its
+  profile confines every write to `docs/project/`; my `training-runner` genuinely cannot edit a config
+  file. That containment is most of the value of splitting work into agents at all.
+- **`model:` is set per role** — a large model for agents that plan or synthesize, a fast one for the
+  reviewers. If a model name is not available on your plan, change it or delete the line to inherit the
+  session's model.
 
 The rule of thumb I settled on: **if it needs its own context window and its own refusals, make it an
 agent; if it is a procedure the current Claude should follow, make it a skill.**
@@ -164,17 +146,25 @@ Requires `scripts/claude/*.py` from this bundle (stdlib-only Python, no project 
 
 ---
 
-## 4. What I would copy first, in order
+## 4. What to set up first, in order
 
-1. **`.claude/agents/` — the researchers and the reviewers.** `research-postdoc`, the professor
-   pattern, `literature-reviewer`, `literature-curator`, `plan-reviewer`, `pi`. Rewrite the professors'
-   domains for your field and you are done.
-2. **The wiki + diary skills** and `scripts/claude/`. Highest long-term payoff, lowest adaptation cost.
-3. **`examples/CLAUDE.md.example`.** Read it, then write your own from scratch rather than editing
-   mine — most of its length is my project's plumbing. What is genuinely reusable is in the sections
-   "Working Principles", "Documentation framing", and the git-safety rules.
-4. **`academic-research-skills/`** if you want the peer-review pipeline (or clone it fresh from GitHub).
+Ordered by payoff per hour of adaptation. For each one, the useful move is to point your Claude at the
+profile here and at your own repo, and ask it to write the adapted version — it will get your paths,
+your language, and your domain right, which is nearly all of the work.
+
+1. **The researchers and the reviewers.** `research-postdoc`, the professor pattern,
+   `literature-reviewer`, `literature-curator`, `plan-reviewer`, `pi`. Swap the professors' six domains
+   for the ones your field actually argues about; keep them narrow.
+2. **The wiki + diary skills** and their scripts. Highest long-term payoff, lowest adaptation cost —
+   the scripts are stdlib-only and care about nothing except a `docs/` folder.
+3. **Your own `CLAUDE.md`.** Read mine for shape, then have Claude draft yours from your repo. Anything
+   you find yourself correcting in conversation twice belongs in it.
+4. **`academic-research-skills/`** if you want the peer-review pipeline — clone it fresh from GitHub
+   rather than taking my snapshot.
 5. Everything else only if you happen to run RL training on a GPU cluster.
+
+A note on how to iterate: these files are prompts, so the maintenance loop is to use them for a week
+and, whenever you correct the same thing twice, tell Claude to fix the profile instead of the output.
 
 ---
 
