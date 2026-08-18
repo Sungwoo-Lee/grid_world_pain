@@ -47,4 +47,5 @@ The olfactory distance-discounting exponent `sensory.decay_power` (smell intensi
 ## Backlinks
 - [[20260726_0416_critical_settings_registry_changelog_guardrail]] (config_system, 2026-07-26) — Created docs/environment/CONFIG_CRITICAL_SETTINGS.md — a registry of high-impact
 - [[20260727_0542_eval_seed_testing_seed_config_owned_flags]] (config_system, 2026-07-27) — Training-time eval reused args.seed, so eval SCENARIOS followed the training see
+- [[20260818_1622_yaml_list_replace_and_runtime_env_test]] (config_system, 2026-08-18) — To REMOVE an item from a YAML list (resources/entities/obstacles) via extends:, 
 <!-- END BACKLINKS -->

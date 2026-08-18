@@ -4,9 +4,9 @@
 >
 > Read this file before classifying a new insight. Folder definitions here are the matching surface — if a new insight does not match any definition verbatim, the new-folder justification protocol applies (see CLAUDE.md, "Fragmentation safeguards").
 
-**Last updated**: 2026-08-06
+**Last updated**: 2026-08-18
 **Active folders**: 10
-**Total insights**: 200
+**Total insights**: 203
 **Last audit**: (none)
 
 ---
@@ -19,12 +19,12 @@
 | `subagent_engineering` | Subagent + worktree usage gotchas | 22 | 2026-07-28 | [meta, learned_lesson, worktree, subagent, decision, design] |
 | `nmn_diagnosis` | NMN performance diagnosis findings | 17 | 2026-07-23 | [nmn, hypervigilance, film, learned_lesson, design, meta, training_runner, refutation, decision, config] |
 | `dreamer_diagnosis` | DreamerV3 failure investigation | 30 | 2026-08-06 | [dreamer, decision, learned_lesson, refutation, meta, design, rl] |
-| `cluster_ops` | Lab cluster ops and env mgmt | 43 | 2026-08-06 | [meta, training_runner, learned_lesson, decision, design, dreamer] |
+| `cluster_ops` | Lab cluster ops and env mgmt | 44 | 2026-08-18 | [meta, training_runner, learned_lesson, decision, design, dreamer, wandb] |
 | `hypervigilance` | Hypervigilance experiments | 28 | 2026-07-27 | [hypervigilance, dreamer, design, learned_lesson, decision, refutation, meta, noise, rl] |
 | `env_entities` | Env entity architecture decisions | 17 | 2026-07-03 | [design, decision, learned_lesson, meta, config, dreamer] |
-| `config_system` | Config loader/layering/schema | 10 | 2026-07-27 | [config, design, decision, meta, learned_lesson] |
+| `config_system` | Config loader/layering/schema | 11 | 2026-08-18 | [config, design, decision, meta, learned_lesson] |
 | `curriculum_learning` | Curriculum/continual training | 3 | 2026-06-24 | [learned_lesson, decision, refutation] |
-| `behavior_measures` | Behavior-measure platform & probes | 17 | 2026-08-10 | [design, decision, meta, learned_lesson, hypervigilance, refutation, noise, dreamer] |
+| `behavior_measures` | Behavior-measure platform & probes | 18 | 2026-08-18 | [design, decision, meta, learned_lesson, hypervigilance, refutation, noise, dreamer] |
 
 ---
 
@@ -55,6 +55,7 @@ Surface a merge proposal to the user when:
 ---
 
 ## Change history
+- 2026-08-18: Captured 3 insights from the rest-premium / no-hiding-predator / log_code session: 1 into `behavior_measures` (`20260818_1620_rest_premium_sweep_refuted` - a 1x-129962x rest-streak-premium sweep with the injured window held matched does NOT drive injured agents to cover; flat at ~20M (rho=+0.10) and ~36-40M steps (rho=-0.19), and the uninjured-minus-injured gap stays positive in all 10 arms), 1 into `cluster_ops` (`20260818_1621_wandb_log_code_walks_whole_repo` - log_code('.') never prunes dirs so it stats ~372k files under results/ before training; include_fn/exclude_fn do not help; 8min->45min->1h40m escalation; fixed 657c87a with anchored globs + InternalArtifact, 1.37s), and 1 into `config_system` (`20260818_1622_yaml_list_replace_and_runtime_env_test` - removing a YAML list entry needs a full restatement, and verify by BUILDING the env: obs_dim stayed 27 because sensors sum over resources). Promoted tag `wandb` into cluster_ops top-tags. No new folders.
 - 2026-08-10: Corrected a units error: `bush_dwell` is a 0-1 FRACTION not steps, so the prior 'agents don't hide' claim was wrong (they hide 34-42% vs predators). Superseded `20260805_0117_bushrefuge_survives_by_evasion_not_refuge` with `20260810_1753_bushrefuge_injury_suppresses_bush_use_heal_by_rest` (behavior_measures): injury robustly REDUCES cover use in wander conditions (inj00>inj70, block-bootstrap CI excludes 0 in both agents), caused by a heal-by-rest confound (injured -> rest ~86% in the open; gap made entirely in the injured window). Method: block bootstrap for autocorrelated checkpoint series; measure by injury-window not whole-episode. No new tags/folders.
 - 2026-08-06: Captured 3 insights from the dreamer-integration Gate-2 session: 2 into `dreamer_diagnosis` (`20260806_0304_dreamer_sampler_seeding_full_determinism_recipe` — the replay sampler's unseeded `np.random.default_rng()` at `buffers.py:76`/`:782` was the ONLY training-affecting entropy source, so no Dreamer run was ever same-seed reproducible; fix seeds it from the run seed, and full GPU bit-determinism additionally needs `--xla_gpu_deterministic_ops=true` + matched preallocate (~15% slower); rPPO audit-confirmed already clean; `20260806_0305_equivalence_testing_noise_floor_and_det_trio` — the reusable equivalence-testing pattern: seed every entropy source first, measure the noise floor by running the SAME side twice, then close the residual with a deterministic trio (A, A-repeat, B), validate comparators as non-vacuous, and put the verdict through adversarial review), 1 into `cluster_ops` (`20260806_0306_gpu_claim_and_nas_git_lock_protocol` — nvidia-smi misses CPU-phase GPU claimants so require pgrep + diary check with first-diary-row-wins; NAS git commits need one patient attempt with orphan-verified locks; concurrent deterministic runs compare by matched iteration, not wall-clock). All tags reused (dreamer, learned_lesson, decision, meta, design, training_runner). No new tags, no new folders.
 - 2026-08-05: Captured 4 insights from the results-generation-battery session (dp1 arms + curriculum + bush-refuge): 3 into `behavior_measures` (`20260805_0117_bushrefuge_survives_by_evasion_not_refuge` - bush-refuge rPPO agents survive by EVASION not refuge use, bush_dwell ~0 (mean <0.5 steps, 0% of 100-253 ckpts >5 steps) despite surviving to the 501 cap; `20260805_0118_regime_matched_probe_and_run_sweep_probe_dir` - regime-matched probe (avoidance_bushrefuge/ w/ blocks_animals) + run_sweep probe-dir-path support, af46e99; `20260805_0119_render_recordings_output_path_collision` - render_recordings.py derives video_dir from rec_dir.parent.parent, collides in batch video jobs (4th recurrence), needs --output-dir), 1 into `cluster_ops` (`20260805_0120_node114_nas_hang_sustained_io` - node 114 NAS reads OK but HANGS long video-eval on sustained I/O; gpu_status --free lists it while NAS writes fail). All tags reused (design, decision, learned_lesson, refutation, config, training_runner, meta). No new tags, no new folders.

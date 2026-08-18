@@ -50,4 +50,5 @@ Bush-hiding on the hard-predator random-init task is a **metastable / intermitte
 - [[20260721_0424_dreamer_low_dwell_real_trajectory_verified]] (behavior_measures, 2026-07-21) — The near-zero bush-dwell of the size-sweep Dreamer agents is a GENUINE 'not lear
 - [[20260805_0117_bushrefuge_survives_by_evasion_not_refuge]] (behavior_measures, 2026-08-05) — The 4 bush-refuge rPPO agents (bush blocks predators) survive predator encounter
 - [[20260810_1753_bushrefuge_injury_suppresses_bush_use_heal_by_rest]] (behavior_measures, 2026-08-10) — Bush-refuge rPPO agents DO hide heavily (predator 34-42%, rabbit-chase 26-32%, r
+- [[20260818_1620_rest_premium_sweep_refuted]] (behavior_measures, 2026-08-18) — REFUTED: making uninterrupted rest valuable does NOT drive an injured agent to t
 <!-- END BACKLINKS -->

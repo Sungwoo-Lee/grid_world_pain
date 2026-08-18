@@ -46,4 +46,5 @@ The behaviour-probe eval sweep's earlier "the shared NAS saturates when you fan 
 - [[20260721_0422_batched_dreamer_eval_rng_and_unify]] (dreamer_diagnosis, 2026-07-21) — Unified Dreamer eval into eval_rollout.py (one script, both algorithms) and adde
 - [[20260721_0423_batched_eval_layout_and_npar]] (behavior_measures, 2026-07-21) — Two operational gotchas when driving Dreamer probe sweeps through eval_rollout.p
 - [[20260726_0417_dwell_sweep_rerun_silent_skip_traps]] (behavior_measures, 2026-07-26) — The dwell/behavior sweep pipeline has two silent-skip traps on incremental re-ru
+- [[20260818_1621_wandb_log_code_walks_whole_repo]] (cluster_ops, 2026-08-18) — wandb.run.log_code('.') walked the ENTIRE repo before every training run: wandb'
 <!-- END BACKLINKS -->

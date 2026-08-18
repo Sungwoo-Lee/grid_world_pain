@@ -6,8 +6,8 @@
 > To improve a row, set a `headline:` field on the entry itself.
 
 **Folder definition**: Config loader/layering/schema decisions
-**Insights**: 10
-**Last updated**: 2026-07-27
+**Insights**: 11
+**Last updated**: 2026-08-18
 
 ---
 
@@ -15,6 +15,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-08-18 | 16:22 | [20260818_1622_yaml_list_replace_and_runtime_env_test](20260818_1622_yaml_list_replace_and_runtime_env_test.md) | To REMOVE an item from a YAML list (resources/entities/obstacles) via extends:, the whole list must be restated - deep-merge cannot delete… |
 | 2026-07-27 | 05:42 | [20260727_0542_eval_seed_testing_seed_config_owned_flags](20260727_0542_eval_seed_testing_seed_config_owned_flags.md) | Training-time eval reused args.seed, so eval SCENARIOS followed the training seed: at --seed 0 the deterministic first eval episode on basi… |
 | 2026-07-26 | 04:19 | [20260726_0419_experiment_eval_config_layer_selector](20260726_0419_experiment_eval_config_layer_selector.md) | The behavior-probe eval-during-training opt-in was moved from a --experiment-eval CLI flag to a config-layer --eval-config <preset> selecto… |
 | 2026-07-26 | 04:16 | [20260726_0416_critical_settings_registry_changelog_guardrail](20260726_0416_critical_settings_registry_changelog_guardrail.md) | Created docs/environment/CONFIG_CRITICAL_SETTINGS.md — a registry of high-impact config settings (canonical value + meaning) plus a dated c… |
