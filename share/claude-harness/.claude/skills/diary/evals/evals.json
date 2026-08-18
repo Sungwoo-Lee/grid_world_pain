@@ -1,0 +1,26 @@
+{
+  "skill_name": "diary",
+  "evals": [
+    {
+      "id": 1,
+      "name": "session-start-then-implemented-then-end",
+      "prompt": "I'm starting a session to fix bug X. After implementing the fix at commit abc1234, log session-end with that commit.",
+      "expected_output": "Three diary calls: (1) session-start with label='bug X fix', (2) implemented with subject mentioning the bug fix, (3) session-end with --label matching the start and --commits 'abc1234'. Today's docs/diary/<date>.md exists and contains a Sessions row with Ended filled, plus an Events row.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "training-launch-and-analyze",
+      "prompt": "We just launched training tag=foo_v1 on node 113 GPU 1, cell C, wandb foo_v1_2026... per docs/experiments/active/foo/foo_v1.md. Hours later the analysis is done at docs/experiments/active/foo/foo_v1_analysis.md and the result is 'survival 18 ± 3 steps'.",
+      "expected_output": "Two diary calls: (1) training-start with all six required args, (2) training-done with --tag matching --result 'survival 18 ± 3 steps' --analysis pointing at the analysis doc. The Training runs row in today's diary is created on call 1 and edited in place on call 2 (Status changes from 'running' to 'done HH:MM').",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "memorize-into-diary-multiple-insights",
+      "prompt": "/wiki-write just captured 2 insights: 20260508_0429_memorize_skill_design_and_ship into wiki_system_design and 20260508_0430_worktree_isolation_path_safety into subagent_engineering. Log them in the diary.",
+      "expected_output": "Two diary insight calls (one per insight), each with --subject from the insight's summary and --link to the docs/llm_wiki/entries/<topic>/<id>.md path. Two new rows in the Events section.",
+      "files": []
+    }
+  ]
+}
