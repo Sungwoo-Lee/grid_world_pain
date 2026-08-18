@@ -963,7 +963,43 @@ def main():
         # CORRECT x-position no matter how far training has advanced since dispatch.
         wandb.define_metric("Experiment/*", step_metric="Episode/Number")  # episode-level x-axis
 
-        wandb.run.log_code(".", include_fn=lambda path: path.endswith(".py"))
+        # --- Source snapshot for reproducibility -------------------------------
+        # DO NOT use wandb.run.log_code(".") here. It walks the ENTIRE repo:
+        # wandb's filtered_dir() does `for dirpath, _, files in os.walk(root)` and
+        # DISCARDS dirnames, so it never prunes directories -- it stats every file
+        # under results/ (~370k recordings on the NAS) before the first training
+        # step. include_fn/exclude_fn do NOT help: they run AFTER the walk has
+        # visited each file, so they cut uploads, not traversal. Measured cost had
+        # grown to >1.5 h of dead time per launch, and it worsens with every eval
+        # sweep (see docs/diary/2026-08-16; first noted 2026-07-03).
+        #
+        # Instead: build the same artifact from ANCHORED globs (122 files, ~1 s).
+        # WARNING: keep every pattern ANCHORED to a code directory. A bare
+        # "**/*.py" is UNANCHORED and silently restores the full-repo walk --
+        # results/ holds no .py files, so it scans ~370k paths yielding nothing.
+        _code_files = (
+            glob.glob("*.py")
+            + glob.glob("src/**/*.py", recursive=True)
+            + glob.glob("scripts/**/*.py", recursive=True)
+        )
+        _code_name = wandb.util.make_artifact_name_safe(f"source-{wandb.run.project}")
+        try:
+            # Same class log_code() uses, so the WandB UI "Code" tab renders it
+            # (the public API rejects type="code" as reserved).
+            from wandb.sdk.artifacts._internal_artifact import InternalArtifact
+            _code_art = InternalArtifact(_code_name, "code")
+        except Exception:  # wandb moved the private module -> public fallback
+            _code_art = wandb.Artifact(_code_name, type="source")
+        for _f in _code_files:
+            _code_art.add_file(_f, name=_f)
+        _logged_art = wandb.run.log_artifact(_code_art)
+        try:
+            # log_code() sets this itself; do it manually so the UI links the snapshot.
+            wandb.run.config.update(
+                {"_wandb": {"code_path": _logged_art.name}}, allow_val_change=True
+            )
+        except Exception as _e:  # cosmetic UI linkage only -- never block training
+            print(f"[wandb] could not set code_path (cosmetic): {_e}")
 
     # 4. Print Summary
     if not args.quiet:
