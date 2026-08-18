@@ -1,0 +1,36 @@
+# Behavior-probe sweep for the 10-arm NO-HIDING-PREDATOR rest-premium sweep
+# (launched 2026-08-16, nodes 106-112; STILL TRAINING — incremental snapshot).
+#
+# These arms are the parent rest-premium sweep with the 2-12 ambush
+# `hiding_predator` resources REMOVED (resources = food only), testing the
+# "moving is dangerous" explanation for why injury SUPPRESSES cover use:
+# if ambush risk while crossing open ground is what pins an injured agent in
+# place, removing it should let the injured agent travel to the refuge bush.
+#   a01 1x (zero-premium anchor) a02 11x  a03 38x  a04 119x  a05 323x
+#   a06 512x  a07 1207x  a08 3815x  a09 19683x  a10 129962x
+#
+# Probed with the BUSH-REFUGE-MATCHED battery (bush carries blocks_animals:true)
+# — identical probe to the parent sweep, so the two are directly comparable.
+#
+# Run: python scripts/eval/dwell_sweep/run_sweep.py configs/eval_sweeps/restprem_nohide_rppo.yaml
+# Eval nodes EXCLUDE 106-112 (those are training these arms).
+name: restprem_nohide_rppo
+algo: rppo
+output_dir: results/eval/avoidance/restprem_nohide
+probe: configs/environment/experiment/behavior_probes/core/avoidance_bushrefuge
+conditions: all
+episodes: 30
+nodes: [101, 102, 103, 105, 113]
+x_axis: steps
+plot_measures: [bush_dwell, survival_steps, spatial_spread]
+runs:
+  - {label: nh_a01_prem1,      path: results/JAX_RecurrentPPO/20260816-151827_rppo_restpremNH_a01_n106}
+  - {label: nh_a02_prem11,     path: results/JAX_RecurrentPPO/20260816-151930_rppo_restpremNH_a02_n106}
+  - {label: nh_a03_prem38,     path: results/JAX_RecurrentPPO/20260816-152028_rppo_restpremNH_a03_n107}
+  - {label: nh_a04_prem119,    path: results/JAX_RecurrentPPO/20260816-152156_rppo_restpremNH_a04_n107}
+  - {label: nh_a05_prem323,    path: results/JAX_RecurrentPPO/20260816-152230_rppo_restpremNH_a05_n108}
+  - {label: nh_a06_prem512,    path: results/JAX_RecurrentPPO/20260816-152340_rppo_restpremNH_a06_n110}
+  - {label: nh_a07_prem1207,   path: results/JAX_RecurrentPPO/20260816-152440_rppo_restpremNH_a07_n110}
+  - {label: nh_a08_prem3815,   path: results/JAX_RecurrentPPO/20260816-152541_rppo_restpremNH_a08_n111}
+  - {label: nh_a09_prem19683,  path: results/JAX_RecurrentPPO/20260816-152642_rppo_restpremNH_a09_n112}
+  - {label: nh_a10_prem129962, path: results/JAX_RecurrentPPO/20260816-152742_rppo_restpremNH_a10_n112}
