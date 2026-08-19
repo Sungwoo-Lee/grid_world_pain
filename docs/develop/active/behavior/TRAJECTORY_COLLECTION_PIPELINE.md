@@ -175,7 +175,7 @@ Three layers defeat the §A6 hazard:
 2. **Manifest guard.** On any resume, the collector recomputes `env_fp`, the git SHA, `SCHEMA_VERSION`, `seed_base`, and `n_episodes`, and compares them to `_manifest.json`. **Any mismatch is a hard `ValueError` and nothing is written.** (Git SHA mismatch is a warning, not a failure — code can legitimately move between collection sessions — but it is recorded per shard so provenance is never lost.)
 3. **Atomic shards.** Each shard is written to `<name>.parquet.tmp` and then `os.replace`d. A shard on disk is always complete. There is no partial-file state for a reader to trip over.
 
-`_manifest.json` records: `schema_version`, `env_fp`, the full resolved env config, `run_path`, `checkpoint_path`, `ckpt_step`, slot counts `(A, R, B, V, VV, D)`, `max_steps`, `action_dim`, `seed_base`, `n_episodes`, `shard_episodes`, `batch_size`, `device`, `policy_mode` (always `"deterministic_argmax"`), `obs_dtype`, `git_sha`, the per-entity **names and classes** (`animal_classes`, `animal_behaviours`, resource / obstacle names) so array index `i` can be given a human label, and the static per-entity parameter arrays needed as join partners: `animal_damage` bounds, `obs_hides_agent`, `res_type`, `animal_is_damaging`, and the per-episode sampling bounds (`animal_detect_low/high`, `count_low/high`, …).
+`_manifest.json` records: `schema_version`, `env_fp`, the full resolved env config, `run_path`, `checkpoint_path`, `ckpt_step`, slot counts `(A, R, B, V, VV, D)`, `max_steps`, `action_dim`, `seed_base`, `n_episodes`, `shard_episodes`, `batch_size`, `device`, `policy_mode` (always `"deterministic_argmax"`), **`obs_precision`** (§D12 — manifest-guarded, so a `float16` store can never be resumed as `float32`), `git_sha`, the per-entity **names and classes** (`animal_classes`, `animal_behaviours`, resource / obstacle names) so array index `i` can be given a human label, and the static per-entity parameter arrays needed as join partners: `animal_damage` bounds, `obs_hides_agent`, `res_type`, `animal_is_damaging`, and the per-episode sampling bounds (`animal_detect_low/high`, `count_low/high`, …).
 
 Storage root: `results/trajectories/`. This is gitignored data on the NAS — the standing git-safety rule applies (never `git clean -x` / `-X` / `-fdx`).
 
@@ -221,10 +221,36 @@ One row per `(episode, t)`, `t ∈ [0, T]`. Sorted by `(episode_seed, t)`. Colum
 | 30 | `res_active` | `fixed_size_list<bool>[R]` | state at `t` | `state.res_active` |
 | 31 | `res_cons_count` | `fixed_size_list<int16>[R]` | state at `t` | `state.res_cons_count` |
 | 32 | `res_reg_timer` | `fixed_size_list<int16>[R]` | state at `t` | `state.res_reg_timer` |
-| 33 | `obs_noised` | `fixed_size_list<float16>[D]` | state at `t` | `get_observation(state, params)` — what the policy received |
-| 34 | `obs_true` | `fixed_size_list<float16>[D]` | state at `t` | `get_observation(state, params, apply_noise=False)` — ground truth |
+| 33 | `obs_row` | `fixed_size_list<int16>[B]` | state at `t` | `state.obs_pos[:,0]` — constant within an episode; deliberately kept per-step, see below |
+| 34 | `obs_col` | `fixed_size_list<int16>[B]` | state at `t` | `state.obs_pos[:,1]` |
+| 35 | `obs_noised` | `fixed_size_list<float16 \| float32>[D]` | state at `t` | `get_observation(state, params)` — what the policy received; element type set by the mandatory `obs_precision` key (§D12) |
+| 36 | `obs_true` | `fixed_size_list<float16 \| float32>[D]` | state at `t` | `get_observation(state, params, apply_noise=False)` — noise-free ground truth; same element type |
 
-**No obstacle columns appear per step.** Obstacle positions never change: `obs_pos` is absent from the `state._replace(...)` call at `core.py:800-838` and is therefore carried through every step unmodified. They are hoisted to the per-episode record. This assumption is load-bearing for a 31 % size saving and is guarded by a permanent regression test (verification V5).
+**Obstacle and resource positions stay per-step, even though obstacles provably never move.** `obs_pos` is absent from the `state._replace(...)` call at `core.py:800-838`, so it is constant within an episode. An earlier draft of this plan hoisted it to the per-episode record and claimed a **31 % saving**. **That figure was wrong and the optimisation is deleted.** 31 % was a fraction of *raw uncompressed* bytes, and **raw-byte accounting is not valid for sizing a compressed columnar store** — Parquet's run-length encoding removes nearly all of that redundancy before any schema change gets a chance at it.
+
+Measured directly, on a realistic layout (1,000 episodes × 192 steps × 22 obstacle slots, zstd, `fixed_size_list` columns matching the schema above):
+
+| | size |
+|---|---:|
+| obstacle position columns, kept per-step | 0.08 MB |
+| same, hoisted to per-episode | 0.02 MB |
+| saving **on those columns** | 75 % |
+| those columns as a share of total payload | **~1 %** (0.08 MB against a 21.5 MB observation block) |
+| **net saving on the store** | **~0.75 %** |
+
+Three-quarters of one percent — in exchange for schema complexity and a join at read time on every analysis wanting agent-versus-obstacle geometry, which is the single most common question this store will be asked. **Recorded here so nobody re-proposes it.**
+
+Supporting column-level measurements on 200,000 real rows, zstd-compressed, showing why the redundancy was already gone before the optimisation was considered:
+
+| Column shape | CSV | Parquet + zstd | Ratio |
+|---|---:|---:|---:|
+| constant integer (an obstacle position that never moves) | 391 KB | **2 KB** | 213× |
+| mostly-`False` boolean flag | 1,162 KB | **11 KB** | 104× |
+| 6-value low-cardinality string | 911 KB | **71 KB** | 13× |
+
+The general rule, and the one that should govern any future schema debate: *in a columnar store, never size from raw byte counts, and do not restructure the schema to remove redundancy the encoder already removes for free.* Integer, boolean, and constant columns are effectively free. **Float columns are the only ones that cost anything (§D11).**
+
+The corollary is why this is a net simplification rather than a concession. The hoisting draft required a permanent regression test asserting that obstacles never move — a correctness assumption baked into the store — purely to protect a 0.75 % saving. **Deleting the optimisation deletes the assumption and the test with it.** If moving obstacles are ever added, this store records the movement correctly, with no schema change and no silent corruption.
 
 **Not recorded, deliberately** — with reasons, so nobody re-adds them by accident:
 
@@ -263,14 +289,16 @@ One row per episode. Columns in this exact order:
 | 19 | `res_property_sampled_init` | `fixed_size_list<float32>[R*V]` | **realised draw at reset**, flattened `[R, V]` — see caveat below |
 | 20 | `res_visual_property_sampled_init` | `fixed_size_list<float32>[R*VV]` | **realised draw at reset**, flattened `[R, VV]` — see caveat below |
 | 21 | `obs_active` | `fixed_size_list<bool>[B]` | **realised draw** — which obstacle slots exist this episode |
-| 22 | `obs_row` | `fixed_size_list<int16>[B]` | hoisted static obstacle positions |
-| 23 | `obs_col` | `fixed_size_list<int16>[B]` | hoisted static obstacle positions |
-| 24 | `obs_property_sampled` | `fixed_size_list<float32>[B*V]` | **realised draw**, flattened `[B, V]` |
-| 25 | `obs_visual_property_sampled` | `fixed_size_list<float32>[B*VV]` | **realised draw**, flattened `[B, VV]` |
+| 22 | `obs_property_sampled` | `fixed_size_list<float32>[B*V]` | **realised draw**, flattened `[B, V]` |
+| 23 | `obs_visual_property_sampled` | `fixed_size_list<float32>[B*VV]` | **realised draw**, flattened `[B, VV]` |
 
-Rows 7–25 are the complete independent-variable side of the analysis: everything the environment secretly re-rolled at the start of this episode. Joined against the manifest's sampling bounds (§A10), each realised draw can be expressed as a position within its own range.
+Rows 7–23 are the complete independent-variable side of the analysis: everything the environment secretly re-rolled at the start of this episode. Joined against the manifest's sampling bounds (§A10), each realised draw can be expressed as a position within its own range.
 
-**Caveat on columns 19–20 (must be in the schema doc).** `res_property_sampled` and `res_visual_property_sampled` are re-drawn whenever a resource regenerates (`core.py:808-809`). The recorded values are the **reset draw only**. A regeneration event is detectable per step from `res_cons_count` incrementing and `res_active` toggling, so an analysis that conditions on resource property should either restrict to the pre-first-regeneration window or accept the approximation. Recording them per step would cost `R*V + R*VV` half-precision values per step, roughly **+16 %** payload; deferred, see **Open Question 2**.
+Obstacle **positions** are not here — they are per-step columns 33–34, for the reason given in §D4.1. Only the obstacle *draws* (which slots exist, and their sampled properties) live at episode level, matching how animals and resources are handled.
+
+All per-episode float columns are `float32` regardless of `obs_precision`: they are the independent variables of every future analysis, they cost ~1.8 KB per episode against ~47 KB of step data, and reducing their precision would save nothing measurable while making a join partner lossy.
+
+**Caveat on columns 19–20 (must be in the schema doc).** `res_property_sampled` and `res_visual_property_sampled` are re-drawn whenever a resource regenerates (`core.py:808-809`). The recorded values are the **reset draw only**. A regeneration event is detectable per step from `res_cons_count` incrementing and `res_active` toggling, so an analysis that conditions on resource property should either restrict to the pre-first-regeneration window or accept the approximation. Recording them per step would add `R*(V+VV) = 52` float values per step — a ~40 % increase on the 128-float-per-step observation block that dominates the store (§D11), since floats are the only columns that cost anything. Deferred; see **Open Question 2**.
 
 **Flattening note.** `[A, V]`-shaped draws are stored flattened row-major into a single list column so that the column count is fixed and independent of `V`. `(A, V)` are in the manifest; the reader reshapes.
 
@@ -285,19 +313,22 @@ The scan kernel emits, per environment-step, native-dtype device arrays (JAX has
 | agent + body scalars + info scalars + flags | 53 |
 | animals (`pos` 32, `state` 16, `stamina` 16, `move_timer` 16, `attack_timer` 16) | 96 |
 | resources (`pos` 32, `active` 4, `cons_count` 16, `reg_timer` 16) | 68 |
+| obstacles (`pos` `int32[22,2]`) | 176 |
 | observations (`obs` 27×4, `obs_true` 27×4) | 216 |
-| **Total** | **≈ 433** |
+| **Total** | **≈ 609** |
 
-Scan output for a chunk of `B_c` episodes: `max_steps × B_c × 433 B = 216.5 KB × B_c`. The device buffer and its host copy coexist during transfer, so peak ≈ 2×.
+Scan output for a chunk of `B_c` episodes: `max_steps × B_c × 609 B = 304.5 KB × B_c`. The device buffer and its host copy coexist during transfer, so peak ≈ 2×.
 
 | `B_c` | scan buffer | device + host peak | process peak RSS (base 1.2 GB) |
 |---:|---:|---:|---:|
-| 1024 | 222 MB | 444 MB | **≈ 1.7 GB** |
-| 2048 | 443 MB | 886 MB | ≈ 2.2 GB |
-| 4096 | 887 MB | 1.77 GB | ≈ 3.1 GB |
-| 102400 (unchunked, illustrative) | 22 GB | 44 GB | OOM |
+| 1024 | 312 MB | 624 MB | **≈ 1.8 GB** |
+| 2048 | 623 MB | 1.25 GB | ≈ 2.5 GB |
+| 4096 | 1.25 GB | 2.50 GB | ≈ 3.7 GB |
+| 102400 (unchunked, illustrative) | 30 GB | 61 GB | OOM |
 
-**Chosen: `batch_size = 1024`.** At 16 worker processes per node this is ~27 GB of node RAM, comfortable on any lab node. On CPU, "device memory" *is* host memory, so the 2× factor is real, not conservative. GPU changes the trade-off — see §D7.
+**Chosen: `batch_size = 1024`.** At 16 worker processes per node this is ~29 GB of node RAM, comfortable on any lab node. On CPU, "device memory" *is* host memory, so the 2× factor is real, not conservative. GPU changes the trade-off — see §D7.
+
+**The obstacle-position block is emitted per step by the scan, not broadcast on host.** Because `obs_pos` is constant within an episode, the scan *could* emit it once from `states0` and let the host writer broadcast it across the episode's rows, saving 176 of 609 bytes per env-step of device→host traffic (29 %). **Rejected.** That reintroduces exactly the silent-corruption failure mode §D4.1 just removed: if moving obstacles are ever added, the writer would quietly record the reset position for every step. RAM at `batch_size = 1024` is 1.8 GB either way and the whole collection is a ~1.5 h job (§D6), so the saving buys nothing that matters and costs a correctness caveat. Emit it plainly.
 
 Per chunk: `1024 × 500 = 512,000` scanned steps ÷ 7,150 steps/s ≈ **72 s**. One 5,000-episode shard block = 5 chunks ≈ 6 minutes.
 
@@ -375,7 +406,7 @@ Final checkpoint only, but the spec format accepts a list without redesign (`che
 
 #### D10. Resume and failure recovery
 
-- Episode index space is partitioned into contiguous blocks of `shard_episodes` (5,000). Block `b` covers `[5000b, 5000(b+1))`; episode `i` uses seed `seed_base + i`. Both the block partition and the seed mapping are pure functions of `(seed_base, shard_episodes)` recorded in the manifest — no state, no counter file.
+- Episode index space is partitioned into contiguous blocks of `shard_episodes` (5,000). Block `b` covers `[5000b, 5000(b+1))`; episode `i` uses seed `seed_base + i`, where `seed_base` is this run's **effective** value (batch-level, or the run-level override — §D13). Both the block partition and the seed mapping are pure functions of `(seed_base, shard_episodes)` recorded in the manifest — no state, no counter file.
 - A block is **complete** iff both `episodes_%05d.parquet` and `steps_%05d.parquet` exist (atomic rename guarantees each is whole). Resume = list complete blocks, skip them, work the rest.
 - A node dying mid-block loses at most one block ≈ **6 minutes** of work, and leaves at most two `.tmp` files, which the collector deletes on startup for blocks it is about to redo.
 - Because blocks are pure functions of the seed, a redone block is **bit-identical** to what the dead process would have produced. Resume can never produce a mixed population.
@@ -383,44 +414,153 @@ Final checkpoint only, but the spec format accepts a list without redesign (`che
 
 #### D11. Budget at the 10⁶-episodes-per-run target
 
-**Per-step raw payload** (post-downcast, the bytes actually handed to Parquet), using §A9 dimensions:
+##### The one fact that governs the whole budget
 
-| Group | bytes/row |
-|---|---:|
-| `episode_seed` 8, `t` 2, `action` 1, `reward` 4 | 15 |
-| agent 4, body (`satiation`/`nutrition`/`injury`) 12, `rest_streak` 2, `last_collision_noc` 4, `damage` 4 | 26 |
-| 8 boolean flags + `termination_reason` | 9 |
-| animals: row/col 16, state 4, stamina 16, timers 16 | 52 |
-| resources: row/col 16, active 4, cons_count 8, reg_timer 8 | 36 |
-| `obs_noised` `float16[27]` 54 + `obs_true` `float16[27]` 54 | 108 |
-| **Total** | **246** |
+**Only float columns cost anything.** Everything else — integers, booleans, positions, timers, counters, the episode key, the step index — is collapsed by Parquet's encodings to a rounding error. This is measured, not assumed (§D4.1: 213× on a constant integer, 104× on a sparse boolean, 13× on a 6-value low-cardinality column).
 
-| Quantity | Value |
+Floats resist compression, and **smoothness does not help**. A smooth, autocorrelated float column and a pure-random float column both compress at **1.9×**, because the low-order mantissa bits are effectively random even in a smooth signal and those bits are most of the bytes. An earlier draft of this plan asserted that real sensor data would compress better than a worst-case benchmark; **that claim is false and must not be repeated.** Use 1.9× for every varying float column.
+
+Consequence: since the user chose to record **both** the noised observation and the noise-free ground truth (54 float values per step, 27 dimensions each), **the observation block dominates the store and is the only lever that changes the bill.**
+
+##### Per-step arithmetic, anchored on the compressed measurement
+
+The only directly-measured anchor that matches this schema is the 1,000-episode × 192-step layout of §D4.1: the two observation columns at `float16` occupied **21.5 MB** over `192,000` rows.
+
+`21.5 MB / 192,000 rows = 112 B per row` for 54 stored `float16` values — against **108 raw bytes**. The `float16` observation block is, in other words, **essentially incompressible**: on-disk size ≈ raw size. That is exactly what the mantissa argument predicts, and it is the number to build the budget on.
+
+| Block | Content | Compressed B / step row | Basis |
+|---|---|---:|---|
+| Observations, `float16` | `obs_noised[27]` + `obs_true[27]` | **112** | measured (21.5 MB / 192,000 rows) |
+| Observations, `float32` | same, 4 bytes/value | **~114** | 216 raw ÷ 1.9× measured float ratio |
+| Other floats | `reward` 1, body + `damage` 5, `animal_stamina` 4 = 10 `float32` values | **~21** | 40 raw ÷ 1.9× |
+| Non-float | `episode_seed`, `t`, `action`, agent, `rest_streak`, 8 bools, `termination_reason`, animals, resources, obstacles (186 raw B) | **~10** | obstacle columns measured at 0.44 B/row; rest bounded by the 13× worst case |
+| **Total** | | **≈ 143 (f16) / ≈ 145 (f32)** | |
+
+| | `float32` observations | `float16` observations |
+|---|---:|---:|
+| Compressed bytes / step row | 145 | 143 |
+| Rows per episode (`T + 1`) | 193 | 193 |
+| Compressed KB / episode (steps) | 28.0 | 27.6 |
+| Compressed KB / episode (episode row)¹ | 0.87 | 0.87 |
+| **Per run (10⁶ episodes)** | **≈ 28 GB** | **≈ 28 GB** |
+| **10 runs** | **≈ 280 GB** | **≈ 280 GB** |
+
+¹ The episode row is 407 `float32` values (dominated by the obstacle property columns, 286 of them) plus 119 non-float bytes → ~866 B compressed. Per-episode floats stay `float32` regardless of `obs_precision` (§D4.2). Where obstacle-property std is zero these columns are *constant across every episode* and compress far better; 866 B is a ceiling.
+
+##### ⚠️ A contradiction in the measured inputs — flagged, not silently resolved
+
+The two measurements supplied to this plan are mutually inconsistent, and the inconsistency lands squarely on the one remaining size lever:
+
+| Measurement | Implies, per stored float value |
 |---|---|
-| Rows per episode | `T + 1 ≈ 193` |
-| Raw bytes per episode (steps) | `193 × 246 ≈ 47.5 KB` |
-| Raw bytes per episode (episode row) | `≈ 1.84 KB` |
-| **Raw per 10⁶ episodes** | **≈ 47.5 GB steps + 1.8 GB episodes ≈ 49 GB** |
-| Parquet + zstd, expected 3–5× | **≈ 10–16 GB per run** |
-| **10 runs** | **≈ 100–160 GB** |
-| Shards per run | `10⁶ / 5000 = 200` blocks → 400 files |
-| Per shard on disk | ≈ 60–80 MB |
+| "varying float columns compress at **1.9×**, smoothness does not help" | `float32`: 4 ÷ 1.9 = **2.1 B** |
+| "`float16` observation block = **21.5 MB** over 192,000 rows × 54 values" | `float16`: **2.07 B** |
 
-The 3–5× compression estimate is well-founded for this data: eight boolean columns and `termination_reason` are near-constant (RLE collapses them to nearly nothing); positions are small integers with cardinality ≤ grid size (dictionary-encoded); proprioception occupies 6 of the 27 observation dimensions as a one-hot; and the per-episode obstacle property columns (columns 24–25, 1,144 raw bytes and by far the largest part of the episode row) are literally constant across all episodes whenever the obstacle property std is zero. Checkpoint C8 requires the developer to **measure** the realised ratio on a 5,000-episode block and record it, rather than trusting this estimate.
+**Both land at ~2.1 compressed bytes per float value.** If that is right, then half precision saves ~2 %, not ~50 % — the mantissa bits are incompressible either way, so cutting them in half is offset by zstd having less to remove. This is physically coherent: `float32` compresses well *because* it carries a highly-redundant exponent byte; `float16` has already had that redundancy removed by the cast, which is why it barely compresses further.
 
-**Where the size optimisations came from** — both are already baked into the schema above:
+The same two measurements, however, were also reported as a headline of **~113 GB (`float32`) vs ~23 GB (`float16`)** per run — a 4.9× gap. That gap is only reachable if the 113 GB figure is *raw uncompressed* and the 23 GB figure is *compressed*, which would be comparing different things.
 
-| Optimisation | Mechanism | Saving |
+**This plan does not pick a winner.** The consequence is material — it decides whether an irreversible precision loss buys 2 % or 50 % — so it is settled by measurement, not by argument. See the extended checkpoint C8 and §D12.
+
+**Planning envelope until C8 lands: ~28 GB per run, ~280 GB for ten runs**, with an upper bound of ~113 GB / ~1.1 TB if the pessimistic reading holds. Every point in that envelope is affordable (below).
+
+##### Disk is not a constraint — do not scope around it
+
+`/media/nas01` has **59 TB free** of 192 TB (70 % used). The worst case in the envelope above is ~1.1 TB for ten runs — **under 2 % of free space**. No design decision in this plan may be justified by saving disk, and no scope reduction may be proposed for disk reasons. Pre-flight `df -h /media/nas01` anyway, because the NAS is shared.
+
+The two real constraints are:
+
+1. **Write throughput** during collection (bounded by rollout compute, §D6, not by bytes).
+2. **Full-corpus read time** for every future analysis. This is the standing cost: a store that is 2× smaller is scanned 2× faster, forever, by every question anyone asks it. This — not disk — is the only argument that could justify the lossy precision choice in §D12, **and it only applies if the store actually gets smaller**, which §D11's contradiction puts in doubt.
+
+##### Data-loss exposure and the protective rules
+
+The store is **gitignored data on a NAS that does not support symlinks**, so the standard "keep data outside the repo and symlink it in" protection is unavailable. The `results/` tree has already been destroyed once, when an aggressive cleanup followed a failed merge, and recovery required re-training. At ~28 GB and ~19 core-hours per run, this store is expensive — though not catastrophic — to regenerate.
+
+Rules that apply to `results/trajectories/`, unchanged from the project-wide git-safety policy:
+
+- **Never** `git clean -x` / `-X` / `-fdx` / `-fdX` — the `-x`/`-X` flag deletes gitignored files. `git clean -fd` is safe; always preview with `git clean -fdn` first and surface the listed paths.
+- **Never** force-checkout or force-switch branches without checking whether the destination branch tracks paths currently untracked locally.
+- **Avoid** `git stash -u` followed by `git stash drop`.
+- **Snapshot before any merge / rebase / branch switch / non-trivial git operation.** `git reset --hard` alone is safe for gitignored data; the danger is the `git clean -x` that often follows it.
+
+One mitigation is already built in: because the store is content-addressed by block (§D10) and every block is a pure function of `(seed_base, shard_episodes)`, **a partial loss is recoverable by re-running only the missing shards.** Losing 20 of 200 shards costs 10 % of one run's compute, not the whole collection. Losing `_manifest.json` alone is *not* recoverable in the same way — it carries the resolved config, `seed_base`, and `obs_precision` — so the driver writes it first, before any shard, and never rewrites it.
+
+##### File count, not bytes, is what this filesystem punishes
+
+An independent, decisive datapoint: `du -sh results/` on this NAS **timed out after two minutes**. Merely *walking* the existing tree exceeds two minutes. The binding cost on this filesystem is **file count**, not total bytes.
+
+This is a second, independent argument for the sharded layout, separate from size: the alternative of one file per episode would create **10⁶ files per run, 10⁷ across ten runs**, on a filesystem that already cannot walk its own results tree in two minutes. The chosen layout produces:
+
+| | files per run | files, 10 runs |
+|---|---:|---:|
+| One file per episode (rejected) | 1,000,000 | 10,000,000 |
+| **Sharded, 5,000 episodes/block** | **400** (200 blocks × 2) | **4,000** |
+
+400 files per run is a directory listing that returns instantly. It also sets a floor on shard size: do not reduce `shard_episodes` below ~1,000 without re-checking this, because file count is the scarce resource here.
+
+##### Runtime
+
+19.4 core-hours per run (§D6) → 194 core-hours for 10 runs → **≈ 1.5 h wall on 8 nodes × 16 processes**. Plus a fixed 15–17 s JAX-startup cost per worker process; with one process per block that would be `200 × 16 s = 53 min` of pure startup per run, so **each worker process must handle multiple consecutive blocks** (a worklist line is a *block range*, not a single block), amortising startup to ~16 s per worker. This is the direct analogue of `run_sweep.py`'s per-checkpoint grouping and is required, not optional.
+
+#### D12. Observation precision — an explicit lossy decision, not a compression setting
+
+**These are two different things and the plan must not conflate them.**
+
+| | What it does | Reversible? |
 |---|---|---|
-| Hoist static obstacle data to the episode record | `obs_pos` never mutates (`core.py:800-838`); `obs_active` is constant per episode (`core.py:828`) | per-step payload would be `246 + 22×2×2 + 22 = 356 B`; hoisting saves **31 %** |
-| Half-precision observations | `obs_noised` + `obs_true` at `float16` instead of `float32` | `246` vs `354 B`; saves **31 %** |
-| Both together | | `47.5 KB` vs `≈ 88 KB` per episode — **46 %** |
+| Compression (zstd + Parquet encodings) | makes the same values occupy fewer bytes | **lossless and exact** — round-trip is bit-identical |
+| `float32 → float16` | **discards information** | **irreversible** |
 
-Half-precision is safe for the sensors in §A9 (all values are normalised or small integers) but is **not safe unconditionally** — the `Location` sensor emits raw grid coordinates, and any future sensor emitting values above 65,504 would overflow to `inf`. Verification V6 is a real check, not a formality.
+Storing observations at half precision is therefore a **scientific decision about acceptable measurement error**, not a storage optimisation, and it is recorded as one.
 
-**Runtime**: 19.4 core-hours per run (§D6) → 194 core-hours for 10 runs → **≈ 1.5 h wall on 8 nodes × 16 processes**. Plus a fixed 15–17 s JAX-startup cost per worker process; with one process per block that would be `200 × 16 s = 53 min` of pure startup per run, so **each worker process must handle multiple consecutive blocks** (worklist line = a *block range*, not a single block), amortising startup to ~16 s per worker. This is the direct analogue of `run_sweep.py`'s per-checkpoint grouping and is required, not optional.
+**The error bound, verified:**
 
-**Disk**: `/media/nas01` currently has **59 TB free** of 192 TB. 100–160 GB is not a constraint. Pre-flight `df -h /media/nas01` anyway.
+| Property | `float32` | `float16` |
+|---|---|---|
+| Decimal digits retained | ~7.2 | **~3.3** |
+| Worst-case absolute error on values in `[0, 1]` | ~6e-08 | **2.44e-04** |
+| Round-trip bit-identical | yes | **no** |
+| Overflow threshold | ~3.4e38 | **65,504** |
+
+For already-noisy sensor readings a worst-case absolute error of `2.44e-04` is very likely irrelevant — the perceptual noise the environment deliberately injects is orders of magnitude larger. But "very likely irrelevant" is a judgement that belongs in the record, not in a compression ratio.
+
+**Design:**
+
+- **`obs_precision` is a mandatory spec key** — `float16` or `float32`, read through `_req(spec, 'obs_precision')`, **no fallback default** (project Configuration Protocol). A collection cannot be launched without someone stating which precision they chose.
+- The chosen value is written to `_manifest.json` and is the element type of step columns 35–36. **An analysis can always tell which precision it is reading**, and a mixed-precision corpus is self-describing rather than silently inconsistent.
+- Switching to full precision is a **spec-file edit, not a code change**. The store path already partitions by `env_fp`; `obs_precision` is additionally a manifest-guarded field (§D3), so resuming a `float16` store with `float32` is a hard `ValueError`, never a silent mix within one store.
+- **Recommended value: `float32` — see the reversal note below.**
+
+##### Recommendation reversal: prefer `float32` unless C8 proves otherwise
+
+An earlier draft of this plan recommended `float16` on the assumption that it roughly halves the store. **§D11's measured anchor does not support that assumption**: a `float16` observation block was measured at ~2.07 compressed bytes per value, and `float32` at ~2.1 compressed bytes per value under the measured 1.9× float ratio. If those two numbers are both right, half precision buys **~2 %**, not ~50 %.
+
+The decision then becomes trivial. The only argument for `float16` was read-time (§D11), and read-time only improves if the store actually shrinks. Against a ~2 % gain sits an **irreversible** `2.44e-04` worst-case error on a quantity — the observation the policy consumed — that is the primary independent variable of every perception-related analysis this store exists to enable. **Do not trade an irreversible loss for two percent.**
+
+**Therefore: default `obs_precision: float32`.** Choose `float16` only if checkpoint C8's paired measurement shows a saving above **20 %**, which is the point where read-time starts to matter enough to weigh against lossiness. C8 is extended to require that paired measurement — the same 5,000 real episodes written both ways, compared on disk — *before* any large collection starts. This costs ~6 minutes of compute and settles a question that is otherwise unanswerable from the plan.
+
+Nothing else in the design changes either way: the schema, the manifest guard, and the reader are precision-agnostic by construction.
+
+**Half precision is not unconditionally safe** and the guard is a real check, not a formality. The `Location` sensor emits raw grid coordinates and any future sensor emitting magnitudes above **65,504** would silently become `inf`. The representative config of §A9 has the location sensor **off**, so verification V5 must be run on at least one config that has it **on**.
+
+#### D13. Seed policy — shared by default, overridable per run
+
+**Default: one `seed_base` shared by every run in a batch spec.** Because an episode is a pure function of `jax.random.PRNGKey(seed)`, run A's episode `i` and run B's episode `i` then face the **same** environment draw — the same number of predators, the same sight ranges, the same bush layout. Comparisons across runs become **paired**, which is a large gain in statistical power for exactly the question this pipeline exists to answer ("what did this training change do?") and costs nothing.
+
+**Per-run override is permitted and sometimes required.** Pairing is a property of the environment, not of the seed. Where two runs' environments differ *structurally*, the same key does not produce the same draw, and assuming pairing would be worse than not having it — an illusory pairing invites an analyst to run a paired test on unpaired data. The spec therefore accepts a `seed_base` on any individual run entry, overriding the batch-level value.
+
+**The precise condition under which pairing holds** — this must appear in the schema doc, stated exactly, because an analyst cannot infer it:
+
+> Two runs' episode `i` face the same environment draw **iff** they share a `seed_base` **and** the environment parameters consumed by `jax_reset` are identical between them — the entity slot counts (`count_low` / `count_high` for resources, entities, and obstacles) and every per-episode sampling bound (`animal_detect_low/high`, `animal_move_int_low/high`, `animal_attack_delay_low/high`, `animal_attack_range_low/high`, the four float-uniform trait bounds, the property `std` arrays, and the spawn areas). Changing any of these changes what the same key draws.
+>
+> Changes that do **not** break pairing: anything the reset sampler does not read — agent architecture, learning rates, training length, reward shaping, `max_steps`, and any body-dynamics parameter (including the healing rate) that is applied during stepping rather than at reset.
+>
+> **How to check, rather than assume**: `env_fp` (the resolved-config fingerprint in each store's manifest, §D3) being equal is sufficient for pairing. It is stricter than necessary — it also changes on parameters that do not affect the draw — so when fingerprints differ, compare the `seed_base` and the sampling-bound block recorded in the two manifests before claiming or denying pairing. **Never assume pairing from run labels.**
+
+Mechanics: the effective `seed_base` is resolved per run (run-level value if present, else the batch-level value), written into that run's `_manifest.json`, and **guarded** — resuming a store with a different `seed_base` is a hard `ValueError` (§D3, verification V7 case (b)), so a store can never contain a mixed episode population.
+
+A concrete example of when the override is needed: comparing a training run whose world has up to 2 predators against one whose world has up to 4. The animal slot count differs, so `jax_reset` consumes the key differently and episode `i` is not a matched pair. Give the second run its own `seed_base` and analyse the two as independent samples.
 
 ### File Changes
 
@@ -434,8 +574,8 @@ SCHEMA_VERSION = 1
 STEP_COLUMNS = [...]      # ordered list of (name, arrow_type_factory, doc) — §D4.1, exact order
 EPISODE_COLUMNS = [...]   # ordered list — §D4.2, exact order
 
-def build_step_schema(dims) -> pa.Schema: ...      # dims = (A, R, B, V, VV, D)
-def build_episode_schema(dims) -> pa.Schema: ...
+def build_step_schema(dims, obs_precision) -> pa.Schema: ...   # dims = (A, R, B, V, VV, D)
+def build_episode_schema(dims) -> pa.Schema: ...   # per-episode floats are always float32 (§D4.2)
 
 def env_fingerprint(resolved_cfg_dict) -> str:     # sha256(yaml.safe_dump(sort_keys=True))[:10]
 def write_manifest(store_dir, manifest: dict) -> None:
@@ -471,7 +611,7 @@ The `nnx.jit`-wrapped batched scan kernel emitting exactly the fixed key set. De
 
 Single-run, single-process collector. Flags:
 
-`--run` (required, path to the training run dir) · `--checkpoint` (`final` or an explicit step; numeric-max selection per §D9) · `--out-root` · `--episodes` · `--seed-base` · `--blocks` (`lo:hi` block range for this worker) · `--batch-size` · `--shard-episodes` · `--device {cpu,gpu}` · `--quiet`
+`--run` (required, path to the training run dir) · `--checkpoint` (`final` or an explicit step; numeric-max selection per §D9) · `--out-root` · `--episodes` · `--seed-base` · `--blocks` (`lo:hi` block range for this worker) · `--batch-size` · `--shard-episodes` · `--obs-precision {float16,float32}` (**required, no default** — §D12) · `--device {cpu,gpu}` · `--quiet`
 
 Flow: resolve checkpoint → load env from `<run>/models/config.yaml` (never from `configs/`) → compute `env_fp` → create-or-validate the store manifest → for each incomplete block in range: for each chunk of `batch_size`: `vmap(jax_reset)` → parity guard → `nnx.jit` scan → vectorised flatten → accumulate → write both shards atomically. Policy is deterministic argmax, always.
 
@@ -494,18 +634,26 @@ name: example
 algo: rppo                 # MANDATORY — only 'rppo' is supported in this change
 out_root: results/trajectories   # MANDATORY
 episodes: 1000000          # MANDATORY — per run
-seed_base: 1000000         # MANDATORY — defines the episode population; never defaulted
+seed_base: 1000000         # MANDATORY — shared by every run below so comparisons are PAIRED (§D13);
+                           #             defines the episode population; never defaulted
 checkpoints: [final]       # MANDATORY — list form, accepts explicit steps later
 nodes: [101, 103, 104, 105]  # MANDATORY
+obs_precision: float32     # MANDATORY — 'float16' or 'float32'; a LOSSY choice, never defaulted (§D12)
 device: cpu                # optional, default 'cpu'
 npar: 16                   # optional, default derived from device (§D7)
 batch_size: 1024           # optional, default derived from device (§D7)
-shard_episodes: 5000       # optional, default 5000
+shard_episodes: 5000       # optional, default 5000 — do NOT go below ~1000 (file-count floor, §D11)
 runs:                      # MANDATORY
+  # Runs sharing the batch-level seed_base are PAIRED with each other (§D13).
   - {label: a01, path: results/JAX_RecurrentPPO/20260816-151827_rppo_restpremNH_a01_n106}
+  - {label: a02, path: results/JAX_RecurrentPPO/20260816-151930_rppo_restpremNH_a02_n106}
+  # Per-run override: this run's world has a different predator slot count, so the same
+  # key does not produce the same draw and pairing would be illusory. Independent sample.
+  - {label: b01, path: results/JAX_RecurrentPPO/20260816-152028_rppo_other_n107,
+     seed_base: 5000000}
 ```
 
-**No fallback defaults for scientific parameters.** `algo`, `out_root`, `episodes`, `seed_base`, `checkpoints`, `nodes`, `runs` are read through a `_req(spec, key)` helper that raises `ValueError` on absence. The five operational keys have documented defaults, and **every resolved value — defaulted or not — is written into `_manifest.json`**, so the value actually used is never in doubt.
+**No fallback defaults for scientific parameters.** `algo`, `out_root`, `episodes`, `seed_base`, `checkpoints`, `nodes`, `obs_precision`, `runs` are read through a `_req(spec, key)` helper that raises `ValueError` on absence. `obs_precision` is mandatory specifically because it is **lossy** (§D12) — a collection must not be launchable without someone stating the measurement precision they accepted. A run-level `seed_base` is the **only** permitted per-run override (§D13); every other key is batch-level. The four operational keys have documented defaults, and **every resolved value — defaulted or not, including the per-run effective `seed_base` — is written into `_manifest.json`**, so the value actually used is never in doubt.
 
 **No environment-config schema change.** This pipeline adds no keys to `configs/` env YAMLs and does not touch `config_loader.py`, `state.py` `EnvParams`, or the config system. Therefore `docs/environment/CONFIG_GUIDE.md`, `docs/environment/02_config_schema.md`, and `docs/environment/CONFIG_CRITICAL_SETTINGS.md` require **no** update, and no critical-settings change-log entry is due. (Stated explicitly so the verifier can confirm the omission is deliberate.)
 
@@ -518,8 +666,14 @@ runs:                      # MANDATORY
 3. The complete fixed key list (§D4.1, §D4.2) with dtype, shape, timing, and source, verbatim.
 4. Path scheme and manifest schema (§D3), including how `env_fp` prevents overwrites.
 5. Worked reader snippets: load episodes, join steps to episodes on `episode_seed`, reshape a flattened `[A, V]` draw, select "all predators", compute per-episode bush-dwell fraction.
-6. Caveats, in a section titled **Known caveats — read before analysing**: the `res_property` regeneration re-draw (§D4.2), the `agent_in_bush` comparability warning (§D8), half-precision observation error bounds (V6), and `animal_damage` being per-step rather than per-episode (§A2).
-7. **Maintenance Contract**: any change to the fixed key set, any dtype change, and any row-convention change **must** bump `SCHEMA_VERSION` in `src/utils/trajectory_store.py` and update this document in the same commit. Readers hard-fail on an unknown `SCHEMA_VERSION`.
+6. **When cross-run pairing holds** — the §D13 condition reproduced verbatim, including the "check `env_fp` and the sampling bounds, never assume from run labels" instruction. This is the one thing an analyst is most likely to get wrong and cannot infer from the data.
+7. Caveats, in a section titled **Known caveats — read before analysing**:
+   - **Resource properties are an episode-level approximation.** `res_property_sampled_init` is the draw *at reset*; the environment re-draws it on every regeneration (`core.py:808-809`). An analysis treating food properties as constant within an episode is making an approximation. **Where it breaks**: any episode in which a resource was consumed and regenerated — detectable per step from `res_cons_count` incrementing and `res_active` toggling `False → True`. The approximation is exact for the window before the first regeneration, and degrades with the number of regenerations, so it is worst in long episodes with a short `res_reg_delay` and best in short ones. Analyses that condition on resource property should either restrict to the pre-first-regeneration window or report the regeneration count as a covariate.
+   - The `agent_in_bush` comparability warning (§D8).
+   - **Observation precision**: how to read `obs_precision` from the manifest, and the `2.44e-04` worst-case absolute error if it says `float16` (§D12).
+   - `animal_damage` is per-step, not per-episode (§A2) — only its bounds are in the manifest.
+8. A short **"why the schema looks like this"** note carrying the §D4.1 measurements: integers and booleans are effectively free under Parquet encoding; floats cost ~2 compressed bytes per value regardless of smoothness *and largely regardless of stored precision*; hoisting static entity positions was measured at a **0.75 %** net saving and rejected; and raw-byte accounting must never be used to size a compressed columnar store. This section exists to stop the next reader from "optimising" the schema.
+9. **Maintenance Contract**: any change to the fixed key set, any dtype change, and any row-convention change **must** bump `SCHEMA_VERSION` in `src/utils/trajectory_store.py` and update this document in the same commit. Readers hard-fail on an unknown `SCHEMA_VERSION`.
 
 #### NEW — `scripts/eval/traj_collect/README.md`
 
@@ -527,7 +681,7 @@ Operator doc: how to run one run locally, how to run a spec across nodes, how to
 
 #### NEW — `tests/test_trajectory_collection.py`
 
-Pytest home for verifications V1, V3, V4, V5, V6, V8, V10 (see Verification Plan). Fast variants (small episode counts, tiny configs) so the suite stays runnable.
+Pytest home for verifications V1, V3, V4, V5, V7 and V9 (see Verification Plan). Fast variants (small episode counts, tiny configs) so the suite stays runnable. V2, V6 and V8 are operator-run rather than pytest (they need a real checkpoint, a `SIGKILL`, and a lab node respectively).
 
 #### MODIFIED — `docs/environment/SCRIPTS_DEPENDENCY_MAP.md`
 
@@ -558,12 +712,16 @@ Verified by the implementing agent **during** implementation:
 
 - [ ] **C1 — `nnx.jit` entry.** Assert the scan is never called eagerly: add a `RuntimeError` if `_rollout_scan` is invoked outside a trace, and confirm the first forward pass of the process goes through `nnx.jit` (§A5). Print the first 5 actions of seed 0 and compare to the legacy path before writing any shard.
 - [ ] **C2 — Numeric checkpoint selection.** Print the resolved checkpoint directory for a run with 591 numerically-named dirs and confirm it is `59100070`, not a lexicographic winner (§D9).
-- [ ] **C3 — Schema round-trip.** Write a 10-episode block, read it back with `open_store`, and assert column names + order + types match `build_step_schema(dims)` exactly.
+- [ ] **C3 — Schema round-trip.** Write a 10-episode block, read it back with `open_store`, and assert column names + order + types match `build_step_schema(dims, obs_precision)` exactly. Run once per `obs_precision` value.
 - [ ] **C4 — Row counts.** For 10 episodes assert `len(steps[seed]) == episodes[seed].length + 1`, `steps[t=0].action == -1`, `steps[t=0].reward == 0.0`.
 - [ ] **C5 — Realised draws are constant within an episode.** Assert every episode-level draw read at reset equals the same field on the final state (they must be, per `core.py:818-828`) — a cheap in-loop guard that catches a wrong state being snapshotted.
-- [ ] **C6 — Peak RSS.** Measure peak RSS of one worker at `batch_size=1024` and confirm ≤ 2.5 GB (§D5 predicts ~1.7 GB). Report the number.
+- [ ] **C6 — Peak RSS.** Measure peak RSS of one worker at `batch_size=1024` and confirm ≤ 2.5 GB (§D5 predicts ~1.8 GB). Report the number.
 - [ ] **C7 — Throughput.** Time one 5,000-episode block; report episodes/s and compare against the 14.3 eps/s baseline of §A8. Report as a before/after speed number in the Implementation Report.
-- [ ] **C8 — Realised compression ratio.** Report raw payload bytes vs on-disk Parquet bytes for one shard, and extrapolate to 10⁶ episodes. If the ratio is worse than 2.5×, stop and report before collecting at scale (§D11).
+- [ ] **C8 — Precision decision: the paired size measurement.** *(Blocking — must complete before any large collection.)* Write **the same 5,000 real episodes twice**, once with `obs_precision: float32` and once with `float16`, and report for each: on-disk bytes for the whole shard, on-disk bytes for the two observation columns alone, and compressed bytes per stored float value. Then extrapolate to 10⁶ episodes.
+  - This settles the contradiction flagged in §D11 (does half precision buy ~2 % or ~50 %?) with a direct paired observation instead of an argument.
+  - **Decision rule, fixed in advance so the result cannot be rationalised**: if `float16` saves **> 20 %** of total store size, adopt it; otherwise keep `float32`, because a `2.44e-04` irreversible error is not worth a small percentage when disk is free (§D12).
+  - Also report the realised whole-store compression ratio. If it is worse than 1.5×, stop and report before collecting at scale.
+  - Cost: ~12 minutes of compute. Do not skip it and do not substitute an estimate.
 - [ ] **C9 — Resume is a no-op.** Run the same block range twice; assert the second run writes nothing and completes in under 30 s.
 - [ ] **C10 — Zero-slot environment.** Collect 20 episodes from a config with `A = 0` (no animals) and confirm the animal columns are present as zero-length lists and the reader does not branch.
 
@@ -593,7 +751,7 @@ For every sampled episode assert: `steps[0].t == 0`, `steps[0].action == -1`, `s
 
 ### V4 — `agent_in_bush` recomputed independently in NumPy
 
-For every step row with `t ≥ 1`, recompute in pure NumPy from the recorded per-episode obstacle positions, `obs_active`, and the manifest's `obs_hides_agent`:
+For every step row with `t ≥ 1`, recompute in pure NumPy from the **per-step** obstacle position columns (`obs_row`, `obs_col` — columns 33–34), the per-episode `obs_active` mask, and the manifest's `obs_hides_agent`:
 
 ```
 expected = any( (obs_row == agent_row) & (obs_col == agent_col) & obs_hides_agent & obs_active )
@@ -601,39 +759,35 @@ expected = any( (obs_row == agent_row) & (obs_col == agent_col) & obs_hides_agen
 
 and assert it equals the recorded `agent_in_bush`.
 
-**Fails on**: accidentally inheriting the slot-0 hardcode of `avoidance_stats_heatmap.py:77-79`, a wrong `obs_active` hoist, or obstacles that actually do move (which would also trip V5). This is a NumPy reimplementation with no shared code with the JAX environment.
+**Fails on**: accidentally inheriting the slot-0 hardcode of `avoidance_stats_heatmap.py:77-79`, a wrong `obs_active` mask, or a mis-transcribed reset-row helper. This is a NumPy reimplementation with no shared code with the JAX environment.
 
-### V5 — The static-obstacle assumption *(permanent regression test)*
+*(An earlier draft carried a further test asserting that obstacle positions never move, because the store depended on hoisting them to episode level. That dependency is gone — positions are recorded per step (§D4.1) — so the test has been dropped rather than kept as dead weight. If moving obstacles are ever added, this store records them correctly and V4 keeps passing.)*
 
-For 20 seeds across **three structurally different** configs, run a direct env loop recording `state.obs_pos` at **every** step, and assert it is identical to the reset value throughout.
+### V5 — Observation precision: fidelity and overflow
 
-**Fails on**: anyone adding moving obstacles in the future — which would silently corrupt every store written under the hoisting optimisation (§D11). This test is the tripwire that makes a 31 % size saving safe to depend on. It must be permanent, not a one-off.
+Replay a sample of states, recompute `get_observation` at `float32`, and compare against the store. When the manifest says `obs_precision: float16`, assert `max |obs_f32 − obs_stored| ≤ 2.44e-04` in absolute terms on values in `[0,1]` (the verified `float16` worst case, §D12) and, separately, `isfinite(obs_stored).all()`. When it says `float32`, assert **bit-identical** round-trip — compression is lossless, so anything else is a writer bug.
 
-### V6 — Half-precision observation fidelity
+**Fails on**: any sensor emitting magnitudes above 65,504, which silently becomes `inf` under `float16` — in particular the `Location` sensor on a large grid. **Must be run on at least one config with the location sensor enabled**, since the representative config of §A9 has it off. Also fails on a `float32` store that is not bit-exact, which would mean an unintended downcast somewhere in the writer.
 
-Replay a sample of states and recompute `get_observation` at `float32`. Assert `max |obs_f32 − obs_f16| / (|obs_f32| + 1e-6) < 1e-3` and, separately, `isfinite(obs_f16).all()`.
-
-**Fails on**: any sensor emitting values outside `float16`'s useful range — in particular the `Location` sensor on a large grid, or any future sensor emitting magnitudes above 65,504, which would silently become `inf`. Run this on at least one config with the location sensor **enabled**, since the representative config of §A9 has it off.
-
-### V7 — Resume and atomicity under a hard kill
+### V6 — Resume and atomicity under a hard kill
 
 Start a 3-block collection; `SIGKILL` the process partway through block 2; restart. Assert: (a) no `.parquet.tmp` files remain, (b) the final store contains exactly the expected episode count with **no duplicate `episode_seed`**, (c) `steps.groupby(episode_seed).size() == length + 1` holds for every episode, and (d) blocks 0 and 1 are byte-identical to a clean run.
 
 **Fails on**: non-atomic writes, a resume that re-does or skips a block, or a seed mapping that depends on process state rather than on `(seed_base, shard_episodes)`.
 
-### V8 — Overwrite-hazard guard *(direct regression test for the 2026-07-04 incident)*
+### V7 — Overwrite-hazard guard *(direct regression test for the 2026-07-04 incident)*
 
-Collect 100 episodes into a store. Then attempt to resume **the same store path** with (a) a mutated env config, (b) a different `seed_base`, and (c) a bumped `SCHEMA_VERSION`. Assert each raises `ValueError` and that **no file in the store is modified** (compare mtimes and hashes before/after).
+Collect 100 episodes into a store. Then attempt to resume **the same store path** with (a) a mutated env config, (b) a different `seed_base`, (c) a bumped `SCHEMA_VERSION`, and (d) a different `obs_precision`. Assert each raises `ValueError` and that **no file in the store is modified** (compare mtimes and hashes before/after).
 
-**Fails on**: a missing or weak manifest guard. This is the check that the 2026-07-04 contamination cannot recur.
+**Fails on**: a missing or weak manifest guard. Case (d) additionally guarantees no store can end up half `float16` and half `float32` — a silent mixed-precision corpus would be undetectable at read time without it. This is the check that the 2026-07-04 contamination cannot recur.
 
-### V9 — Scale and speed
+### V8 — Scale and speed
 
 Time one 5,000-episode block on a lab node. Assert throughput ≥ 10 episodes/s/process (against the 14.3 eps/s baseline of §A8; ≥ 10 allows for the extra recording payload) and peak RSS ≤ 2.5 GB.
 
 **Fails on**: the O(n) Python bottlenecks not actually being removed, or a chunking bug that materialises more than one chunk at a time. Per the project's speed-review rule, a > 15 % throughput regression against the baseline is a blocker unless explicitly accepted here — and it is **not** accepted here.
 
-### V10 — Schema invariance across environments *(the hard requirement's direct test)*
+### V9 — Schema invariance across environments *(the hard requirement's direct test)*
 
 Collect 200 episodes from **three** structurally different saved configs: (i) a probe config with one predator, (ii) a training config with four animal slots, (iii) a config with the location sensor enabled and different `V` / `VV`. Assert the Parquet column **names and order are byte-identical** across all three, that only the `fixed_size_list` widths differ, and that **one** reader function loads all three without branching.
 
@@ -651,12 +805,22 @@ Collect 200 episodes from **three** structurally different saved configs: (i) a 
 
 ---
 
+## Decisions Taken
+
+All four questions this plan opened have been decided by the user. Recorded here so the reasoning survives; the design sections above already reflect them.
+
+| # | Question | Decision | Where it lives |
+|---:|---|---|---|
+| 1 | Record per-step `damage`? | **Yes, include it.** It is not reward decomposition but the physical transition quantity that, with the healing rate, determines `injury_level` — without it, "got hit less" and "healed faster" are not separable, and healing rate is a named analysis target. ~4 B/step. | §D4.1 column 13 |
+| 2 | Resource properties: reset draw only, or per step? | **Reset draw only (`_init`).** Do not pay the extra payload. The caveat is prominent in the schema doc, regeneration stays detectable per step from the consumption counters, and the doc states explicitly that treating food properties as an episode constant is an approximation and where it breaks. | §D4.2 cols 19–20; schema doc §7 |
+| 3 | `seed_base` shared across runs, or per run? | **Shared by default, overridable per run.** Shared gives paired comparisons at zero cost; the override exists for runs whose environment differs structurally, where the same key does not produce the same draw and the pairing would be illusory rather than real. Effective value recorded per run in the manifest and guarded on resume. | §D13 |
+| 4 | Store root? | **`results/trajectories/`.** Disk is not a constraint; the data-loss exposure and the protective rules are stated, along with the fact that the manifest-plus-resume design makes a partial loss recoverable by re-running only the missing shards. | §D11 "Data-loss exposure" |
+
 ## Open Questions
 
-1. **`damage` (per-step column 13).** This goes one field beyond the two additions selected. It is not reward decomposition — it is the physical per-step damage that, together with the healing rate, determines `injury_level`. Without it, "the agent got hit less" and "the agent healed faster" are not separable, and the healing-rate parameter is one of the named analysis targets. Cost: 4 bytes/step, ~1.6 % of payload. **Recommend keeping.** To drop it, delete row 13 from §D4.1 and from `STEP_COLUMNS` — a one-line change.
-2. **Resource property re-draw on regeneration (§D4.2 columns 19–20).** The plan records the reset draw only. Recording per step costs ~+16 % payload. Acceptable as-is, or upgrade before collecting at scale?
-3. **`seed_base` policy across runs.** Should every run share one `seed_base` (so run A's episode *i* and run B's episode *i* face the **same** environment draw — a paired comparison, much higher statistical power for "what did this training change do?"), or should each run get a distinct base (independent samples)? A shared base is strictly more informative and costs nothing. **Recommend a single project-wide `seed_base` for any set of runs intended to be compared**, recorded in the spec. Needs a decision before the first collection, because it cannot be changed afterwards without recollecting.
-4. **Store root placement.** `results/trajectories/` on the NAS. 100–160 GB against 59 TB free — no constraint, but it is gitignored data subject to the project's git-safety rules. Confirm this root, or name another.
+Only one remains, and it is settled by measurement rather than by discussion.
+
+1. **Observation precision — `float16` or `float32`?** Deliberately *not* resolved in this document, because the two measurements available to it disagree about whether half precision saves ~2 % or ~50 % (§D11). The plan's current default is **`float32`** (lossless; a `2.44e-04` irreversible error is not worth a small percentage when disk is free), and **checkpoint C8 is a blocking, pre-registered paired measurement** with the decision rule fixed in advance: adopt `float16` only if it saves more than 20 % of total store size. Nothing else in the design depends on the outcome — the schema, manifest guard, and reader are precision-agnostic.
 
 ---
 
@@ -669,7 +833,8 @@ Collect 200 episodes from **three** structurally different saved configs: (i) a 
      - Measured before/after throughput (C7) and peak RSS (C6) on the same node/config.
      - Realised Parquet compression ratio (C8).
      - Any deviation from the fixed key list in §D4, with justification.
-     - Which of V1-V10 were run and their outcomes. -->
+     - The C8 paired precision measurement and which precision was adopted (§D12).
+     - Which of V1-V9 were run and their outcomes. -->
 
 ## Verification Report
 
