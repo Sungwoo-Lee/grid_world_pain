@@ -140,6 +140,9 @@ Every number quoted in the page's prose is computed at build time from the same 
 
 ## Related
 
+- [[ONSOURCE_RULE_STUDY]] — resolves this study's open question about the on-source 2.0 decay
+  rule. Headline: at the shipped γ=1 the constant is exactly a half-cell floor and produces no jump;
+  it becomes wrong only if γ is swept, which this study proposes.
 - [[VISUAL_PSF_MECHANISM_STUDY]] — companion study, and the source of the shared-kernel framing.
 - [[09_sensors_and_observation]] — canonical sensor reference. **§6 is stale**: it records
   `decay_power` default 2.0 where `default.yaml` ships 1.0, and olfactory signatures that no longer

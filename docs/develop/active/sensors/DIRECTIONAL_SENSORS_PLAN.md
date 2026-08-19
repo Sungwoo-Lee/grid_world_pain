@@ -426,13 +426,26 @@ which device the suite happens to run.
 
 ## Decisions still needing the user
 
-Four questions the review surfaced that the plan should not answer on its own. Each has a
-recommendation; none is implemented until confirmed.
+Four questions the review surfaced that the plan should not answer on its own. **Three are now
+answered by the user (2026-08-20); the fourth is still open.**
+
+### Answered
+
+| # | Question | Decision |
+|---|---|---|
+| — | `visual_sensor_range` for blur runs | **2** (13 cells, 104 visual dims, observation 27 → 123). The smallest diamond with room for the kernel to place an off-axis lobe, and the range both Fig 2 and Fig 3 were measured on. |
+| — | `olfactory_sensor_range` | **1** (5 cells, 25 olfaction dims, observation 27 → 47). Cheapest range that gives direction, and per Fig 3 the *most accurate* one while perceptual noise is off — which is the default. |
+| 1 | Out-of-bounds olfactory cells | **Zero them, matching the visual sensor.** This overrides the plan's recommendation to sample anyway. Consequence to record: the resulting asymmetry is a usable wall cue carried in a chemical channel, so any behaviour analysis attributing wall-avoidance or edge-hugging to olfaction must account for it. Implement with the same `is_in_bounds` mask `sense_visual` already builds. |
+
+Combined observation with both settings: 27 − 8 − 5 + 104 + 25 = **143 dims**.
+
+### Still open
+
+Each has a recommendation; none is implemented until confirmed.
 
 | # | Question | Recommendation |
 |---|---|---|
-| 1 | **Out-of-bounds olfactory cells.** With a diamond near a wall, some sampling points lie outside the grid. Vision zeroes out-of-bounds cells; olfaction has no such mask today because it only ever sampled the agent's own cell. | **Sample anyway, no mask.** The chemical field is well defined outside the walls (all sources are inside), and zeroing would inject a wall cue into a chemical channel, duplicating the collision sensor and confounding any olfaction-driven behaviour measure. |
-| 2 | **The on-source decay-2.0 rule.** `sense_resource` returns 2.0 when the sampling point sits exactly on a source. Today only the agent's cell can trigger it; with a diamond, any cell can, so a factor-two discontinuity that fires rarely starts firing often. [[OLFACTORY_EXPANSION_STUDY]] left this open and the first draft silently resolved it to "keep". | **Keep for now**, because changing it breaks range-0 parity — the one property the whole plan is built on. Revisit as a separate change with its own parity story. |
+| 2 | **The on-source decay-2.0 rule.** *(Now studied in detail — see [[ONSOURCE_RULE_STUDY]], which recommends option B: express the constant as a half-cell floor `1/(0.5^γ)`, bit-identical at the shipped γ and correct at every other.)* `sense_resource` returns 2.0 when the sampling point sits exactly on a source. Today only the agent's cell can trigger it; with a diamond, any cell can, so a factor-two discontinuity that fires rarely starts firing often. [[OLFACTORY_EXPANSION_STUDY]] left this open and the first draft silently resolved it to "keep". | **Keep for now**, because changing it breaks range-0 parity — the one property the whole plan is built on. Revisit as a separate change with its own parity story. |
 | 3 | **The three continuous blur knobs are unfingerprinted.** Curriculum stages could differ in ρ or radial scale — a large same-dimension semantics change — without rejection, while a `visual_blur_enabled` flip is rejected. (Pre-existing sibling: `visual_vector_size` is also unfingerprinted.) | **Accept, and say so in the code comment.** Fingerprinting floats is brittle and would forbid legitimate schedules. But the asymmetry should be deliberate rather than accidental. |
 | 4 | **Fingerprinting `visual_blur_enabled` forecloses a sharp→blurred curriculum.** That is correct per the check's stated purpose — semantics must not change mid-run — but it removes an experiment someone might want. | **Accept.** A perceptual-degradation curriculum would need its own weight-compatibility story anyway. |
 
