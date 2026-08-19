@@ -79,10 +79,21 @@ From [[OLFACTORY_EXPANSION_STUDY]]:
 | Visual masking | Per-entity `visual_mask: none \| far \| all` | user, confirmed |
 | Width parameterisation | One radial scale + anisotropy ratio ρ | **plan's choice** — ρ=1 is exactly the isotropic kernel, so the ablation is one config value |
 | Normalisation | Full analytic mass | **plan's choice** — Fig 4; the alternative silently removes distance falloff |
-| Mask ordering | Zero the entity's weight in every cell at Manhattan distance ≥ 1 (blur first, mask after) | **plan's choice** — "hidden" should mean no leakage |
+| Mask ordering | Zero the **entity's whole column** whenever that *entity* is at Manhattan distance ≥ 1 from the agent | **plan's choice, revised after review** — see below |
 
 The three plan's-choice rows are the author's calls from the study evidence, not user decisions.
 They are the rows most worth arguing with.
+
+**Mask ordering was wrong in the first draft and is corrected here.** The original spec gated on the
+*cell's* distance from the agent — zero every cell at distance ≥ 1. Under exact matching that is
+equivalent to gating on the entity, because an entity only ever writes into its own cell. Under blur
+the equivalence breaks: a `far`-masked entity three cells away still deposits weight in the agent's
+own cell, which the gate leaves untouched. At the shipped knobs that leak is 0.086 at d=1, 0.043 at
+d=2 and 0.029 at d=3 — 13.5%, 6.8% and 4.5% of a visible adjacent entity's peak, deterministic and
+noise-free. A recurrent policy would learn it, and the first masking experiment would read
+leak-driven detection as anticipatory avoidance of an unseen threat: a paper-level wrong conclusion
+shaped exactly like the hoped-for result. Gating on the **entity's** distance makes `far` mean what
+it says — visible only when the agent is standing on it.
 
 ### What is NOT in scope
 
@@ -199,8 +210,13 @@ def sense_olfaction_cells(state, params):
     """Olfactory field sampled at every cell of a Manhattan diamond.
 
     olfactory_sensor_range == 0 reproduces the pre-v3.1 single sample exactly:
-    the diamond is [[0,0]], so the sampling point IS the agent's cell.
+    the diamond is [[0,0]], so the sampling point IS the agent's cell. The
+    range-0 case takes a STATIC fallback to the original un-vmapped expression
+    so parity does not depend on vmap-of-one compiling identically -- the same
+    belt-and-braces the visual path gets from visual_blur_enabled.
     """
+    if params.olfactory_sensor_range == 0:          # static branch, trace time
+        return _sense_olfaction_point(state.agent_pos, state, params)   # today's code, verbatim
     offsets = get_visual_offsets(params.olfactory_sensor_range)      # [C,2]
     cells = state.agent_pos + offsets
 
@@ -218,8 +234,10 @@ def sense_olfaction_cells(state, params):
 Note the summation order (`res + animal + obs`) is preserved from the current code so float
 accumulation is bit-identical at range 0.
 
-**(b) `sense_visual` (line ~145)** — add the blur branch. The exact-match path stays untouched, so
-`visual_blur_enabled: false` is byte-parity by construction rather than by test:
+**(b) `sense_visual` (line ~145)** — add the blur branch. Note the false branch is **not** untouched:
+the activity mask moves from `all_props` onto `W`, and a gate multiply is added to both paths. Parity
+is therefore a claim the tests must establish, not a structural guarantee — the first draft's "parity
+by construction" language was wrong:
 
 ```python
     # BEFORE:
@@ -236,12 +254,28 @@ accumulation is bit-identical at range 0.
     vis_entities = jnp.matmul(W, all_props)
 ```
 
-Today the activity mask is applied to `all_props`; moving it onto `W` is algebraically identical for
-the boolean path (both are pure scaling of the same product) and is what lets the blur path share it.
-**This must be parity-tested, not assumed** — float multiplication order changes.
+Today the activity mask is applied to `all_props` (`sensor.py:230`); moving it onto `W` is
+algebraically identical for the boolean path and is what lets the blur path share it. Bitwise
+micro-checks during review found both transformations bit-identical, including for negative
+properties — but that is evidence, not proof across backends. **Parity is established by the tests
+below, on a pinned backend**; if the test fails, keep the mask on `all_props` for the boolean path and
+apply it separately in the blur path.
 
-`_visual_mask_gate` builds `[C, E]` from the static per-cell Manhattan distances and the per-entity
-mask code: `all` → 0 everywhere, `far` → 0 wherever cell distance ≥ 1, `none` → 1.
+`_visual_mask_gate` builds `[C, E]` from the per-entity mask code and each **entity's** Manhattan
+distance from the agent (`d_e = |Δrow| + |Δcol|`, a `[E]` vector), broadcast across cells:
+
+```python
+def _visual_mask_gate(agent_pos, all_pos, all_mask):
+    d_e = jnp.sum(jnp.abs(all_pos - agent_pos), axis=-1)          # [E]
+    keep = jnp.where(all_mask == 2, 0.0,                          # all  -> never visible
+            jnp.where(all_mask == 1, (d_e < 1).astype(jnp.float32),  # far -> only when co-located
+                      1.0))                                        # none -> always
+    return keep[None, :]                                          # [1, E], broadcasts over cells
+```
+
+Gating the entity's whole column is what makes `far` leak-free under blur. Gating on the *cell's*
+distance instead — the first draft's spec — leaves the agent's own cell open to a distant masked
+entity's blur tail.
 
 **(c) `get_observation` (line ~315)** — olfaction branch calls `sense_olfaction_cells`.
 
@@ -264,13 +298,20 @@ live bug: the olfaction pod currently passes the **eight visual channel labels**
 (`['GRS','SND','PLN','FOD','DNG','PRD','RCK','NEU']`) for a five-dimensional chemical vector. It is
 inert today because `draw_spectrum_pod` ignores `labels`, but a diamond renderer will not.
 
-#### `train.py` (~line 485) and `src/algorithms/dreamer_srl/dreamer_srl_main.py` (~line 774)
+#### `train.py` (line 784) and `src/algorithms/dreamer_srl/dreamer_srl_main.py` (line 774)
 
-**The highest-risk change in this plan.** Both files carry a duplicated "13-field modality
-fingerprint" that gates whether curriculum stages share an observation layout. It contains
-`visual_sensor_range` and `olfactory_vector_size` but has no olfactory range field, because none
-existed. Two stages differing only in `olfactory_sensor_range` would produce different observation
-dimensions and **pass validation**, loading weights shaped for the wrong observation.
+**Corrected after review — the first draft misdiagnosed this.** Both files carry a duplicated
+13-field modality fingerprint that gates whether curriculum stages share an observation layout, and
+it has no olfactory range field because none existed. The first draft claimed two stages differing
+only in `olfactory_sensor_range` would pass validation. **That is false**: both validators check
+obs_dim equality *first* (`train.py:816-822`, `dreamer_srl_main.py:806-812`) and an olfactory-range
+change always changes obs_dim, so it is already rejected today.
+
+The fingerprint addition is still correct, but for a different and narrower reason:
+**`visual_blur_enabled` is the only genuinely new hazard** — it changes observation *semantics* at an
+*identical* dimension count, which is precisely the case obs_dim equality cannot catch. Adding
+`olfactory_sensor_range` is defence in depth rather than a fix. The test must therefore target the
+fingerprint-specific rejection (see Test Plan), or it passes without the change and proves nothing.
 
 ```python
 # BEFORE (both files):
@@ -292,8 +333,34 @@ dimensions and **pass validation**, loading weights shaped for the wrong observa
     )
 ```
 
-The "13-field" wording in both docstrings and in `tests/env/test_no_recompile.py`'s module docstring
-becomes 15.
+The "13-field" wording becomes 15 — but only where it actually appears, which is
+`dreamer_srl_main.py:771,775`. `train.py`'s docstring does not carry the phrase, and neither does
+`tests/env/test_no_recompile.py` (whose docstring is about animal-class recompiles). The first draft
+named two edit sites that do not exist.
+
+#### Standalone configs — the undisclosed blast radius (added after review)
+
+Making the five `sensory.*` keys mandatory has consequences the first draft did not state.
+
+**Historical runs become un-evaluatable.** Every run dumps its fully merged config to
+`models/config.yaml` (`train.py:881-883`), and the evaluation path loads that snapshot and merges
+only the *evaluation* and *visualization* defaults on top of it (`evaluation.py:_load_eval_config`,
+line ~132-140) — never `configs/environment/default.yaml`. A pre-change snapshot therefore lacks the
+new keys, and `load_env_params` raises `ValueError` on every historical run.
+
+Required, in the same change:
+
+- Sweep the new keys into every standalone config that does not inherit from
+  `configs/environment/default.yaml` (~98 files; `test_backward_compat_configs.py:66-90` otherwise
+  demotes them to a silent "stale-skip" rather than failing loudly). Precedent: the interoceptive
+  keys forced a 48-config sweep.
+- Update `scripts/verification/check_olfaction_parity.py` and its standalone configs.
+- Document the one-line remedy for existing run snapshots (append the five keys to
+  `results/.../models/config.yaml`) in the plan's Implementation Report and in
+  [[CONFIG_CRITICAL_SETTINGS]]'s change-log entry.
+
+Keeping the keys mandatory is the project rule (`get_mandatory`, no fallback defaults); the cost is
+disclosed here rather than discovered by whoever next re-evaluates an old run.
 
 #### Docs (maintenance contracts)
 
@@ -301,7 +368,9 @@ becomes 15.
   during the studies: §9 still describes the pre-v3.0 hardcoded one-hot visual sensor; §6 records
   `decay_power` 2.0 where the config ships 1.0 and olfactory signatures that no longer match
   `default.yaml`.
-- `docs/environment/02_config_schema.md` — five new `sensory.*` keys plus per-entity `visual_mask`.
+- `docs/environment/02_config_schema.md` **and** [[CONFIG_GUIDE]] — five new `sensory.*` keys plus
+  per-entity `visual_mask`. Both are required by the schema maintenance contract; the atomic-landing
+  recipe is at `CONFIG_GUIDE.md:208-211`. The first draft listed only the schema doc.
 - [[CONFIG_CRITICAL_SETTINGS]] — register the new keys with canonical values, plus a dated change-log
   entry (required by that doc's maintenance contract).
 
@@ -321,8 +390,10 @@ becomes 15.
       failure Fig 4 documents.
 - [ ] **CP5 — no recompile from sweeping.** Changing the three continuous blur knobs must not
       recompile `jax_step`; changing either range must.
-- [ ] **CP6 — cost.** Re-run `bench_aniso.py` after implementation and confirm the measured delta is
-      in the same range as the prototype (<3% of `env.step`).
+- [ ] **CP6 — cost, measured on the shipped code.** `bench_aniso.py` currently benchmarks its own
+      embedded `sense_visual_aniso` prototype, so re-running it as written would re-measure the
+      prototype and reproduce the study's numbers no matter what was built — circular. Repoint it at
+      the real `sense_visual` with `visual_blur_enabled: true`, then confirm <3% of `env.step`.
 
 ## Test Plan
 
@@ -333,12 +404,15 @@ New, under `tests/env/`:
 | `test_olfaction_range0_parity.py` | `olfactory_sensor_range: 0` gives observations bit-identical to a stored pre-change reference |
 | `test_visual_blur_disabled_parity.py` | `visual_blur_enabled: false` likewise, **including** the moved activity mask |
 | `test_visual_psf_kernel.py` | CP3 + CP4 as unit assertions on the weight matrix |
-| `test_visual_mask.py` | `far` zeroes every cell at distance ≥ 1 and leaves the centre; `all` zeroes everything; `none` unchanged; an unknown string raises at load |
+| `test_visual_mask.py` | With blur ON, a `far`-masked entity at distance ≥ 1 contributes **exactly zero to every cell including the centre** (the leak regression test); it contributes normally when the agent stands on it; `all` zeroes everything; `none` unchanged; an unknown string raises at load |
 | `test_olfaction_diamond.py` | At range 1 with a single source, the cell toward the source reads higher than the cell away from it, for several bearings |
-| `test_modality_fingerprint.py` | Two configs differing **only** in `olfactory_sensor_range` are rejected by the curriculum-stage validator, in both `train.py` and `dreamer_srl_main.py` |
+| `test_modality_fingerprint.py` | Two configs with **identical obs_dim** but different `visual_blur_enabled` are rejected by the curriculum-stage validator, in both `train.py` and `dreamer_srl_main.py`. Must assert the *fingerprint* error, not the obs_dim error — a test built on `olfactory_sensor_range` passes without the change and proves nothing |
 
 Extend: `test_no_recompile.py` (CP5), `test_visual_parity.py` / `test_visual_properties.py` /
 `test_visual_sampling.py` (must still pass unchanged — they are the existing parity net).
+
+Parity fixtures must **pin the JAX backend** (CPU) so a bitwise comparison cannot pass or fail on
+which device the suite happens to run.
 
 ## Risks
 
@@ -350,6 +424,44 @@ Extend: `test_no_recompile.py` (CP5), `test_visual_parity.py` / `test_visual_pro
 | `sigma_floor` interacts with anisotropy — flooring `σ_⊥` silently reduces effective ρ at short range | Documented as intended behaviour; CP3 asserts the value stays finite. Worth a note in the config comment |
 | Olfactory range ≥ 2 tripling the observation | Not an implementation risk; a training-cost decision, deferred to experiment configs |
 
+## Decisions still needing the user
+
+Four questions the review surfaced that the plan should not answer on its own. Each has a
+recommendation; none is implemented until confirmed.
+
+| # | Question | Recommendation |
+|---|---|---|
+| 1 | **Out-of-bounds olfactory cells.** With a diamond near a wall, some sampling points lie outside the grid. Vision zeroes out-of-bounds cells; olfaction has no such mask today because it only ever sampled the agent's own cell. | **Sample anyway, no mask.** The chemical field is well defined outside the walls (all sources are inside), and zeroing would inject a wall cue into a chemical channel, duplicating the collision sensor and confounding any olfaction-driven behaviour measure. |
+| 2 | **The on-source decay-2.0 rule.** `sense_resource` returns 2.0 when the sampling point sits exactly on a source. Today only the agent's cell can trigger it; with a diamond, any cell can, so a factor-two discontinuity that fires rarely starts firing often. [[OLFACTORY_EXPANSION_STUDY]] left this open and the first draft silently resolved it to "keep". | **Keep for now**, because changing it breaks range-0 parity — the one property the whole plan is built on. Revisit as a separate change with its own parity story. |
+| 3 | **The three continuous blur knobs are unfingerprinted.** Curriculum stages could differ in ρ or radial scale — a large same-dimension semantics change — without rejection, while a `visual_blur_enabled` flip is rejected. (Pre-existing sibling: `visual_vector_size` is also unfingerprinted.) | **Accept, and say so in the code comment.** Fingerprinting floats is brittle and would forbid legitimate schedules. But the asymmetry should be deliberate rather than accidental. |
+| 4 | **Fingerprinting `visual_blur_enabled` forecloses a sharp→blurred curriculum.** That is correct per the check's stated purpose — semantics must not change mid-run — but it removes an experiment someone might want. | **Accept.** A perceptual-degradation curriculum would need its own weight-compatibility story anyway. |
+
+## Author response to plan-reviewer
+
+Reviewed by `plan-reviewer` (Fable) on 2026-08-19; full report at
+[`docs/reviews/plan_directional_sensors.md`](../../../reviews/plan_directional_sensors.md). Verdict:
+**NOT READY**. All seven findings accepted; the two most consequential were independently verified
+against the code before acting.
+
+| Finding | Disposition |
+|---|---|
+| 🔴 1 — `far` mask leaks under blur | **Accepted and fixed.** Gate now zeroes the entity's column by *entity* distance. The leak arithmetic reproduces: 0.086 at d=1 with the shipped knobs. The proposed regression test was itself enshrining the leak ("leaves the centre") and has been rewritten to assert exactly zero everywhere. |
+| 🟡 2 — mandatory keys break historical runs | **Accepted.** Verified: `evaluation.py:_load_eval_config` merges only evaluation + visualization defaults over a run's snapshot, never the environment default, so old snapshots do raise. Added a File Changes section covering the ~98-config sweep, the verification script, and the remedy for existing snapshots. Keys stay mandatory per project rule. |
+| 🟡 3 — fingerprint misdiagnosed, test vacuous | **Accepted.** Verified: `train.py:816-822` checks obs_dim before the fingerprint, so an olfactory-range change is already caught. My "highest-risk change" framing was wrong — it is the *safest*. The addition survives on `visual_blur_enabled` alone, and the test now targets the same-dim case. |
+| 🟡 4 — CP6 circular | **Accepted.** CP6 now requires repointing the benchmark at the real `sense_visual`. |
+| 🟡 5 — "parity by construction" overstated | **Accepted.** Language dropped; olfaction gains a static range-0 fallback matching vision's; parity fixtures pin the backend. |
+| 🟡 6 — CONFIG_GUIDE.md missing | **Accepted.** Added. |
+| 🟢 7 — stale line references | **Accepted.** `train.py:784` corrected; two claimed edit sites that do not exist removed. |
+| ❓ a–d | **Promoted** to "Decisions still needing the user" above, each with a recommendation. |
+
+On the three unilateral decisions the review was asked to attack: full-mass normalisation and the
+one-width-plus-ρ parameterisation were upheld as evidence-backed — the review additionally observed
+that `σ_⊥ = (scale/ρ)·d` is algebraically the study's own fixed-angular-blur form under different
+knob names. Mask-after-blur was **not** upheld, and is the Critical finding above.
+
+Status remains **PLANNED**. It should not move to IN PROGRESS until the four user decisions are
+answered.
+
 ## Implementation Report
 
 > **Implemented by**: _(not yet implemented)_
@@ -359,3 +471,18 @@ Extend: `test_no_recompile.py` (CP5), `test_visual_parity.py` / `test_visual_pro
 
 > **Verified by**: _(not yet verified)_
 > **Date**: —
+
+---
+
+## Feedback from plan-reviewer
+
+**Date**: 2026-08-19 · **Verdict**: **NOT READY** — 1 Critical, 5 Moderate, 1 Low, 4 Open. Full review: [[plan_directional_sensors]] (`docs/reviews/plan_directional_sensors.md`).
+
+- 🔴 **`far` mask leaks by its own spec**: the per-cell gate leaves the centre cell open, so a "hidden" entity deposits ~13.5% (d=1) → 1.6% (d=5) of an adjacent visible entity's peak into the agent's own cell, deterministically — contradicting the decision row's rationale ("'hidden' should mean no leakage") and detectable by a recurrent policy. Gate on the entity's distance, or re-specify the semantics with user sign-off.
+- 🟡 Five unconditional `get_mandatory` keys break re-evaluation/resume of **every pre-change run** (merged `models/config.yaml` snapshots lack them) plus `check_olfaction_parity.py` and its configs; the standalone-config sweep is missing from File Changes.
+- 🟡 The fingerprint motivation is misdiagnosed — obs_dim validation already rejects olfactory-range mismatches (train.py:816-822, dreamer_srl_main.py:806-812) — and `test_modality_fingerprint.py` as specified passes without the change; the genuinely new case (`visual_blur_enabled`, same dim) is untested.
+- 🟡 CP6 is circular: `bench_aniso.py` benchmarks its own embedded prototype, not the implemented code.
+- 🟡 "Parity by construction" claims are overstated (the false branch *does* change; range-0 olfaction goes through vmap) — CPU bitwise micro-checks pass, but keep the tests as the guarantee and add an olfaction fallback. 🟡 CONFIG_GUIDE.md missing from the maintenance-contract doc list.
+- ❓ OOB olfactory sampling cells; the study's Open "on-source decay 2.0" rule silently resolved to "keep"; continuous blur knobs unfingerprinted; blur-curriculum foreclosed.
+
+— plan-reviewer
