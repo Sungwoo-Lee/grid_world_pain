@@ -167,6 +167,9 @@ tracked. Republishing to the same artifact URL keeps the existing link.
 
 ## Related
 
+- [[OLFACTORY_EXPANSION_STUDY]] — companion study for the per-cell olfactory expansion. Establishes
+  that the two senses become the same operator with different kernels (global `1/d^γ` versus local
+  Gaussian), so one piece of machinery can serve both.
 - [[09_sensors_and_observation]] — canonical sensor reference. **Its §9 is stale**: it documents the
   pre-v3.0 hardcoded one-hot visual sensor, `decay_power` 2.0 (config says 1.0), and olfactory
   signatures that no longer match `default.yaml`. Must be corrected alongside any change here.
