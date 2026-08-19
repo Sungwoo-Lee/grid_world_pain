@@ -61,4 +61,5 @@ Two things. (1) UNITS: `bush_dwell` in the dwell-sweep CSVs is a FRACTION in [0,
 - [[20260805_0117_bushrefuge_survives_by_evasion_not_refuge]] (behavior_measures, 2026-08-05) — The 4 bush-refuge rPPO agents (bush blocks predators) survive predator encounter
 - [[20260818_1620_rest_premium_sweep_refuted]] (behavior_measures, 2026-08-18) — REFUTED: making uninterrupted rest valuable does NOT drive an injured agent to t
 - [[20260818_1622_yaml_list_replace_and_runtime_env_test]] (config_system, 2026-08-18) — To REMOVE an item from a YAML list (resources/entities/obstacles) via extends:, 
+- [[20260819_1945_ambush_risk_refuted_normalize_gap_floor_effect]] (behavior_measures, 2026-08-19) — REFUTED: ambush risk does NOT explain why injury suppresses cover use. Re-traini
 <!-- END BACKLINKS -->

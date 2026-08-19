@@ -6,8 +6,8 @@
 > To improve a row, set a `headline:` field on the entry itself.
 
 **Folder definition**: Behavior-measure platform & probes
-**Insights**: 18
-**Last updated**: 2026-08-18
+**Insights**: 20
+**Last updated**: 2026-08-19
 
 ---
 
@@ -15,6 +15,8 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-08-19 | 19:46 | [20260819_1946_probe_snapshot_staleness_verdict_on_partial_training](20260819_1946_probe_snapshot_staleness_verdict_on_partial_training.md) | A watermark-incremental probe only covers checkpoints that existed WHEN IT LAST RAN. |
+| 2026-08-19 | 19:45 | [20260819_1945_ambush_risk_refuted_normalize_gap_floor_effect](20260819_1945_ambush_risk_refuted_normalize_gap_floor_effect.md) | REFUTED: ambush risk does NOT explain why injury suppresses cover use. |
 | 2026-08-18 | 16:20 | [20260818_1620_rest_premium_sweep_refuted](20260818_1620_rest_premium_sweep_refuted.md) | REFUTED: making uninterrupted rest valuable does NOT drive an injured agent to the refuge bush. 10 arms spanning a 1x-129962x rest-streak p… |
 | 2026-08-10 | 17:53 | [20260810_1753_bushrefuge_injury_suppresses_bush_use_heal_by_rest](20260810_1753_bushrefuge_injury_suppresses_bush_use_heal_by_rest.md) | Bush-refuge rPPO agents DO hide heavily (predator 34-42%, rabbit-chase 26-32%, rabbitwander 11-14% of episode; bush_dwell is a 0-1 FRACTION… |
 | 2026-08-05 | 01:19 | [20260805_0119_render_recordings_output_path_collision](20260805_0119_render_recordings_output_path_collision.md) | render_recordings.py derives its output dir as rec_dir.parent.parent/videos/rec_dir.name (no override flag), so multi-model / multi-conditi… |
