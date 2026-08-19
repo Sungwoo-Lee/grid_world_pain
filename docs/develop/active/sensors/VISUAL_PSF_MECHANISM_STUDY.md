@@ -60,12 +60,32 @@ diagonal. The pathology is that isotropic blur makes 20° and 70° read as nearl
 
 | Fig | Question it answers |
 |---|---|
+| 0 | Anatomy of the kernel — a plain Gaussian, stretched along one axis and pointed at the object |
 | 1 | Kernel shape on the grid — the isotropic disc vs the anisotropic cigar pointing at the object |
 | 2 | What the agent actually reads, for the top-right case that motivated the study |
 | 3 | Angular discriminability vs distance, for both kernels |
 | 4 | Whether distant objects get fainter — depends entirely on the normalisation choice |
 | 5 | One scene under all five candidate mechanisms, side by side |
 | 6 | The anisotropy knob ρ = `σ_∥`/`σ_⊥`, and where its useful band lies |
+
+## Reading it as a newcomer
+
+The shareable page is written to be followed from first principles, for a reader who has not met a
+covariance matrix inside a Gaussian exponent before. It carries a six-part **Background** section
+(point-spread functions; the Gaussian and its width; covariance as two widths instead of one;
+rotating the ellipse onto the ray; normalisation; angles versus lengths), Fig 0 as a visual anatomy
+of the kernel, and a **worked example** that takes one object and two cells all the way from
+coordinates to final weights. The worked example is the left column of Fig 2, so every number in it
+can be located in the plot.
+
+Two implementation consequences are called out there and are easy to miss:
+
+- **It is a matmul, not a convolution.** `σ_∥` depends on each object's distance from the agent, so
+  the kernel is spatially varying and the operator is not shift-invariant. Costs nothing here — the
+  sensor is already a matmul over entities; the boolean match matrix simply becomes real-valued.
+- **The sensor loses its hard range.** Every object then has some weight in every cell (negligible
+  past a few σ, but nonzero), so `visual_sensor_range` controls how many cells are *output*, not how
+  far the agent can see. A separate cutoff radius mirroring olfaction's is available if wanted.
 
 ## Two corrections the measurements forced
 
@@ -130,10 +150,17 @@ Gaussian is what would make the deconvolution ill-posed, and remains available a
 
 ```bash
 cd docs/develop/active/sensors/visual_psf_study
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python make_figs.py   # figures 1-5
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python fig6.py        # figure 6
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python build_page.py  # rebuild index.html
+PY=/home/vncuser/miniconda3/envs/grid_world_pain/bin/python
+$PY fig0.py           # figure 0 — kernel anatomy
+$PY make_figs.py      # figures 1-5
+$PY fig6.py           # figure 6
+$PY worked_example.py # prints the worked-example numbers + asserts the matrix
+                      # form v^T Sigma^-1 v equals the explicit two-term exponent
+$PY build_page.py     # rebuild index.html
 ```
+
+Every number quoted in the page's prose is **computed at build time** from the same formulas the
+figures use, so the text cannot drift away from the plots.
 
 `index.html` is generated (1.1 MB of base64-embedded PNGs) and gitignored — the PNGs and scripts are
 tracked. Republishing to the same artifact URL keeps the existing link.
