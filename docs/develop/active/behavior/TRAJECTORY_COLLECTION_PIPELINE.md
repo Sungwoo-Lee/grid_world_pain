@@ -12,6 +12,7 @@ aliases: [trajectory_collection_pipeline]
 
 > **Status**: PLANNED
 > **Opened**: 2026-08-19
+> **Review**: [[plan_trajectory_collection]] (`docs/reviews/plan_trajectory_collection.md`) — NOT READY (2 Critical). See **Review Response** below for the disposition of every finding.
 > **Related**: [[EVAL_ROLLOUT_BATCHING_PERF]] (the batched-rollout kernel this reuses the correctness argument from), [[PER_EPISODE_ENV_VARIANCE]] (the per-episode random draws this pipeline records), [[BEHAVIOR_ANALYSIS]] (the existing probe-based behaviour measurement this complements)
 
 ---
@@ -114,9 +115,55 @@ Taken from a real saved training config (`results/JAX_RecurrentPPO/20260816-1527
 
 All size arithmetic below uses these numbers.
 
-### A10. The saved config is the correct source of truth
+### A10. The saved config is the correct source of truth — but reloading it is not free of assumptions
 
 `train.py:881-883` writes the **fully resolved** config to `<run>/models/config.yaml` — no `extends:` survives. It carries the per-episode sampling *bounds* (`detection_range: [1,7]`, `count_low` / `count_high`, and so on), which are the join partner for the realised draws recorded per episode. Loading the environment from this file rather than from `configs/` is what makes the pipeline honest about which world the agent actually trained in, per the project's "verify actual state, not a re-derivation" rule.
+
+That is necessary but **not sufficient**. Reading the right file still means re-running it through *today's* loader, and the loader's behaviour has changed since some of these files were written. §A11 is the consequence.
+
+### A11. The faithfulness hazard — reloading a saved config can rebuild the world the trainer discarded
+
+**This is the assumption the entire tool rests on, and it is the one assumption no check inside the pipeline can test.** Stated plainly: the collector rebuilds the environment by feeding the run's saved config to `load_env_params`. If that rebuild does not reproduce the world the agent actually trained in, the pipeline records a million perfectly-formed episodes of the agent in the wrong world, fingerprints that wrong world in the manifest as if it were the truth, and produces no internal signal that anything is amiss.
+
+**The mechanism is real and already documented.** `src/environment/config_loader.py:428-435` gives a non-empty legacy scene block precedence over the modern one:
+
+```python
+has_entities = config.get('environment.entities') is not None
+has_legacy   = bool(config.get('environment.predators')) or \
+               bool(config.get('environment.neutral_animals'))
+
+if has_entities and not has_legacy:
+    # modern `entities:` path
+```
+
+So when a saved config carries **both** formats, today's loader takes the legacy branch. Before commit `828b77e` (2026-07-23, "fix(config): legacy-scene precedence"), `train.py` resolved the same file the *other* way — it merged in the base config's newer scene and silently discarded the older-format list (KNOWN_BUGS registry, "Config layer trained a different scene than it evaluated"). For such a run, **reloading rebuilds the scene the trainer threw away.** The animals differ, the slot count differs, and every recorded episode is of a different world.
+
+**Why the plan's own checks cannot catch it — the circularity.** V1 (realised draws vs. independent replay) and V2 (trajectory parity vs. the legacy loop) both consume the *same* `params` object the collector built. Both would pass, in full agreement, describing the wrong world consistently. A check that shares the suspected-broken step with the thing it validates returns the assumption as proof. Neither check is weak; they are simply blind to this class of error by construction.
+
+**Measured scope — the boundary is a fact, not an assumption.** Scanning every saved config in the results tree (334 configs, runs from 2026-04-20 to 2026-08-16):
+
+| Saved-config scene shape | Count | Reload risk |
+|---|---:|---|
+| `entities:` only | 153 | none — unambiguous |
+| legacy `predators:` / `neutral_animals:` only | 151 | none — unambiguous, both old and new loaders take the legacy path |
+| **both formats present** | **12** | **ambiguous — precedence decides, and it changed** |
+| neither (no animals in the world) | 18 | none |
+
+All 12 ambiguous runs date from **2026-05-29 to 2026-06-11**, comfortably before the 2026-07-23 fix; ten of them are throwaway `logcheck_*` runs. The full list, which doubles as the test corpus for the guard below:
+
+```
+20260529-212737_recurrent_ppo_04-sameProp_R4_chasingRabbit_s42
+20260609-191226_recurrent_ppo_08-singlePredRabbit_disengage_s42
+20260611-150754_logcheck_ckpt100k_log200      20260611-151553_logcheck_ckpt250k_log500
+20260611-150754_logcheck_ckpt250k_log500      20260611-152445_logcheck_ckpt100k_log200_2M
+20260611-151157_logcheck_ckpt100k_log200      20260611-152456_logcheck_ckpt200k_log500_2M
+20260611-151256_logcheck_ckpt250k_log500      20260611-152707_logcheck_ckpt200k_log500_2M
+20260611-182431_logcheck_ckpt200k_log300_2M   20260611-182449_logcheck_ckpt200k_log400_2M
+```
+
+No run after 2026-06-11 carries both formats, so the hazard is **historical, not live** — but it is not self-announcing, and `train.py` records no training-time git SHA, so nothing in a run directory says which loader built its world.
+
+**The fix — hard-fail, do not guess (§D14).** The coexistence of both blocks is precisely the fingerprint of an ambiguous dump, so the collector detects exactly that and refuses to run. This is a *detector for the ambiguity*, not a repair of the config: nothing in the run directory records which branch the trainer took, so there is no correct scene to reconstruct — only a choice, which is why the answer is to stop rather than pick. Design in §D14, guard test in V10.
 
 ---
 
@@ -201,7 +248,7 @@ One row per `(episode, t)`, `t ∈ [0, T]`. Sorted by `(episode_seed, t)`. Colum
 | 10 | `rest_streak` | `int16` | state at `t` | `state.rest_streak` |
 | 11 | `last_collision_noc` | `float32` | state at `t` | `state.last_collision_noc` |
 | 12 | `terminated` | `bool` | state at `t` | `state.terminated` |
-| 13 | `damage` | `float32` | **arriving** (`0.0` at `t=0`) | `info['damage']` — see **Open Question 1** |
+| 13 | `damage` | `float32` | **arriving** (`0.0` at `t=0`) | `info['damage']` — included by decision, see **Decisions Taken #1** |
 | 14 | `ate_food` | `bool` | **arriving** (`False` at `t=0`) | `info['ate_food']` |
 | 15 | `rested` | `bool` | **arriving** | `info['rested']` |
 | 16 | `hit_predator` | `bool` | **arriving** | `info['hit_predator']` |
@@ -383,7 +430,7 @@ L3 reuses the pattern proven by `scripts/eval/dwell_sweep/run_sweep.py`: LPT par
 |---|---|---|
 | env | `JAX_PLATFORMS=cpu`, `OMP/MKL/OPENBLAS/TF_*_THREADS=1`, `XLA_FLAGS=--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1` | `JAX_PLATFORMS=cuda`, `XLA_PYTHON_CLIENT_PREALLOCATE=false`, `CUDA_VISIBLE_DEVICES=<idx>` |
 | `npar` per node | `min(cores − 2, 16)` — throughput comes from L2 | **1 per GPU** — a second JAX process on one GPU contends for memory and is slower, not faster |
-| `batch_size` | 1024 (host-RAM bound, §D5) | 8192 (GPU-memory bound; 8192 → ~1.8 GB scan buffer, fits an 11 GB 2080 Ti with headroom) |
+| `batch_size` | 1024 (host-RAM bound, §D5) | 8192 (GPU-memory bound; 8192 × 500 × 609 B ≈ **2.4 GB** scan buffer, still fitting an 11 GB 2080 Ti with headroom) |
 | where the parallelism lives | L2 (many processes) | L1 (one big vmap batch) |
 
 The two knobs move in opposite directions and **must be set together**; the driver derives `npar` and `batch_size` from `device` unless both are given explicitly in the spec, and writes the resolved values into `_manifest.json`. Before any GPU launch the lab GPU rules apply: consult `docs/environment/LAB_NODE_GPU_SPEC.md` for which GPU indices exist on the target node, and check live occupancy with `scripts/lab/gpu_status.py`. CPU collection can run on nodes that are busy training on GPU; GPU collection cannot.
@@ -594,6 +641,113 @@ Mechanics: the effective `seed_base` is resolved per run (run-level value if pre
 
 A concrete example of when the override is needed: comparing a training run whose world has up to 2 predators against one whose world has up to 4. The animal slot count differs, so `jax_reset` consumes the key differently and episode `i` is not a matched pair. Give the second run its own `seed_base` and analyse the two as independent samples.
 
+#### D14. Scene-ambiguity guard, and the applicability boundary
+
+Addresses the §A11 hazard. Three parts: refuse ambiguous runs, record what was actually used, state where the tool applies.
+
+**(a) Hard-fail on scene-format coexistence.** Immediately after loading `<run>/models/config.yaml` and **before** building any params, the collector checks:
+
+```
+has_entities = bool(cfg['environment'].get('entities'))
+has_legacy   = bool(cfg['environment'].get('predators')) or \
+               bool(cfg['environment'].get('neutral_animals'))
+if has_entities and has_legacy:  -> raise ValueError
+```
+
+The error must name the run, say that the saved config carries both a modern `entities:` block and a legacy `predators:` / `neutral_animals:` block, explain that the trainer's scene precedence changed at commit `828b77e` (2026-07-23) so it cannot be determined which scene this run actually trained on, and point at §A11. **It must not attempt to pick one.**
+
+An escape hatch exists for someone who has independently established which scene is correct: `--allow-ambiguous-scene`, which downgrades the failure to a loud warning and sets `scene_ambiguous: true` in the manifest so every downstream reader inherits the caveat. Absent that flag, the collection stops.
+
+**(b) Record scene provenance in `_manifest.json`.** A creation date alone is a weak proxy; record the facts directly:
+
+| Manifest field | Value | Why |
+|---|---|---|
+| `scene_format` | `"entities"` \| `"legacy"` \| `"none"` | the branch the loader actually took — an audit reads it instead of re-deriving it |
+| `scene_ambiguous` | bool | true only when `--allow-ambiguous-scene` overrode the guard |
+| `run_dir_name` | e.g. `20260816-152742_rppo_…` | carries the run's creation date as the provenance proxy |
+| `train_config_mtime` | ISO timestamp of `<run>/models/config.yaml` | independent of directory naming convention |
+| `collection_git_sha` | git SHA at collection time | **note the asymmetry** — see §D15 |
+
+**(c) Applicability boundary — state it, do not bury it.** In this plan, in the collector's `--help`, and in the schema doc:
+
+> **Runs trained after 2026-07-23 (commit `828b77e`) are unambiguous** — the trainer and today's loader resolve the scene identically. **Runs before that date may not be**, and any run whose saved config carries both scene formats is not reconstructable with confidence and is refused by default. Measured against the current results tree, exactly 12 of 334 saved configs are affected, all dated 2026-05-29 to 2026-06-11 (§A11).
+
+This boundary is what makes the "training-run agnostic" claim honest. The tool works on any run it accepts, and it refuses the runs it cannot faithfully reconstruct, rather than silently doing its best.
+
+#### D15. Reset-time state is covered by a green gate — and code drift is unrecorded
+
+Two things here: a **positive assurance** that was missing from earlier drafts, and a **residual gap** that survives it.
+
+##### The reset-parity gate is essentially green (diagnosed 2026-08-19)
+
+`tests/env/test_unified_parity.py` is the gate that would catch a regression in **reset-time state** — exactly what §D4.2 records as the realised per-episode draws and what §D2 records as row `t = 0`. It appeared in this plan's review as a Critical, on the strength of a Known-Bugs entry describing it as red, twice-confirmed and unowned.
+
+It was then actually run, as a full sweep with no early exit. Result:
+
+```
+4 failed, 30 passed, 293 skipped   (344 s)
+
+FAILED test_parity[configs__verification__observability_gates_S1]
+FAILED test_parity[configs__verification__observability_gates_S2]
+FAILED test_parity[configs__verification__observability_gates_S3]
+FAILED test_parity[configs__verification__observability_gates_S4]
+```
+
+**30 of 34 executed reset-parity scenarios pass.** All four failures are the same scenario family and are byte-identical in form: `agent_pos` at step 0, actual `[4,4]` against fixture `[2,2]`. **No other scenario fails.**
+
+Diagnosed from git, and the answer is benign:
+
+| | |
+|---|---|
+| Fixtures generated | **2026-05-28**, commit `3d20aab` ("generate CP1 parity fixtures — 31 loadable configs at HEAD") |
+| Configs changed | **2026-07-04**, commit `84014e4` ("fix(config): observability gates use fixed start pos (no step-0 contact) — Finding G2") |
+| What changed | all four `configs/verification/observability_gates_S{1..4}.yaml` now declare `start_pos: [5, 5]` with `random_start_pos: false` |
+| What did not | the four fixtures still record `step000_agent_pos = [2 2]` |
+
+So a **deliberate July config change** — itself a fix for a real bug where the agent could begin an episode already touching an entity — moved the start position in all four gate configs, and the May fixtures were never regenerated. **The environment reset code did not drift.** The test compares today's environment against a snapshot predating an intentional change.
+
+**The four failures are exactly the four configs that change touched, with zero unexplained residue.** That completeness is what makes the diagnosis strong: a partial or scattered failure set would leave room for a second, real regression hiding among stale fixtures. There is none.
+
+**Consequence for this plan, and it is a positive assurance rather than a caveat:** reset-time state — precisely what §D4.2 records as the realised per-episode draws and what §D2 records as row `t = 0` — **is covered by a broadly green gate with no unexplained failures.** This is the strongest independent evidence the plan has that the foundation of its per-episode record is sound, and no earlier draft stated it. Severity **Low**. Fixture regeneration for those four is a `developer` task, not a design change, and is listed as a cheap Phase 0 precondition (§D16) so the gate is fully green before ten million episodes depend on it — not as a blocker on the design.
+
+**Recorded here so nobody re-escalates it.** The commit pair above is the whole story; anyone encountering the red test again should read this section rather than re-triage it.
+
+##### The residual that survives the diagnosis, and is worth more than the fixture fix
+
+The substantive point does not go away just because this particular test turned out benign.
+
+This failure sat in the bug registry as *"reset behaviour drifted, twice-confirmed, unowned"* long enough to surface as a **Critical finding in a plan review** — and the diagnosis that defused it took about four minutes. That is the lesson: **a red test nobody triages is operationally indistinguishable from a red test that matters.** You cannot tell a stale fixture from a live regression without spending those four minutes, and until someone does, every downstream plan has to treat it as the worse case.
+
+The durable version of the concern is an **unstated assumption this pipeline makes**: that environment code is unchanged between a run's training and its collection. Nothing verifies it, and — as §A11 established for the scene format — `train.py` writes **no training-time git SHA** anywhere, so no recorded fact would ever reveal a difference.
+
+**The mitigation is provenance, not more testing:**
+
+1. **Record `collection_git_sha` in `_manifest.json`** (§D14b). The least this pipeline can do is not repeat on the collection side the omission that makes §A11 unresolvable on the training side.
+2. Together with `run_dir_name` / `train_config_mtime` (also §D14b), a future analyst has **two bracketing facts** — when the run was trained, and at which commit it was collected — and can bound the code-drift question by inspecting history, instead of guessing.
+3. **The schema doc's Known-caveats section states it plainly**: *this store records reset-time state under whatever environment code existed at collection time; the training-time code version is unrecorded; use `run_dir_name` and `collection_git_sha` to bound what may have changed in between.*
+4. **Recommended as a separate follow-up outside this plan's scope**: have `train.py` write a training-time git SHA into the saved config, closing the gap permanently for future runs. Flagged for `senior-developer`; deliberately not bundled here, because it modifies the trainer and this plan touches no training code.
+
+#### D16. Phased rollout — pilot before production, and the acceptance gate
+
+Collection is cheap (~1.5 h wall for all ten runs) but a silently-wrong store is expensive, so the sequence is staged and each phase has an exit condition that can fail.
+
+| Phase | Scope | Exit condition |
+|---|---|---|
+| **0 — preconditions** | No collection. (a) Regenerate the four stale `observability_gates_S{1..4}` parity fixtures so the gate goes from 30/34 to fully green (§D15) — `developer` owns this; (b) confirm the scene-ambiguity guard fires on the 12 known dual-format runs (V10); (c) `df -h /media/nas01`. | Parity suite green; V10 passes; disk confirmed |
+| **1 — pilot** | **~25,000 episodes of ONE run, on ONE node.** ~5 blocks, ~10 minutes. | **V1–V5 all pass against the pilot store**, plus the driver's full validation (§D10) and the whole-store draw check below. C6/C7/C8/C8b measured and reported. |
+| **2 — first full run** | One complete run at 10⁶ episodes. | Driver validation + whole-store draw check pass; realised size and wall-time within 2× of the §D11/§D6 predictions |
+| **3 — remainder** | The other nine runs, packed node-first | Same checks per store |
+
+**The sampled checks run against the PRODUCTION store, not only the pilot.** V1 (realised draws vs. independent replay), V3 (row convention) and V4 (`agent_in_bush` recomputation) are cheap sampled checks — a few hundred episodes out of 10⁶ — and they are **acceptance gates on every production store**, not one-time pre-flight tests. A pilot that passes proves the code works; it does not prove that a specific 10⁶-episode store is sound. Running them per store is the difference.
+
+**Whole-store draw validation (in the driver's final pass, in addition to §D10's structural checks).** The realised draws are the entire point of the store, and V1 samples only ~200 episodes — a degenerate sampler, or a column accidentally wired to a constant, can slip through a sample. Columnar min/max/nunique over the whole `episodes` dataset is cheap (one pass, no step data) and catches it:
+
+1. **Bounds**: every realised-draw column lies within the sampling bounds recorded in the manifest — e.g. every `animal_detect_sampled` value within `[animal_detect_low, animal_detect_high]`. Catches out-of-range wiring and unit errors.
+2. **Non-degeneracy**: every realised-draw column has **more than one distinct value wherever the manifest's bounds satisfy `low < high`**. Catches a sampler stuck at a constant, a field silently defaulted, or a column wired to the wrong source. Conversely, where `low == high`, assert exactly one distinct value.
+3. **Activation masks**: `animal_active` / `obs_active` / `res_allocated` population counts fall within `[count_low, count_high]`, and — where `count_low < count_high` — more than one distinct count occurs across the store.
+
+A failure here is a hard stop: the store is deleted and the cause found, because a store that passes structure but fails these has *plausible-looking* independent variables, which is the worst possible failure mode for the analyses this exists to serve.
+
 ### File Changes
 
 #### NEW — `src/utils/trajectory_store.py`
@@ -614,8 +768,31 @@ def write_manifest(store_dir, manifest: dict) -> None:
 def read_manifest(store_dir) -> dict:
 def assert_manifest_compatible(store_dir, expected: dict) -> None:   # hard ValueError on mismatch
 
-def write_shard_atomic(path: Path, table: pa.Table) -> None:         # .tmp + os.replace
+def write_shard_atomic(path: Path, table: pa.Table) -> None:
+    # Write .tmp -> flush -> os.fsync(fd) -> os.replace -> fsync the DIRECTORY fd.
+    # The fsyncs are NOT optional here: results/ is a CIFS mount (//192.168.0.250/
+    # cocoanlab01), so POSIX rename atomicity + durability must NOT be assumed. The
+    # rename alone survives a process SIGKILL; only the fsync pair also survives a
+    # NODE crash, which is the realistic multi-node failure. See V6.
 def completed_blocks(store_dir) -> set[int]:
+
+def assert_scene_unambiguous(cfg: dict, run_path, allow_override: bool) -> str:
+    # §D14a — raises ValueError when the saved config carries BOTH a modern
+    # `entities:` block and a legacy `predators:`/`neutral_animals:` block.
+    # Returns the resolved scene_format ("entities"|"legacy"|"none") for the manifest.
+    # MUST NOT attempt to pick a scene. Error names the run, the two blocks, commit
+    # 828b77e (2026-07-23), and points at §A11.
+
+def assert_restored_tree_matches(restored_tree, model) -> None:
+    # F3 — hard-fail if the orbax-restored tree and the built model disagree on ANY
+    # key or ANY shape. Catches the silent-unmodulated-agent bug (a missing
+    # modulation block builds a structurally different model that restores
+    # "successfully") and non-persisted model-size flags. V2 cannot catch either:
+    # both its paths rebuild from the same saved config and so agree with the same
+    # wrong agent.
+
+def validate_store_draws(store_dir) -> None:
+    # §D16 — whole-store columnar bounds / non-degeneracy / activation-count checks.
 
 # Reader — the API every future analysis uses. Must work for every run, forever.
 def open_store(store_dir) -> TrajectoryStore:      # validates SCHEMA_VERSION
@@ -646,13 +823,17 @@ Single-run, single-process collector. Flags:
 
 `--run` (required, path to the training run dir) · `--checkpoint` (`final` or an explicit step; numeric-max selection per §D9) · `--out-root` · `--episodes` · `--seed-base` · `--blocks` (`lo:hi` block range for this worker) · `--batch-size` · `--shard-episodes` · `--obs-precision {float16,float32}` (**required, no default** — §D12) · `--device {cpu,gpu}` · `--quiet`
 
-Flow: resolve checkpoint → load env from `<run>/models/config.yaml` (never from `configs/`) → compute `env_fp` → create-or-validate the store manifest → for each incomplete block in range: for each chunk of `batch_size`: `vmap(jax_reset)` → PRNG parity guard → `nnx.jit` scan → vectorised flatten → **`assert_obs_representable` range guard (§D12)** → accumulate → write both shards atomically. Policy is deterministic argmax, always.
+Flow: resolve checkpoint → load `<run>/models/config.yaml` (never from `configs/`) → **`assert_scene_unambiguous` (§D14a)** → build params → compute `env_fp` → create-or-validate the store manifest → load policy → **`assert_restored_tree_matches` (F3)** → for each incomplete block in range: for each chunk of `batch_size`: `vmap(jax_reset)` → PRNG parity guard → `nnx.jit` scan → vectorised flatten → **`assert_obs_representable` range guard (§D12)** → accumulate → write both shards atomically. Policy is deterministic argmax, always.
+
+Note the ordering: the scene guard runs **before** params are built, so an ambiguous run cannot get far enough to create a store directory.
 
 Checkpoint-loading and rollout are kept behind two seams — `load_policy(agent_type, ckpt) -> (model, initial_state_fn)` and `policy_step(model, obs, h) -> (action, h)` — so Dreamer-SRL can be added later. **rPPO is the only supported and tested algorithm in this change**; `agent_type != "rppo"` raises `NotImplementedError` with a pointer to this section. No Dreamer support is claimed.
 
+`load_policy` must call `assert_restored_tree_matches` before returning. A checkpoint that restores "successfully" into a structurally different model is the failure mode behind two recorded bugs (a missing modulation block silently yielding an unmodulated agent; model-size CLI flags possibly not persisted to the saved config), and a strict key+shape comparison catches both with one check.
+
 #### NEW — `scripts/eval/traj_collect/collect_worker.sh`
 
-Per-node worker, modelled on `scripts/eval/dwell_sweep/sweep_worker.sh`. Carries the CPU thread caps (`sweep_worker.sh:29-31`), the per-node persistent XLA compile cache (`:38-40`), `xargs -P npar` over worklist lines, and `_run_markers/{done,fail,prog}_<node>`. Each worklist line is `RUN|CKPT|OUT_ROOT|SEED_BASE|BLOCK_LO:BLOCK_HI|DEVICE|BATCH_SIZE` — a **block range**, so JAX startup is amortised (§D11).
+Per-node worker, modelled on `scripts/eval/dwell_sweep/sweep_worker.sh`. **Invokes the conda interpreter by explicit absolute path — `PY=/home/vncuser/miniconda3/envs/grid_world_pain/bin/python` — never `conda run`, `conda activate`, or a bare `python`**, per the project-wide conda rule; the `sweep_worker.sh` precedent already complies (`:27`) and should be copied verbatim. Carries the CPU thread caps (`sweep_worker.sh:29-31`), the per-node persistent XLA compile cache (`:38-40`), `xargs -P npar` over worklist lines, and `_run_markers/{done,fail,prog}_<node>`. Each worklist line is `RUN|CKPT|OUT_ROOT|SEED_BASE|BLOCK_LO:BLOCK_HI|DEVICE|BATCH_SIZE` — a **block range**, so JAX startup is amortised (§D11).
 
 #### NEW — `scripts/eval/traj_collect/run_collection.py`
 
@@ -698,15 +879,17 @@ runs:                      # MANDATORY
 
 1. Plain-language entry point: what the store is, what one row means, what question it answers.
 2. The row convention (§D2) stated in one sentence, with a worked three-step example table.
-3. The complete fixed key list (§D4.1, §D4.2) with dtype, shape, timing, and source, verbatim.
+3. The complete fixed key list (§D4.1, §D4.2) with dtype, shape, timing, and source. **These tables must be generated from `STEP_COLUMNS` / `EPISODE_COLUMNS`, not hand-transcribed** — a script (`scripts/eval/traj_collect/gen_schema_doc.py`) emits them between marker comments in the doc, and a test asserts the committed doc matches freshly-generated output. Hand-maintained schema tables rot, and this doc is half the deliverable; a doc that disagrees with the code is worse than no doc, because it is trusted.
 4. Path scheme and manifest schema (§D3), including how `env_fp` prevents overwrites.
-5. Worked reader snippets: load episodes, join steps to episodes on `episode_seed`, reshape a flattened `[A, V]` draw, select "all predators", compute per-episode bush-dwell fraction.
+5. Worked reader snippets: load episodes, join steps to episodes on `episode_seed`, reshape a flattened `[A, V]` draw, select "all predators", and compute a per-episode bush-occupancy **fraction in `[0, 1]`** (mean of the boolean `agent_in_bush` over the episode's steps) — the snippet must state that unit explicitly and must not be called "dwell", given the retracted units claim on the existing `bush_dwell` measure (§D8).
 6. **When cross-run pairing holds** — the §D13 condition reproduced verbatim, including the "check `env_fp` and the sampling bounds, never assume from run labels" instruction. This is the one thing an analyst is most likely to get wrong and cannot infer from the data.
 7. Caveats, in a section titled **Known caveats — read before analysing**:
    - **Resource properties are an episode-level approximation.** `res_property_sampled_init` is the draw *at reset*; the environment re-draws it on every regeneration (`core.py:808-809`). An analysis treating food properties as constant within an episode is making an approximation. **Where it breaks**: any episode in which a resource was consumed and regenerated — detectable per step from `res_cons_count` incrementing and `res_active` toggling `False → True`. The approximation is exact for the window before the first regeneration, and degrades with the number of regenerations, so it is worst in long episodes with a short `res_reg_delay` and best in short ones. Analyses that condition on resource property should either restrict to the pre-first-regeneration window or report the regeneration count as a covariate.
    - The `agent_in_bush` comparability warning (§D8).
    - **Observation precision**: how to read `obs_precision` from the manifest; the `2.44e-04` worst-case absolute error if it says `float16`, stated against the environment's own injected noise (σ = 0.01–0.20, so the quantisation is ~40–800× below it); and the fact that a collection-time range guard hard-fails rather than silently clipping, so an out-of-range channel cannot be sitting in the store unnoticed (§D12).
    - `animal_damage` is per-step, not per-episode (§A2) — only its bounds are in the manifest.
+   - **Applicability boundary (§D14c)**: runs trained after 2026-07-23 (commit `828b77e`) are unambiguous; earlier runs may not be, and any run whose saved config carries both scene formats is refused by the collector. Check `scene_format` and `scene_ambiguous` in the manifest before trusting a store built from an older run.
+   - **Code drift (§D15)**: this store records reset-time state under whatever environment code existed **at collection time**; the training-time code version is unrecorded anywhere in the project. Use `collection_git_sha` together with `run_dir_name` / `train_config_mtime` to bound what may have changed in between. As of 2026-08-19 the reset-parity gate passed **30 of 34** executed scenarios; the four failures are all `observability_gates_S1`–`S4` and are fully explained by stale fixtures (generated `3d20aab`, 2026-05-28) predating a deliberate start-position change (`84014e4`, 2026-07-04) — not a code regression.
 8. A short **"why the schema looks like this"** note carrying the measurements: constant integer / boolean columns are effectively free (211× vs raw binary), floats cost **3.26** compressed bytes per value at `float32` and **1.68** at `float16` regardless of smoothness, hoisting static entity positions was measured at a **0.75 %** net saving and rejected, and **a compression ratio is meaningless without its denominator** — mixing CSV-denominated and raw-denominated figures is what produced two wrong answers during this plan's drafting. This section exists to stop the next reader from "optimising" the schema.
 9. **Maintenance Contract**: any change to the fixed key set, any dtype change, and any row-convention change **must** bump `SCHEMA_VERSION` in `src/utils/trajectory_store.py` and update this document in the same commit. Readers hard-fail on an unknown `SCHEMA_VERSION`.
 
@@ -716,7 +899,7 @@ Operator doc: how to run one run locally, how to run a spec across nodes, how to
 
 #### NEW — `tests/test_trajectory_collection.py`
 
-Pytest home for verifications V1, V3, V4, V5, V7 and V9 (see Verification Plan). Fast variants (small episode counts, tiny configs) so the suite stays runnable. V2, V6 and V8 are operator-run rather than pytest (they need a real checkpoint, a `SIGKILL`, and a lab node respectively).
+Pytest home for verifications V1, V3, V4, V5, V7, V9 and **V10** (see Verification Plan). Fast variants (small episode counts, tiny configs) so the suite stays runnable. V10 is cheap and high-value — it runs against the 12 real dual-format configs already on disk and needs no rollout at all, since the guard fires before params are built. V2, V6 and V8 are operator-run rather than pytest (they need a real checkpoint, a NAS-hosted `SIGKILL`, and a lab node respectively).
 
 #### MODIFIED — `docs/environment/SCRIPTS_DEPENDENCY_MAP.md`
 
@@ -745,9 +928,10 @@ Regenerated via `python scripts/claude/regen_dev_index.py`. Never hand-edited.
 
 Verified by the implementing agent **during** implementation:
 
+- [ ] **C0 — Guards fire before anything is written.** Confirm, in order: `assert_scene_unambiguous` raises on one of the 12 known dual-format runs with no store directory created (V10); `assert_restored_tree_matches` raises when a deliberately mismatched model is built against a checkpoint. Both must fail *loudly and early* — a guard that runs after side effects is not a guard.
 - [ ] **C1 — `nnx.jit` entry.** Assert the scan is never called eagerly: add a `RuntimeError` if `_rollout_scan` is invoked outside a trace, and confirm the first forward pass of the process goes through `nnx.jit` (§A5). Print the first 5 actions of seed 0 and compare to the legacy path before writing any shard.
 - [ ] **C2 — Numeric checkpoint selection.** Print the resolved checkpoint directory for a run with 591 numerically-named dirs and confirm it is `59100070`, not a lexicographic winner (§D9).
-- [ ] **C3 — Schema round-trip.** Write a 10-episode block, read it back with `open_store`, and assert column names + order + types match `build_step_schema(dims, obs_precision)` exactly. Run once per `obs_precision` value.
+- [ ] **C3 — Schema round-trip.** Write a 10-episode block, read it back with `open_store`, and assert column names + order + types match `build_step_schema(dims, obs_precision)` exactly. Run once per `obs_precision` value. **Note this check is circular** (reader and writer share `build_step_schema`) — it catches wiring mistakes, not schema-definition mistakes. V9's bare-pyarrow read is the non-circular counterpart; do not treat C3 as sufficient.
 - [ ] **C4 — Row counts.** For 10 episodes assert `len(steps[seed]) == episodes[seed].length + 1`, `steps[t=0].action == -1`, `steps[t=0].reward == 0.0`.
 - [ ] **C5 — Realised draws are constant within an episode.** Assert every episode-level draw read at reset equals the same field on the final state (they must be, per `core.py:818-828`) — a cheap in-loop guard that catches a wrong state being snapshotted.
 - [ ] **C6 — Peak RSS.** Measure peak RSS of one worker at `batch_size=1024` and confirm ≤ 2.5 GB (§D5 predicts ~1.8 GB). Report the number.
@@ -767,9 +951,15 @@ Verified by the implementing agent **during** implementation:
 
 Every check below can **fail**, and none of them validates a code path using that same code path.
 
+> **What these checks CANNOT cover — read before trusting them.** V1 and V2 both consume the `params` object the collector built from the saved config. If that object describes the wrong world (§A11), both pass in full agreement while describing the wrong world consistently. **No check in this list can detect a faithfulness failure of the config reload**, which is precisely why §D14's guard refuses ambiguous runs at the door rather than trying to verify its way out afterwards. V10 tests the guard; nothing tests the assumption the guard protects, because nothing can. Same structure applies to F3's restore check: V2 cannot catch a structurally-wrong model, because both of its paths rebuild from the same config, so `assert_restored_tree_matches` is a guard rather than a verification.
+
 ### V1 — Realised draws against an independent replay *(the primary correctness check)*
 
-An episode is a pure function of `jax.random.PRNGKey(seed)`, so ground truth is freely available. Sample 200 recorded episodes at random. For each, take the recorded `episode_seed`, call `jax_reset(params, jax.random.PRNGKey(seed))` **unbatched, un-vmapped, outside any scan** — a genuinely different execution path from the batched collector — and assert **exact** equality (bitwise for ints/bools, `==` for floats, since it is the same computation) for all 19 episode-level draw columns.
+An episode is a pure function of `jax.random.PRNGKey(seed)`, so ground truth is freely available. Sample 200 recorded episodes at random. For each, take the recorded `episode_seed`, call `jax_reset(params, jax.random.PRNGKey(seed))` **unbatched, un-vmapped, outside any scan** — a genuinely different execution path from the batched collector — and assert equality for all 19 episode-level draw columns.
+
+**Tolerance policy, pre-stated so it cannot be quietly weakened.** The assertion is **exact equality, including for float columns.** This is deliberate, not an oversight: both paths execute the identical sampling arithmetic on the identical key, so the outputs are bit-identical or something is genuinely wrong. **If this ever fails on a float column, the correct response is to diagnose the divergence — not to relax it to `allclose`.** A bitwise difference between `vmap(jax_reset)` and `jax_reset` would mean vectorisation is changing the sampler's output, which is exactly the class of bug this check exists to catch and which would shift every recorded draw in the store. Any future loosening of this tolerance requires a documented justification appended to this plan.
+
+**Runs against the production store, not only the pilot** (§D16).
 
 **Fails on**: seed-to-row misassociation (the realistic failure mode — an off-by-one in block indexing or in the vectorised flatten), a wrong reset key derivation, or reading the draws from the wrong lane of the vmap batch.
 
@@ -813,11 +1003,15 @@ Two halves. The second is the one that matters, because it tests the *guard* rat
 
 **Fails on**: a missing or mis-thresholded guard, a guard that warns instead of raising, a guard placed after the shard write, an unhelpful error message, or a `float32` store that is not bit-exact (which would mean an unintended downcast in the writer). Part (b) is the check that stands between us and a store that silently mangled a channel — the failure mode that would be undetectable at read time and would invalidate every analysis touching that sensor.
 
-### V6 — Resume and atomicity under a hard kill
+### V6 — Resume and atomicity under a hard kill, **on the NAS**
 
 Start a 3-block collection; `SIGKILL` the process partway through block 2; restart. Assert: (a) no `.parquet.tmp` files remain, (b) the final store contains exactly the expected episode count with **no duplicate `episode_seed`**, (c) `steps.groupby(episode_seed).size() == length + 1` holds for every episode, and (d) blocks 0 and 1 are byte-identical to a clean run.
 
-**Fails on**: non-atomic writes, a resume that re-does or skips a block, or a seed mapping that depends on process state rather than on `(seed_base, shard_episodes)`.
+**This must be run on the NAS filesystem, not on local disk.** The entire "a shard on disk is always complete" guarantee (§D3) rides on `os.replace` being atomic and durable, and `results/` lives on a **CIFS mount** (`//192.168.0.250/cocoanlab01`), where POSIX rename semantics must not be assumed. A local-disk pass would prove nothing about the filesystem the store actually uses. Run it in `results/trajectories/_v6_scratch/` and delete afterwards.
+
+Note the failure mode `SIGKILL` alone does **not** exercise: a killed *process* leaves the OS page cache intact, so the rename is durable even without an fsync. A killed *node* — the realistic multi-node failure — can leave a renamed-but-unflushed file that looks complete to `completed_blocks()` and is truncated on read. That is why `write_shard_atomic` fsyncs the file before renaming and the directory after (File Changes). V6 cannot easily simulate a node crash; the fsync is defence for the case the test cannot reach.
+
+**Fails on**: non-atomic writes, a resume that re-does or skips a block, a seed mapping that depends on process state rather than on `(seed_base, shard_episodes)`, or CIFS not honouring rename atomicity — in which case the shard-completeness design needs revisiting before any production collection.
 
 ### V7 — Overwrite-hazard guard *(direct regression test for the 2026-07-04 incident)*
 
@@ -837,6 +1031,19 @@ Collect 200 episodes from **three** structurally different saved configs: (i) a 
 
 **Fails on**: any conditional column creeping in — the exact failure mode that makes the existing CSV unusable (§A1).
 
+**Plus a non-circular read.** C3 validates a written store by reading it back through `open_store`, which shares `build_step_schema` with the writer — a schema-definition bug would echo itself back as proof. So V9 additionally reads one shard with **bare `pyarrow.parquet`, importing nothing from `trajectory_store`**, and compares the column names, order, and types against the **schema doc's** generated table. That closes the loop between code, store, and documentation without any of the three vouching for itself.
+
+### V10 — The scene-ambiguity guard fires *(direct regression test for the §A11 faithfulness hazard)*
+
+The corpus contains 12 real saved configs carrying both scene formats (§A11), which makes this testable against genuine artifacts rather than synthetic ones.
+
+- Point the collector at `results/JAX_RecurrentPPO/20260609-191226_recurrent_ppo_08-singlePredRabbit_disengage_s42` (or any of the 12) and assert it raises `ValueError`, that the message names both offending blocks and commit `828b77e`, and that **no store directory is created** — the guard runs before params are built (File Changes flow).
+- Assert a clean run (any of the 20 rest-premium runs, all `entities:`-only) passes the guard and records `scene_format: "entities"`, `scene_ambiguous: false`.
+- Assert a legacy-only config passes and records `scene_format: "legacy"`.
+- Assert `--allow-ambiguous-scene` downgrades the failure to a warning and sets `scene_ambiguous: true` in the manifest.
+
+**Fails on**: a missing guard, a guard that warns instead of raising, a guard placed after store creation, or a guard that tries to *resolve* the ambiguity rather than refuse it. This is the check that stands between the project and a million episodes of an agent in the world its trainer discarded — the one failure mode with no internal signal and no post-hoc detection.
+
 ---
 
 ## Out of Scope (explicit)
@@ -848,6 +1055,26 @@ Collect 200 episodes from **three** structurally different saved configs: (i) a 
 - **Deleting the dead `build_episode_log_dict`** (`src/behavior/accumulators.py:546`). Noted as pre-existing dead code; removal is a separate change.
 
 ---
+
+## Review Response
+
+`plan-reviewer` returned **NOT READY** on 2026-08-19 with two Critical and eight lesser findings ([[plan_trajectory_collection]]). Disposition of each, with where the fix lives:
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| F1 | 🔴 | Reloading a saved config can rebuild the scene the trainer discarded; V1/V2 are circular w.r.t. it | **Fixed.** New §A11 (mechanism + corpus scan), §D14 (hard-fail guard, manifest provenance, applicability boundary), V10 (guard-fires test against 12 real dual-format runs). Scope measured, not assumed: 12 of 334 saved configs affected, all 2026-05-29 → 06-11, none after. |
+| F2 | 🔴→🟢 | Reset-parity gate red, plan silent on it | **Downgraded to Low on diagnosis, and kept.** Full sweep: 4 failed / 30 passed / 293 skipped. All four failures are `observability_gates_S1`–`S4`, identical in form, fully explained by stale fixtures (`3d20aab`, 2026-05-28) predating a deliberate start-position change (`84014e4`, 2026-07-04) — reset code did not drift, and there is no unexplained residue. §D15 records the diagnosis so nobody re-escalates, adds fixture regeneration as a Phase 0 precondition, and keeps the durable residual: code drift between training and collection is unrecorded, mitigated by `collection_git_sha` + run-date in the manifest. |
+| F3 | 🟡 | No strict restore check; V2 circular here too | **Fixed.** `assert_restored_tree_matches` (keys **and** shapes) in the `load_policy` seam; checkpoint C0. |
+| F4 | 🟡 | C3 circular; schema doc untied to `STEP_COLUMNS` | **Fixed.** Doc tables generated from code by `gen_schema_doc.py` with a test asserting the committed doc matches; V9 adds a bare-`pyarrow` read importing nothing from `trajectory_store`; C3 relabelled as circular and explicitly not sufficient. |
+| F5 | 🟡 | No pilot-to-scale sequence; sampled checks not tied to production store | **Fixed.** §D16 phases 0–3 with per-phase exit conditions; V1/V3/V4 stated as acceptance gates on **every production store**, not just the pilot. |
+| F6 | 🟡 | Realised draws get only a 200-episode check | **Fixed.** `validate_store_draws` in the driver: whole-store bounds, `> 1` distinct value wherever `low < high` (and exactly one where `low == high`), activation-count ranges. |
+| F7 | 🟢 | GPU buffer stated 1.8 GB | **Fixed** — 2.4 GB; conclusion unchanged. |
+| F8 | 🟢 | `damage` cites a stale Open Question | **Fixed** — now points at Decisions Taken #1. |
+| F9 | 🟢 | V1 float tolerance could be silently weakened | **Fixed.** Exact-equality policy pre-stated with justification and an explicit prohibition on relaxing to `allclose` without documented cause. |
+| F10 | 🟢 | Interpreter path; bush-dwell units | **Fixed.** Worker names the absolute conda interpreter (matching `sweep_worker.sh:27`); reader snippet labelled a `[0,1]` occupancy fraction and renamed away from "dwell". |
+| ❓4 | ❓ | `os.replace` atomicity assumed on this mount | **Fixed.** `results/` is a **CIFS** mount, so POSIX semantics are not assumed: `write_shard_atomic` now fsyncs the file before rename and the directory after, and V6 must run on the NAS, not local disk. The plan states which failure mode `SIGKILL` cannot reach (node crash vs. process kill). |
+
+The reviewer also confirmed three known-bug hazards are genuinely closed by the design — fixed-seed episode repetition, stale-data blending, and derived-measure smuggling. Those verdicts are unchanged by this revision.
 
 ## Decisions Taken
 
