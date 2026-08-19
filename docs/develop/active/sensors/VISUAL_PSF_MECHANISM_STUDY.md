@@ -116,6 +116,59 @@ Normalising by the kernel's full analytic mass (`2π σ_∥ σ_⊥`) reports onl
 inside the diamond, giving a ~30× falloff from d=1 to d=5 **for free** — vision would then need no
 separate `1/d^γ` term at all.
 
+## Cost — measured, not estimated
+
+Benchmarked on this machine (RTX-class CUDA device, JAX 0.9.0.1) with the real environment,
+`num_envs: 128`, via [`visual_psf_study/bench_aniso.py`](visual_psf_study/bench_aniso.py). That
+script also contains a **complete reference implementation** of the anisotropic sensor, so the
+measurement and the proposed code are the same thing.
+
+**The kernel is free.** Replacing the boolean match matrix with the Gaussian weight matrix costs
++2 to +7 µs per batched call of 128 environments — against an `env.step` of 350–420 µs, so under 2%.
+Over a 10M-step run that is **half a second of extra compute in total**:
+
+| `visual_sensor_range` | cells | obs dim | kernel delta | % of `env.step` | total over 10M steps |
+|---|---|---|---|---|---|
+| 0 | 1 | 27 | +2.4 µs | 0.60% | 0.2 s |
+| 1 | 5 | 59 | +7.3 µs | 1.78% | 0.6 s |
+| 2 | 13 | 123 | +6.5 µs | 1.72% | 0.5 s |
+| 3 | 25 | 219 | +5.6 µs | 1.24% | 0.4 s |
+
+The delta does **not** grow with the number of cells even though the arithmetic scales 25× from
+range 0 to range 3. That is the tell: at these sizes the operation is kernel-launch-bound, not
+FLOP-bound. The GPU is idle inside the call either way.
+
+**The network side is also free**, contrary to the reasonable worry that a hierarchical encoder makes
+observation growth expensive. The visual unimodal MLP's first layer grows from 1,024 to 13,312
+parameters at range 2, but a forward+backward over a full rollout (128 envs × 128 steps) measures
+100–155 µs at *every* range — the differences are inside the launch-overhead noise. Across 10M steps
+at `K_epochs: 4` that is ~0.3 s. Rollout buffers grow from 1.77 MB to 8.06 MB per rollout, which is
+nothing on a 24 GB card.
+
+**Conclusion: compute is not the constraint.** Nothing in this proposal costs measurable wall-clock at
+10M steps. What growing the observation actually costs is **sample efficiency** — a 123-dimension
+observation with 104 visual dimensions is a harder representation to learn than 27 with 8, and that is
+paid in environment steps, not microseconds. Argue about `visual_sensor_range` on learning grounds;
+the performance argument does not exist.
+
+## Implementation notes for the JAX version
+
+Four things the reference implementation gets right, each of which is easy to get wrong:
+
+1. **The structure does not change.** It is still one `[C, E] @ [E, V]` matmul. Only the contents of
+   the left matrix change, from `jnp.all(coords == pos)` booleans to Gaussian weights. No new pass,
+   no convolution, no scatter.
+2. **Never form the `[C, E, 2]` displacement tensor.** Since `v·û = c·û − e·û`, the projections come
+   from two small matmuls (`cell_coords @ u.T`) minus a per-entity constant. Keeps the working set at
+   `[C, E]` instead of `[C, E, 2]`.
+3. **Floor both widths at about half a cell.** Mass normalisation divides by `2π σ_∥ σ_⊥`, so an
+   entity standing on the agent (`d = 0` → `σ_∥ = 0`) sends the peak to infinity. A floor of ~0.5
+   cells fixes it — and it is principled rather than a patch: half a cell is the grid's sampling
+   limit, and Fig 6 independently found that sub-cell `σ_⊥` buys nothing but larger value ratios.
+4. **Keep the new config values as traced arrays, not static.** `visual_sensor_range` is
+   shape-determining and must stay static; the blur scale, anisotropy and floor must not, or every
+   sweep value triggers a recompile.
+
 ## Decisions
 
 ### Settled
