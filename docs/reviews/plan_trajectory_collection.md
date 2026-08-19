@@ -3,16 +3,55 @@ title: "Plan review — Trajectory Collection Pipeline"
 topic: reviews
 status: active
 created: 2026-08-19
-last_updated: 2026-08-19
+last_updated: 2026-08-19  # re-review appended same day; verdict revised NOT READY → SOUND
 ---
 
 # Plan Review — Trajectory Collection Pipeline
 
 > **Reviewed plan**: [[TRAJECTORY_COLLECTION_PIPELINE]] (`docs/develop/active/behavior/TRAJECTORY_COLLECTION_PIPELINE.md`)
 > **Reviewed by**: plan-reviewer
-> **Date**: 2026-08-19
+> **Date**: 2026-08-19 (initial) · 2026-08-19 (re-review after revision)
 
 ## Verdict
+
+**SOUND** — re-review of the revised plan; the exit condition of the initial review is **met**. See **Re-review (2026-08-19)** below. The initial NOT READY review is preserved unchanged after it, as history.
+
+## Re-review (2026-08-19) — exit condition MET, verdict revised to SOUND
+
+The plan was revised (~240 lines added: §A11, §D14–§D16, V10, C0, expanded File Changes) in response to the two Critical findings. This re-review verified the revision's claims at source rather than taking them on trust.
+
+**F1 (scene-reload faithfulness) — resolved.**
+
+- The loader-precedence mechanism is confirmed verbatim at `src/environment/config_loader.py:429-435`, and the `828b77e` diff confirms the pre-fix loader dispatched entities-first, so a dual-format dump flips scene across the fix boundary exactly as §A11 states.
+- The guard (§D14a) is **purely structural** — it refuses on scene-format coexistence, with no date heuristic anywhere in the mechanism. The corpus scan is load-bearing only for the *scope* claim ("historical, not live"), and this re-review **independently reproduced it**: 334 saved configs, 153 entities-only / 151 legacy-only / **12 dual-format** / 18 empty-scene, the 12 matching the plan's list (2026-05-29 → 06-11, ten `logcheck_*`).
+- The guard runs before params, `env_fp`, and manifest creation (File Changes flow), so an ambiguous run cannot create a store directory; V10 asserts exactly that, **against a real dual-format run**, and additionally asserts the guard cannot warn-instead-of-raise or attempt to resolve. C0 orders the check first among implementation checkpoints.
+- Refuse-rather-than-resolve is the right call: nothing in a run directory records which branch its trainer took, so any resolution would be a guess; the cost is 12 historical runs (ten throwaway), and `--allow-ambiguous-scene` + `scene_ambiguous: true` covers independently-adjudicated cases. The tool loses nothing it could legitimately handle.
+
+**F2 (red reset-parity gate) — downgrade to Low is justified; the durable residual is retained.**
+
+- All three cited commits verified: fixtures from `3d20aab` (2026-05-28); `84014e4` (2026-07-04) changed **exactly** the four `observability_gates_S{1..4}` configs (confirmed: `start_pos: [5,5]`, `random_start_pos: false` now in the config; the failure's actual `[4,4]` is the 0-indexed internal form of the 1-indexed `[5,5]`, against the stale fixture's `[2,2]`). The failure set equals exactly the four touched configs with zero unexplained residue — a deliberate config change post-dating its fixtures, not code drift.
+- The durable residual survives in the plan: §D15's "red test nobody triages" lesson, the schema doc's code-drift caveat, `collection_git_sha` + `run_dir_name` + `train_config_mtime` in the manifest, fixture regeneration as a Phase 0 exit condition, and the train-time-git-SHA follow-up named to `senior-developer` outside scope.
+
+**F3–F6 spot-checked, all addressed as claimed**: strict key+shape restore assertion in the `load_policy` seam with C0 testing that it *fires*; schema-doc tables generated from `STEP_COLUMNS` with a matching-output test, plus V9's bare-pyarrow read closing the code↔store↔doc loop and C3 honestly relabelled circular; §D16 phased rollout with per-phase failable exit conditions and V1/V3/V4 as acceptance gates on every production store; `validate_store_draws` whole-store bounds / non-degeneracy (correctly conditioned on `low < high`) / activation-count checks. **F7–F10 confirmed fixed. Open assumption 4 (rename atomicity on the NAS)**: the fsync-before-rename + directory-fsync design, V6-on-NAS requirement, and the explicit statement that `SIGKILL` cannot reach the node-crash case (client page cache survives a killed process; only a killed node loses unflushed writes) are sound and honestly bounded — and the driver's full-read validation (§D10) is a second net that would catch a truncated shard post hoc.
+
+### New findings from the revision (all Low; none blocks implementation)
+
+| # | Sev | Location | Issue | Suggested fix | Owner |
+|---|---|---|---|---|---|
+| N1 | 🟢 | §D14a vs `config_loader.py:429` | The guard predicates entities on **truthiness** (`bool(...)`) while today's loader uses **`is not None`** — they diverge on a config carrying an explicit *empty* `entities:` list alongside legacy blocks (precedence flipped across `828b77e` for that shape too, since the old loader dispatched on presence). Verified against the corpus: **zero** of 334 saved configs have that shape, and post-fix runs cannot recreate the ambiguity, so this is currently harmless. | Cheapest hardening: also refuse when `entities` is present-but-empty alongside a non-empty legacy block; at minimum, a comment in `assert_scene_unambiguous` recording that the predicate is deliberately truthiness-based and the empty+legacy shape was verified absent (scan 2026-08-19), so a future maintainer neither "fixes" it into a mismatch nor trusts it blindly. | `developer` |
+| N2 | 🟢 | `tests/test_trajectory_collection.py` (V10 host) | V10-as-pytest depends on 12 specific run directories under gitignored `results/` on the NAS — the test silently loses its subject if those runs are cleaned, and errors on any machine without the mount. | Copy one dual-format `config.yaml` (a small YAML, not run data) into `tests/fixtures/` as the deterministic guard-fires case; `skipif`-guard the against-real-corpus cases on path existence. | `developer` |
+| N3 | 🟢 | `write_shard_atomic` (File Changes) | Directory fsync over CIFS may be unsupported (opening a directory fd for fsync can raise on network filesystems). If so it fails loudly on the first shard — V6-on-NAS will surface it immediately, so nothing silent — but the fallback should be an explicit recorded decision, not an ad-hoc `try/except: pass` added under time pressure. | Decide and document the CIFS-rejects-dir-fsync behaviour when implementing `write_shard_atomic`; V6 already runs on the NAS and will exercise it. | `developer` |
+| N4 | 🟢 | `docs/develop/active/issues/KNOWN_BUGS.md:73` | The registry row for the parity failure still reads "OPEN — needs triage, twice-confirmed, owner unassigned". §D15's verified diagnosis (stale fixtures vs `84014e4`, not code drift) supersedes it; the registry should say so, and point at §D15 and the Phase 0 regeneration task. | Registry update. | `bug-curator` |
+
+No new Critical or Moderate findings. Ordering of the added steps was checked (guard before params before manifest; Phase 0 before any collection; C0 first among checkpoints) and no added check is unfailable; no contradiction was found between the added sections and the pre-existing ones.
+
+### Cost of being wrong (re-review)
+
+With the guard in place, the residual failure surface is implementation-level (the guards existing in the plan but not firing in the code) — which C0, V5(b), V7, and V10 each test as *fires*, not as passes-on-clean-input. If the re-review is wrong anyway, the cost reverts to the original: a store describing the wrong world with no internal signal. The plan now carries four independent layers against that (structural guard, provenance manifest, applicability boundary, guard-fires tests), which is as much as a plan can do; the rest is `senior-developer`'s post-implementation adherence check.
+
+---
+
+## Initial review (2026-08-19) — NOT READY (superseded by the re-review above; preserved as history)
 
 **NOT READY** — two Critical findings, both cheap to fix before implementation.
 

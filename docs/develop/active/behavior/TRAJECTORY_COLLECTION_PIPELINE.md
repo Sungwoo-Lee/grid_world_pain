@@ -1133,3 +1133,13 @@ Checkpoint C8 remains in the plan as a **confirmation on real sensor data** of a
 Known-bug hazards 2 (fixed-seed repetition), 3 (stale-data blends), and 4 (derived-measure smuggling) are genuinely closed by the design as written.
 
 *Reviewed by: plan-reviewer*
+
+### Re-review addendum (2026-08-19) — verdict revised to **SOUND**
+
+> **Verdict**: **SOUND** — the exit condition of the initial review is met. Full re-review: [[plan_trajectory_collection]] §Re-review.
+
+The revision was verified at source, not taken on trust: the loader-precedence mechanism and the `828b77e` before/after diff match §A11 verbatim; the 334-config corpus scan was **independently reproduced** (153 / 151 / **12 dual-format** / 18, same 12 runs); the F2 commit archaeology checks out (the four failures are exactly the four configs `84014e4` touched, fixtures from `3d20aab` — stale fixtures, not code drift, downgrade to Low justified, durable code-drift residual retained). The §D14 guard is structural (no date heuristic), runs before any store directory can exist, correctly refuses rather than resolves, and V10/C0 test that it *fires*. F3–F10 and the fsync/CIFS handling of open assumption 4 are addressed as claimed, with the untestable node-crash case honestly bounded.
+
+Four new **Low** notes from the revision, none blocking (details and owners in the review doc): (N1) the guard's non-empty-entities predicate differs from the loader's is-not-None predicate on the empty-`entities:`+legacy shape — verified absent from the corpus, harden or comment; (N2) V10-as-pytest depends on gitignored NAS run dirs — copy one dual-format YAML into `tests/fixtures/`; (N3) directory-fsync may be unsupported on CIFS — decide the fallback explicitly, V6-on-NAS will surface it; (N4) the Known Bugs registry row still says the parity failure is untriaged — `bug-curator` to record the §D15 diagnosis.
+
+*Reviewed by: plan-reviewer*
