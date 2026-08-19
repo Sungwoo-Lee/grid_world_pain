@@ -1,0 +1,84 @@
+# Trajectory-collection spec template.
+#
+# Driver: scripts/eval/traj_collect/run_collection.py
+# Schema: docs/environment/TRAJECTORY_STORE_SCHEMA.md
+# Plan:   docs/develop/active/behavior/TRAJECTORY_COLLECTION_PIPELINE.md
+#
+# NO FALLBACK DEFAULTS FOR SCIENTIFIC PARAMETERS. `algo`, `out_root`, `episodes`,
+# `seed_base`, `checkpoints`, `nodes`, `obs_precision` and `runs` are read through a
+# `_req(spec, key)` helper that raises ValueError on absence. The four operational keys
+# below (`device`, `npar`, `batch_size`, `shard_episodes`) have documented defaults, and
+# EVERY resolved value — defaulted or not, including each run's effective `seed_base` —
+# is written into that store's `_manifest.json`, so the value actually used is never in
+# doubt.
+
+name: example
+algo: rppo                 # MANDATORY — only 'rppo' is supported in this change
+out_root: results/trajectories   # MANDATORY
+episodes: 1000000          # MANDATORY — per run
+seed_base: 1000000         # MANDATORY — shared by every run below so comparisons are PAIRED;
+                           #             defines the episode population; never defaulted
+checkpoints: [final]       # MANDATORY — list form; accepts explicit steps later, e.g. [final, 30000000]
+nodes: [101, 103, 104, 105]  # MANDATORY
+obs_precision: float32     # MANDATORY — 'float32' or 'float16'; a LOSSY choice, never defaulted.
+                           #
+                           # RECOMMENDED VALUE: float32, decided 2026-08-20 BY MEASUREMENT.
+                           # The plan adopted float16 on a synthetic benchmark predicting a
+                           # ~38% store-wide saving, against a 20% adoption threshold that was
+                           # pre-registered before any measurement was taken. Measured on a real
+                           # paired collection (the SAME 5,000 episodes written twice), the
+                           # saving is 12.8% store-wide / 19.3% on the observation block.
+                           # Below the threshold, so the threshold decides: float32.
+                           #   Why the prediction missed by ~7x: 21 of this env's 27 observation
+                           #   channels are constants or {0,1,2} one-hot indicators stored as
+                           #   floats, so zstd already compresses the block to 0.49 B/value at
+                           #   float32 and half precision has little redundancy left to remove.
+                           #   At ~8 GB/run the saving is ~1 GB against a LOSSLESS store.
+                           #
+                           # float16 stays fully supported and is a sound ACCURACY choice if you
+                           # want the space: worst measured round-trip error 1.95e-03, ~100x
+                           # below the environment's own injected sensor noise, and a
+                           # collection-time guard hard-fails rather than silently clipping an
+                           # out-of-range channel.
+                           #
+                           # CONSEQUENCE OF float32, stated so it is not discovered later: the
+                           # observation guard returns straight after its finiteness check, so
+                           # BOTH magnitude clauses (the 1e-2 round-trip budget and the 1e4
+                           # backstop) go dormant. float32 cannot misrepresent these magnitudes,
+                           # so there is nothing for them to catch — but it does mean a float32
+                           # store carries no recorded evidence about observation range, and
+                           # switching a store to float16 later is not automatically safe.
+
+device: cpu                # optional, default 'cpu'
+npar: 16                   # optional, default derived from device (cpu: 16, gpu: 1 per GPU)
+batch_size: 1024           # optional, default derived from device (cpu: 1024, gpu: 8192)
+shard_episodes: 5000       # optional, default 5000 — do NOT go below ~1000 at scale (file-count floor)
+blocks_per_cell: 10        # optional, default 10 — blocks per worker process, so the fixed
+                           #           15-17 s JAX startup is amortised across several blocks
+
+runs:                      # MANDATORY
+  # Runs sharing the batch-level seed_base are PAIRED with each other: episode i faces the
+  # same environment draw in both, provided the parameters `jax_reset` consumes are
+  # identical. Check `env_fp` and the sampling-bound block in the two manifests before
+  # claiming pairing — never assume it from run labels. See the schema doc §5.
+  - {label: a01, path: results/JAX_RecurrentPPO/20260816-151827_rppo_restpremNH_a01_n106}
+  - {label: a02, path: results/JAX_RecurrentPPO/20260816-151930_rppo_restpremNH_a02_n106}
+
+  # Per-run `seed_base` — the only SCIENTIFIC per-run override. Use it when a run's world
+  # differs STRUCTURALLY from the others (e.g. a different predator slot count): the same
+  # key then does not produce the same draw, so sharing a base would assert a pairing that
+  # does not exist. Give it its own base and analyse it as an independent sample.
+  #
+  # (The run below shares the same world as a01/a02, so in a real spec it would NOT need
+  # an override — it carries one here only to show the syntax. Do not copy the override
+  # without checking `env_fp` and the sampling-bound block in the two manifests first.)
+  - {label: a03, path: results/JAX_RecurrentPPO/20260816-152028_rppo_restpremNH_a03_n107,
+     seed_base: 5000000}
+
+  # A per-run entry may carry ONLY: path (required), label, seed_base,
+  # allow_ambiguous_scene. Any other key is a hard error — a misspelt `seed_base` would
+  # otherwise silently inherit the batch-level value and manufacture an illusory pairing.
+  #
+  # `allow_ambiguous_scene: true` lets a pre-2026-07-23 dual-format run through the
+  # scene-ambiguity guard with a loud warning and `scene_ambiguous: true` in its manifest.
+  # Do not set it unless you have INDEPENDENTLY established which scene the run trained on.

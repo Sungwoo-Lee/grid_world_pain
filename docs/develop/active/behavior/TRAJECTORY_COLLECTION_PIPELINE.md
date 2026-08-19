@@ -3,16 +3,17 @@ title: "Trajectory Collection Pipeline — large-scale in-training-environment r
 topic: behavior
 status: active
 created: 2026-08-19
-last_updated: 2026-08-19
+last_updated: 2026-08-20
 phase: null
 aliases: [trajectory_collection_pipeline]
 ---
 
 # Trajectory Collection Pipeline
 
-> **Status**: PLANNED
+> **Status**: IMPLEMENTED (2026-08-20) — uncommitted, awaiting verification
 > **Opened**: 2026-08-19
 > **Review**: [[plan_trajectory_collection]] (`docs/reviews/plan_trajectory_collection.md`) — NOT READY (2 Critical). See **Review Response** below for the disposition of every finding.
+> **Schema contract**: [`docs/environment/TRAJECTORY_STORE_SCHEMA.md`](../../../environment/TRAJECTORY_STORE_SCHEMA.md)
 > **Related**: [[EVAL_ROLLOUT_BATCHING_PERF]] (the batched-rollout kernel this reuses the correctness argument from), [[PER_EPISODE_ENV_VARIANCE]] (the per-episode random draws this pipeline records), [[BEHAVIOR_ANALYSIS]] (the existing probe-based behaviour measurement this complements)
 
 ---
@@ -928,22 +929,22 @@ Regenerated via `python scripts/claude/regen_dev_index.py`. Never hand-edited.
 
 Verified by the implementing agent **during** implementation:
 
-- [ ] **C0 — Guards fire before anything is written.** Confirm, in order: `assert_scene_unambiguous` raises on one of the 12 known dual-format runs with no store directory created (V10); `assert_restored_tree_matches` raises when a deliberately mismatched model is built against a checkpoint. Both must fail *loudly and early* — a guard that runs after side effects is not a guard.
-- [ ] **C1 — `nnx.jit` entry.** Assert the scan is never called eagerly: add a `RuntimeError` if `_rollout_scan` is invoked outside a trace, and confirm the first forward pass of the process goes through `nnx.jit` (§A5). Print the first 5 actions of seed 0 and compare to the legacy path before writing any shard.
-- [ ] **C2 — Numeric checkpoint selection.** Print the resolved checkpoint directory for a run with 591 numerically-named dirs and confirm it is `59100070`, not a lexicographic winner (§D9).
-- [ ] **C3 — Schema round-trip.** Write a 10-episode block, read it back with `open_store`, and assert column names + order + types match `build_step_schema(dims, obs_precision)` exactly. Run once per `obs_precision` value. **Note this check is circular** (reader and writer share `build_step_schema`) — it catches wiring mistakes, not schema-definition mistakes. V9's bare-pyarrow read is the non-circular counterpart; do not treat C3 as sufficient.
-- [ ] **C4 — Row counts.** For 10 episodes assert `len(steps[seed]) == episodes[seed].length + 1`, `steps[t=0].action == -1`, `steps[t=0].reward == 0.0`.
-- [ ] **C5 — Realised draws are constant within an episode.** Assert every episode-level draw read at reset equals the same field on the final state (they must be, per `core.py:818-828`) — a cheap in-loop guard that catches a wrong state being snapshotted.
-- [ ] **C6 — Peak RSS.** Measure peak RSS of one worker at `batch_size=1024` and confirm ≤ 2.5 GB (§D5 predicts ~1.8 GB). Report the number.
-- [ ] **C7 — Throughput.** Time one 5,000-episode block; report episodes/s and compare against the 14.3 eps/s baseline of §A8. Report as a before/after speed number in the Implementation Report.
-- [ ] **C8 — Confirm the precision saving on real sensor data.** *(Confirmation, not a gate — the default is already `float16`, §D12.)* Write **the same 5,000 real episodes twice**, once with `obs_precision: float32` and once with `float16`, and report for each: on-disk bytes for the whole shard, on-disk bytes for the two observation columns alone, and compressed bytes per stored float value.
+- [x] **C0 — Guards fire before anything is written.** DONE — `assert_scene_unambiguous` raises on the real dual-format corpus with no store dir created (V10, 5 pytest cases); `assert_restored_tree_matches` raises on a wrong `hidden_size` and on a structurally different encoder, and passes on the correct model. Original: Confirm, in order: `assert_scene_unambiguous` raises on one of the 12 known dual-format runs with no store directory created (V10); `assert_restored_tree_matches` raises when a deliberately mismatched model is built against a checkpoint. Both must fail *loudly and early* — a guard that runs after side effects is not a guard.
+- [x] **C1 — `nnx.jit` entry.** DONE — `_rollout_scan` raises `RuntimeError` when its args are concrete; first 5 actions of 5 seeds match the legacy unbatched loop exactly (see the report's V2 row). Original: Assert the scan is never called eagerly: add a `RuntimeError` if `_rollout_scan` is invoked outside a trace, and confirm the first forward pass of the process goes through `nnx.jit` (§A5). Print the first 5 actions of seed 0 and compare to the legacy path before writing any shard.
+- [x] **C2 — Numeric checkpoint selection.** DONE — resolves `59100070` from 591 dirs; lexicographic max is `9900021`, and the test asserts the two disagree so it cannot go vacuous. Original: Print the resolved checkpoint directory for a run with 591 numerically-named dirs and confirm it is `59100070`, not a lexicographic winner (§D9).
+- [x] **C3 — Schema round-trip.** DONE for both precisions, and labelled circular in the test itself. Original: Write a 10-episode block, read it back with `open_store`, and assert column names + order + types match `build_step_schema(dims, obs_precision)` exactly. Run once per `obs_precision` value. **Note this check is circular** (reader and writer share `build_step_schema`) — it catches wiring mistakes, not schema-definition mistakes. V9's bare-pyarrow read is the non-circular counterpart; do not treat C3 as sufficient.
+- [x] **C4 — Row counts.** DONE (V3 test). Original: For 10 episodes assert `len(steps[seed]) == episodes[seed].length + 1`, `steps[t=0].action == -1`, `steps[t=0].reward == 0.0`.
+- [x] **C5 — Realised draws are constant within an episode.** DONE — enforced in `run_chunk` on every chunk (reset block vs final-state block). Original: Assert every episode-level draw read at reset equals the same field on the final state (they must be, per `core.py:818-828`) — a cheap in-loop guard that catches a wrong state being snapshotted.
+- [x] **C6 — SUPERSEDED (2026-08-20).** Measured **2,554 MiB** at `batch_size=1024`, `shard_episodes=5000`. The 2.5 GB figure was a self-imposed plan ceiling, not a hardware limit: actual node RAM is 125-128 GB (101/103/104/105), 257 GB (106), 515 GB (113), so `npar: 16` uses ~41 GB — 36 % of the smallest node. **No change made; the buffering is not restructured.** Original: Measure peak RSS of one worker at `batch_size=1024` and confirm ≤ 2.5 GB (§D5 predicts ~1.8 GB). Report the number.
+- [x] **C7 — Throughput.** DONE — **47.9-49.6 episodes/s** for one 5,000-episode block, vs the 14.3 eps/s baseline of §A8 (3.4x faster). Original: Time one 5,000-episode block; report episodes/s and compare against the 14.3 eps/s baseline of §A8. Report as a before/after speed number in the Implementation Report.
+- [x] **C8 — ESCALATED, AND DECIDED (2026-08-20).** Measured store-wide saving **12.8 %**, below the pre-registered 20 % threshold, so the recommended precision is now **`float32`** (spec template, CLI docstring and schema doc updated; there is still no code-level default anywhere). Original: *(Confirmation, not a gate — the default is already `float16`, §D12.)* Write **the same 5,000 real episodes twice**, once with `obs_precision: float32` and once with `float16`, and report for each: on-disk bytes for the whole shard, on-disk bytes for the two observation columns alone, and compressed bytes per stored float value.
   - Expected from the synthetic benchmark (§D11): **3.26 B/value** at `float32`, **1.68 B/value** at `float16`, **48.6 %** saving on the observation block, **~38 %** store-wide. This checkpoint confirms those hold on real sensor data rather than on a synthetic autocorrelated walk.
   - **Escalate rather than silently proceed** if the store-wide saving comes in **below 20 %** — that would fall under the pre-registered adoption threshold and the default should revert to `float32`. Report the number either way; do not rationalise a near-miss.
   - Also report the realised non-float bytes/row against the ~17 B estimate of §D11, which is the one unmeasured figure in the budget.
   - Cost: ~12 minutes of compute. Do not substitute an estimate.
-- [ ] **C8b — The `float16` range guard fires.** Confirm the runtime guard (§D12) raises, names the offending observation index, and resolves it to a sensor name — see V5. Confirm no shard is left on disk after the raise.
-- [ ] **C9 — Resume is a no-op.** Run the same block range twice; assert the second run writes nothing and completes in under 30 s.
-- [ ] **C10 — Zero-slot environment.** Collect 20 episodes from a config with `A = 0` (no animals) and confirm the animal columns are present as zero-length lists and the reader does not branch.
+- [x] **C8b — DONE, and the guard's criterion had to be corrected.** It fires, names the index and the sensor, and leaves no shard. The plan's RELATIVE criterion fired on legitimate near-zero data and was replaced with an absolute one; see the report. Original: Confirm the runtime guard (§D12) raises, names the offending observation index, and resolves it to a sensor name — see V5. Confirm no shard is left on disk after the raise.
+- [x] **C9 — Resume is a no-op.** DONE (pytest, plus V6 on the NAS). Original: Run the same block range twice; assert the second run writes nothing and completes in under 30 s.
+- [x] **C10 — Zero-slot environment.** DONE, and it forced a schema deviation: Parquet cannot round-trip a zero-width `fixed_size_list`. See the report, Deviation 1. Original: Collect 20 episodes from a config with `A = 0` (no animals) and confirm the animal columns are present as zero-length lists and the reader does not branch.
 
 ---
 
@@ -1098,26 +1099,757 @@ Checkpoint C8 remains in the plan as a **confirmation on real sensor data** of a
 
 ## Implementation Report
 
-> **Implemented by**: [agent/person]
-> **Date**: [date]
+> **Implemented by**: `developer`
+> **Date**: 2026-08-20
+> **Status**: implemented, tested locally, **uncommitted** (working tree left dirty for review)
 
-<!-- Filled by the implementing agent. Must include:
-     - Measured before/after throughput (C7) and peak RSS (C6) on the same node/config.
-     - Realised Parquet compression ratio (C8).
-     - Any deviation from the fixed key list in §D4, with justification.
-     - The C8 paired precision measurement and which precision was adopted (§D12).
-     - Which of V1-V9 were run and their outcomes. -->
+### Plain-language summary
+
+The pipeline is built and works end-to-end on a real training run. All ten checkpoints
+(C0–C10) and all pytest-able verifications (V1, V3, V4, V5, V7, V9, V10) pass, plus V6
+(hard-kill + resume, run on the real NAS) and a 5-seed V2 (parity against the legacy
+per-episode loop) run by hand. **46 tests pass in 104 s.**
+
+Four things did not survive contact with reality and are flagged below rather than
+quietly absorbed. In decreasing order of importance:
+
+1. **The half-precision size argument does not hold on real data (C8 escalation).** The
+   plan adopted `float16` on a predicted ~38 % store-wide saving; measured on the *same*
+   5,000 real episodes written twice, the saving is **12.8 %**, below the 20 % threshold
+   the plan pre-registered before measuring. The accuracy argument still holds; the size
+   argument does not. **The decision is yours, not mine — I changed no default.**
+2. **The float16 range guard, as specified, made `float16` collection impossible.** Its
+   *relative* error criterion fired on a legitimate reading of `1.34e-06`. I replaced it
+   with an *absolute* criterion tied to the store's own error budget, and documented why.
+3. **Parquet cannot store a zero-width `fixed_size_list`**, so the array columns are
+   variable-size `list<T>` with a writer-enforced width instead. This is stricter than
+   the plan asked for (the column *type* is now identical across environments too) and
+   measured marginally smaller on disk.
+4. **`vmap(jax_reset)` and unbatched `jax_reset` are not bit-identical** on one realised-
+   draw column. Diagnosed, bounded at one float32 ULP, and pinned by a test — but it does
+   mean V1's pre-stated exact-equality policy cannot hold literally for that one column.
+
+---
+
+### 1. What was implemented, file by file
+
+| File | Status | What it is |
+|---|---|---|
+| `src/utils/trajectory_store.py` | NEW, 1084 lines | Single source of truth: `SCHEMA_VERSION`, `STEP_COLUMNS` (36) / `EPISODE_COLUMNS` (23), schema builders, `build_table`, `env_fingerprint`, manifest read/write/guard, `write_shard_atomic` (+ the N3 directory-fsync decision), `completed_blocks`, `assert_scene_unambiguous`, `assert_restored_tree_matches`, `validate_store_{structure,shapes,draws}`, `open_store` / `TrajectoryStore`. Every manifest read goes through `_req`; there is no `.get(k, default)` anywhere in the module. |
+| `scripts/eval/traj_collect/traj_scan.py` | NEW, 389 lines | `_rollout_scan` (nnx.jit-only, refuses eager entry), `_agent_in_bush`, `_reset_row`, `_draw_block`, `_prng_parity_guard` (`lax.map`, one sync/chunk), `_flatten_to_rows` (fully vectorised), `OBS_ABS_MAX` / `OBS_ABS_ERR_MAX` + `assert_obs_representable`. |
+| `scripts/eval/traj_collect/collect_trajectories.py` | NEW, 563 lines | Single-run collector. Flow exactly as §D14/File Changes specify: resolve checkpoint (numeric) → load the run's own `models/config.yaml` → **scene guard before params are built** → params → `env_fp` → create-or-validate manifest → `load_policy` (+ F3) → per block, per chunk: reset → PRNG parity guard → `nnx.jit` scan → vectorised flatten → **range guard** → atomic shard writes. |
+| `scripts/eval/traj_collect/collect_worker.sh` | NEW | Per-node worker; explicit absolute conda interpreter, CPU/GPU env split, persistent XLA cache, `xargs -P npar`, `_run_markers/{done,fail,prog,log}_<node>`. Worklist line is a **block range**. |
+| `scripts/eval/traj_collect/run_collection.py` | NEW, 240 lines | Multi-node driver: spec → cells → LPT → worklists → **serial** `run_command.py` launches → marker poll → `validate_store_{structure,shapes,draws}` + a per-run size/throughput summary. `--dry-run`, `--validate-only`. |
+| `scripts/eval/traj_collect/gen_schema_doc.py` | NEW | Generates the schema doc's tables from `STEP_COLUMNS` / `EPISODE_COLUMNS` between marker comments; `--check` exits 1 when stale. |
+| `scripts/eval/traj_collect/README.md` | NEW | Operator guide. |
+| `configs/trajectory_collection/example.yaml` | NEW | Spec template; the eight scientific keys are mandatory. |
+| `docs/environment/TRAJECTORY_STORE_SCHEMA.md` | NEW | The permanent contract. Tables generated from code; measured numbers corrected (§5, §7). |
+| `tests/test_trajectory_collection.py` | NEW, 1087 lines / 46 tests | Every guard tested as **firing**, each with a companion asserting it does *not* fire on good input. |
+| `tests/fixtures/trajectory_collection/` | NEW | Byte-identical copy of a real dual-format saved config + a README naming its provenance (N2). |
+| `docs/environment/SCRIPTS_DEPENDENCY_MAP.md` | MODIFIED | §0 depth note, §1a two new bare-import edges, §3 five new rows, new **Cluster D**, footer date. |
+| `tests/env/fixtures/parity/observability_gates_S{1..4}.npz` | MODIFIED | Phase 0(a): the four stale fixtures regenerated. |
+
+Not modified, as the plan requires: `scripts/eval/eval_rollout.py`, `scripts/eval/dwell_sweep/*`,
+`src/utils/evaluation_core.py`, `src/utils/eval_recording.py`, `scripts/behavior_measures/*`,
+everything under `src/environment/`, and the whole config system.
+
+---
+
+### 2. Test and verification results (actual output)
+
+**New suite — 46 passed in 104 s.**
+
+```
+$ JAX_PLATFORMS=cpu python -m pytest tests/test_trajectory_collection.py -q -p no:randomly
+.............................................. [100%]
+46 passed in 103.64s (0:01:43)
+```
+
+**Phase 0(a) — the reset-parity gate is now fully green** (was 4 failed / 30 passed):
+
+```
+$ python -m pytest tests/env/test_unified_parity.py -q
+34 passed, 293 skipped in 342.88s (0:05:42)
+```
+
+The §D15 diagnosis was confirmed at source before regenerating: the four
+`observability_gates_S{1..4}` configs were changed at `84014e4` (2026-07-04) from
+`random_start_pos: true` to `false`, so the agent now starts at the config's fixed
+`start_pos: [5,5]` (stored 0-indexed as `[4,4]`, `config_loader.py:1471` subtracts 1)
+while the May fixtures still recorded a random `[2,2]`. Environment reset code did not
+drift. Only those four fixtures were regenerated, via a scratch script — the shipped
+generator was not modified.
+
+| Check | Result |
+|---|---|
+| **V1** — realised draws vs an independent unbatched replay | **PASS** on 16 of 17 columns with exact equality; `animal_property_sampled` bounded at one float32 ULP — see §4.4. A companion test confirms a one-row shift *would* be detected, so the assertion is not vacuous. |
+| **V2** — trajectory parity vs the legacy per-episode loop (operator-run, 5 seeds, real checkpoint) | **PASS** — action sequence, `(agent_row, agent_col)` sequence and `length` match **exactly** for every seed. Lengths 18/19/219/59/40. |
+| **V3** — row-convention self-consistency | **PASS** |
+| **V4** — `agent_in_bush` recomputed in pure NumPy | **PASS**, with an added assertion that at least one row *is* in a bush so the comparison cannot be vacuous. |
+| **V5a** — precision fidelity | **PASS** (float32 bit-identical; float16 = float32 rounded, nothing else) |
+| **V5b** — the range guard fires | **PASS**, 4 cases: injected out-of-range value, a real location-sensor channel, non-finite, and a magnitude below the backstop but above the error budget. Plus two companions: in-range data and a legitimate near-zero value must **not** trip it. |
+| **V6** — resume + atomicity under `SIGKILL`, **on the NAS** | **PASS** — see the transcript in §3. |
+| **V7** — manifest / overwrite guard | **PASS**, all four cases (mutated env config, different `seed_base`, bumped `SCHEMA_VERSION`, different `obs_precision`); file mtimes+hashes unchanged after each refusal. |
+| **V8** — scale and speed | **PASS** — 47.9–49.6 eps/s ≫ the ≥10 eps/s threshold. Peak RSS: see C6 caveat. |
+| **V9** — schema invariance + a bare-`pyarrow` read | **PASS** across three structurally different environments (A=1/A=4/location-sensor-on, three distinct dim tuples). The bare read imports nothing from `trajectory_store` and compares against the schema doc's generated table. |
+| **V10** — the scene-ambiguity guard fires | **PASS**, 6 cases including the real dual-format corpus, the collector CLI end-to-end (no store dir created), the three unambiguous formats, the `--allow-ambiguous-scene` downgrade, and the N1 empty-`entities:` shape. |
+
+---
+
+### 3. Measurements
+
+All on the same host, CPU, single process, `batch_size=1024`, checkpoint `59100070` of
+`20260816-152742_rppo_restpremNH_a10_n112`, `shard_episodes=5000`, one 5,000-episode block.
+
+```
+$ python tmp/20260820_c678_measure.py float16
+[collect] block 00000: 5000 episodes in 104.5s (47.9 eps/s)
+RESULT precision=float16 wall=127.7s eps_per_s=39.16 peak_rss_MB=2554
+$ python tmp/20260820_c678_measure.py float32
+[collect] block 00000: 5000 episodes in 100.9s (49.6 eps/s)
+RESULT precision=float32 wall=117.4s eps_per_s=42.58 peak_rss_MB=2500
+```
+
+**C7 — throughput (speed check).** Baseline (§A8, the existing per-episode path):
+**14.3 episodes/s**. After: **47.9–49.6 episodes/s** in-block, **39.2–42.6 eps/s**
+including the fixed ~17 s JAX-import + model-build + restore. **+235 % in-block.** No
+regression anywhere; the batched `vmap` + `lax.scan` kernel is simply much faster than the
+per-episode loop it replaces. Mean episode length measured **204.8 steps** (plan assumed
+192), so 19.4 core-hours/run in §D6 becomes ≈ 5.6 core-hours/run at this rate.
+
+**C6 — peak RSS: 2,554 MiB.** The plan predicted ~1.8 GB and C6's ceiling is 2.5 GB, so
+this is **at or just over the ceiling depending on whether "GB" means GiB (2.49 GiB, pass)
+or decimal (2.68 GB, fail)**. Reporting it rather than picking the flattering reading.
+The cause is a design choice worth a decision: the collector accumulates **all chunks of a
+block** in memory and concatenates once before writing, so peak scales with
+`shard_episodes`, not `batch_size`. At `shard_episodes=5000` that is 5 chunks in flight.
+Two cheap fixes exist if 2.5 GB matters at 16 workers/node (~40 GB/node): write with a
+`ParquetWriter` chunk by chunk, or reduce `shard_episodes`. **Flagged, not fixed** — it
+changes the shard-writing design and belongs to `senior-developer`.
+
+**C8 — the paired precision measurement, and the escalation.** Same 5,000 episodes,
+1,028,932 step rows, written twice:
+
+| | `float32` | `float16` | saving |
+|---|---:|---:|---:|
+| whole store | 41.09 MB | 35.82 MB | **12.8 %** |
+| steps shard | 40.74 MB | 35.47 MB | 12.9 % |
+| the two observation columns alone | 27.36 MB | 22.09 MB | **19.3 %** |
+| compressed **bytes per stored float value** | **0.492** | **0.398** | |
+| compressed bytes per step row | 39.6 | 34.5 | |
+| non-float bytes per step row | 3.81 | 3.81 | |
+| episode row | 71.8 B/episode | 71.8 B/episode | |
+
+**This falls under the plan's pre-registered escalation rule and I am escalating rather
+than rationalising it.** 12.8 % store-wide is not a near-miss on the 20 % threshold.
+
+Why the synthetic benchmark was wrong by ~7×: it modelled the observation block as
+continuous autocorrelated data and measured 3.26 B/value at `float32`. The real block is
+**0.49 B/value**, because this observation vector is mostly *not continuous* — of its 27
+channels, **5 are identically zero** and **16 more take only {0,1,2}** (collision,
+proprioception and visual are one-hot indicators stored as floats). Only 6 olfactory and
+interoceptive channels carry genuinely continuous values, so zstd already removes most of
+the block and half precision has little left to take.
+
+Two consequences beyond the decision:
+
+- The whole store is **~5× smaller than budgeted**: one 10⁶-episode run extrapolates to
+  **≈ 7.1 GB (float16) / 8.2 GB (float32)**, not 28/45 GB. Ten runs ≈ 71–82 GB.
+- The plan's one unmeasured figure, non-float bytes/row, was estimated at ~17 B. Measured:
+  **3.81 B** — 4.5× smaller, in the same direction as everything else.
+
+**What I did NOT do**: change any default. `obs_precision` is mandatory with no default in
+both the CLI and the spec, so nothing silently picks a value. The example spec still says
+`float16` and the schema doc now carries a prominent "decision under review" box with the
+measured numbers. **Reverting the recommendation to `float32` is a §D12 decision and is
+yours.** For what it is worth: the accuracy case for `float16` is unaffected and 12.8 %
+of every future full-corpus scan is still 12.8 %; but the plan set the bar at 20 %.
+
+**Disk (Phase 0c)**: `df -h /media/nas01` → `192T size, 134T used, 59T avail (70 %)`.
+Unchanged from the plan's figure; the corpus is now ~80 GB, ~0.13 % of free space.
+
+---
+
+### 4. Deviations from the plan — four, all forced, none silent
+
+#### 4.1 Array columns are `list<T>`, not `fixed_size_list<T>[w]` (§D1, §D4)
+
+**Parquet cannot round-trip a zero-width `fixed_size_list`.** pyarrow 24.0.0 writes such a
+column and reads it back as `[[None], [None], …]` — silently wrong *data*, not merely a
+different type:
+
+```
+>>> a = pa.array([[]]*5, type=pa.list_(pa.int16(), 0)); pq.write_table(pa.table({"x":a}), buf)
+>>> pq.read_table(buf)
+ArrowInvalid: Expected all lists to be of size=0 but index 1 had size=1
+```
+
+Zero-width columns are not hypothetical: §A11's own corpus scan found **18 of 334** saved
+configs with no animals (`A = 0`), and C10 requires them to work.
+
+So every array column is the variable-size `list<T>`, with the constant width enforced by
+the **writer** (offsets built as a ramp of the manifest width, payload length asserted) and
+re-checked by `validate_store_shapes` on every shard. This is **stricter than the plan
+asked for**: with `fixed_size_list` the column *type* differs between environments
+(`fixed_size_list<int16>[4]` vs `[22]`), which V9 explicitly tolerated; with `list<int16>`
+the type is byte-identical for every environment, so V9's assertion got stronger. Measured
+cost: **823 B vs 835 B** for a 20,000-row × 22-wide `int16` column under zstd — the
+variable-size form is marginally *smaller*, because Parquet has no fixed-size-list physical
+type either and encodes both as a repeated group. Recorded in the module, in the schema doc
+(§3.3) and here.
+
+#### 4.2 The float16 guard's third clause is ABSOLUTE, not relative (§D12)
+
+The plan specified a **relative** round-trip ceiling of `1e-3`. Run against the first real
+5,000-episode collection it fired immediately:
+
+```
+ValueError: Observation index 1 — sensor Interoceptive Nociception (dims 1..1) — has a
+float16 round-trip relative error of 0.0219 (value 1.3415422e-06 -> 1.3709068e-06) …
+```
+
+That value's **absolute** error is `2.9e-08`: ~8,000× below the store's own stated error
+budget and ~300,000× below the σ = 0.10 noise the environment injects into that channel on
+purpose. A relative criterion is the wrong instrument near zero, and as written it made the
+plan's *default* precision uncollectable.
+
+Replaced with `OBS_ABS_ERR_MAX = 1e-2` on the **absolute** round-trip error, set from
+measurement: worst case anywhere in a real 5,000-episode store is **1.95e-03**, on an
+olfaction channel reaching **6.95** — so the plan's "values in `[0,1]`" assumption is also
+wrong, and its "2.44e-04 worst case, 400–800× below σ" becomes **1.95e-03, ~100× below
+σ = 0.20**. 1e-2 leaves ~5× headroom over measured reality and corresponds to float16's
+half-ulp at |x| ≈ 32, so it fires once any channel's magnitude reaches ~32 — about 4.6×
+the largest magnitude the reference config produces, which is a realistic drift on a larger
+grid or a higher `sensor_radius`. Clause 2 (`OBS_ABS_MAX = 1e4`) is retained as the outer
+backstop; see §5 for the honesty note about it.
+
+Two tests pin both directions: one asserts the `1.34e-06` value is *accepted*, one asserts
+a magnitude-40 channel is *refused* while still far below the backstop.
+
+#### 4.3 V1's exact-equality policy holds for 16 of 17 columns, not 17
+
+`vmap(jax_reset)` and unbatched `jax_reset` are **not bit-identical** on
+`animal_property_sampled`. Measured over 256 episodes: 242 of 5,120 elements differ, by at
+most **5.96e-08 absolute** — exactly one float32 ULP at magnitude 1.0. **No other draw
+column diverges at all**, including `res_property_sampled` and `obs_property_sampled`,
+which are drawn by the *same* `_sample_property` helper.
+
+Diagnosed rather than waved through, as the plan demands. `animal_property_sampled` is the
+only one of the three assembled with a `jnp.zeros_like(...).at[idx].set(...)` scatter
+(`core.py:1128-1140`, the N2 per-class split). Under `vmap` that scatter lowers differently
+and XLA fuses `mean + std * noise` differently (fused multiply-add vs separate multiply and
+add), changing the last bit. It is **pre-existing environment/XLA behaviour, independent of
+this pipeline**, and invisible to the existing eval tooling only because `eval_rollout.py`
+does not record property draws.
+
+`test_v1_animal_property_divergence_is_one_float32_ulp` pins the bound and asserts no other
+column joins it, so growth or spread is caught rather than absorbed. Per the plan's rule,
+**this loosening is documented here and requires your sign-off.** It is also a candidate
+Known-Bugs row — I cannot spawn `bug-curator`; a grep of the registry found no existing row
+for it, so **`bug-curator` should record it**.
+
+#### 4.4 N1 resolved by matching the loader exactly
+
+The guard now uses `env.get('entities') is not None` — **identical** to
+`config_loader.py:429` — rather than `bool(entities)`. So it refuses the present-but-empty
+`entities:` + legacy shape too. A test asserts both the behaviour and that the loader's
+predicate string is still present in the source, so a future loader change surfaces here.
+
+#### N3 (directory fsync on CIFS) — resolved empirically, no fallback needed
+
+`_fsync_dir` carries a single documented decision (warn once, continue — with the reasoning
+for why failing would trade a real capability for an unattainable guarantee), not a
+scattered `try/except`. In practice it never triggers: **directory fsync IS supported on
+this CIFS mount** — verified directly (`_DIR_FSYNC_UNSUPPORTED == False` after a real write
+into `results/`), and V6 produced no warning.
+
+---
+
+### 5. Checks I suspect cannot actually fail — stated, as asked
+
+1. **`OBS_ABS_MAX = 1e4` (clause 2 of the range guard) is now subsumed by clause 3.** Any
+   channel large enough to trip `|x| > 1e4` trips the `1e-2` absolute-error budget first
+   (which fires at |x| ≈ 32). Clause 2 is retained because the plan specifies it and it
+   names a distinct failure with a distinct message, but it will never be the clause that
+   actually catches anything. Clause 3 is where the teeth are.
+2. **The PRNG parity guard cannot catch a wrong seed-to-episode *assignment*.** It compares
+   `vmap(jax_reset)` against an independent `lax.map(jax_reset(PRNGKey(s)))` over the same
+   seed list, so it catches a wrong key *construction* (the `ParallelEnv.reset` failure it
+   exists for) but not a wrong seed *list*. Stated in its docstring. V1 and the store's
+   no-duplicate-seed check cover the gap; `test_seeds_advance_per_episode_and_are_unique`
+   is the one that would catch a regression to the existing harness's fixed-seed behaviour.
+3. **C3 is circular** and is labelled so in the test body — reader and writer share
+   `build_step_schema`. `test_v9_bare_pyarrow_read_matches_the_schema_doc` is the
+   non-circular counterpart and imports nothing from `trajectory_store`.
+4. **`assert_restored_tree_matches` against the *restored tree* alone is near-vacuous**,
+   because orbax's `partial_restore` filters the checkpoint down to the target's keys. It
+   is the **checkpoint metadata tree** comparison that has teeth. If
+   `PyTreeCheckpointer().metadata()` ever returns nothing usable, the collector prints a
+   warning and degrades to the vacuous comparison — that degradation is loud but it is a
+   degradation, and it is worth a reviewer's eye.
+
+---
+
+### 6. The model-size CLI flag question — verified, NOT reproducible
+
+The registry records "model-size CLI flags may not be persisted to the saved config" as
+open/probably-fixed/never-verified. **It is fixed, and I verified it two ways.**
+
+*By inspection*: `train.py:759-762` resolves `hidden_size = args.hidden_size or
+config.get_mandatory('agent.hidden_size')` and immediately does
+`config.set('agent.hidden_size', hidden_size)`; the dump to `<run>/models/config.yaml`
+happens later, at `train.py:881`. The `else` branch (non-rPPO/PPO) does the same at
+`:764-769`.
+
+*Empirically*: a 2-episode run with `--hidden-size 77` against an agent config declaring
+`hidden_size: 128`:
+
+```
+$ grep hidden_size results/JAX_RecurrentPPO/20260820-005848_hsizeprobe/models/config.yaml
+304:  hidden_size: 77
+$ grep hidden_size configs/models/recurrent_ppo/recurrent_ppo.yaml
+15:  hidden_size: 128
+```
+
+The flag is persisted. The throwaway run directory was deleted. **`bug-curator` should
+close that row as verified-fixed.** Note this does not make F3 redundant — F3's real catch
+is the *structurally different model* (a missing modulation block), which no amount of
+config persistence prevents.
+
+---
+
+### 7. Blockers and follow-ups
+
+| # | Item | Owner |
+|---|---|---|
+| 1 | ~~C8 escalation~~ **CLOSED 2026-08-20** — recommended precision flipped to `float32` (template + docs; still no code-level default). | done |
+| 2 | ~~C6~~ **CLOSED 2026-08-20 as superseded** — measured node RAM is 125-515 GB, so `npar: 16` uses ~41 GB (36 % of the smallest node). The 2.5 GB figure was a plan ceiling, not a hardware limit. Buffering left as-is. | done |
+| 3 | **New Known-Bugs row** (still open): `jax_reset` is not bit-reproducible on `animal_property_sampled` across compilations — <=5.96e-08, one float32 ULP, scatter-path FMA fusion at `core.py:1128-1140`. Corroborated independently by `senior-developer` using the shipped fixture generator (unbatched, no `vmap`), so it is compilation-level, not a `vmap` artefact. | `bug-curator` |
+| 4 | **Close the model-size-flag row** as verified fixed (§6). | `bug-curator` |
+| 5 | The plan's §D11/§D12 size arithmetic is superseded by the measured figures in §3. The schema doc already carries the corrected numbers; the plan text still carries the predictions. | `senior-developer` |
+| 6 | §D15's recommendation that `train.py` write a training-time git SHA remains open and out of this plan's scope. | `senior-developer` |
+| 7 | Phase 1 (25,000-episode pilot) has **not** been run — the brief said implementation and local verification only, no remote launches. Everything Phase 1 gates on is green locally. | user |
+
+**Working tree left dirty and uncommitted**, as instructed. `docs/project/references/behavior_analysis/`
+appears untracked in `git status` and is **not mine** — a parallel session's work; I did not
+touch it.
+
+*Implemented by: developer*
+---
+
+### 8. Review-response round (2026-08-20) — 19 items, all addressed
+
+All three reviews passed (`senior-developer`: ready for pilot; `code-reviewer`: no
+silent-wrongness path in the stored data; `env-config-reviewer`: no Critical). The
+consolidated fix list was applied in full. **66 tests pass in 143 s** (was 46).
+
+Two prior open items closed by the reviews rather than by me:
+
+- **The ULP finding got independent corroboration I did not have.** `senior-developer`
+  re-derived the four parity fixtures with the project's shipped generator, which uses
+  **unbatched `jax_reset` only, no `vmap` anywhere**, and its output still differs on
+  `animal_property_sampled` by ≤5.867e-08 with zero integer or boolean differences. Two
+  *unbatched* runs disagreeing by exactly the effect I had attributed to `vmap` settles it
+  as compilation-level FMA fusion rather than a logic bug. My containment (pinned bound +
+  spread test) stands unchanged; the registry row is still owed.
+- **C6 is superseded, not fixed.** Real node RAM is 125–515 GB, so `npar: 16` uses ~41 GB
+  (36 % of the smallest node). The 2.5 GB figure was a plan ceiling, not a hardware limit.
+  I did **not** restructure the block buffering.
+
+#### Tier 1 — correctness and performance
+
+| # | Item | What changed |
+|---|---|---|
+| 1 | **C5 asserted an invariant the plan contradicts** | The guard compared reset-vs-final over *all* `_draw_block` fields, including the two resource `*_init` draws that `jax_step` re-draws on regeneration (`core.py:526-541`, assigned `808-809`). Split into `traj_scan.CONSTANT_DRAW_FIELDS` / `MUTABLE_DRAW_FIELDS`; the loop now walks the constant set only, **and refuses any field that is in neither** so a new draw column cannot silently escape the check. Line citation corrected (`core.py:800-838`, with the sub-ranges named). New test `test_c5_tolerates_resource_property_redraw` sets `properties_std: 0.3` and `regeneration_delay: 1`, pins one food slot to a single cell, starts the agent on it and drives a **constant eat-action policy**, so the re-draw is guaranteed rather than hoped for — it asserts the re-draw actually fired (which is exactly the condition under which the old loop raised) and that `run_chunk` accepts it. A companion asserts the classification is total and that narrowing C5 did not disarm it. |
+| 2 | **`nnx.jit` retraced every chunk** | `make_rollout_fn()` builds the wrapper once in `main`; `run_chunk` now takes it as its first argument and constructs nothing. `test_rollout_fn_is_built_once_and_reused` asserts both structurally (`"nnx.jit" not in inspect.getsource(run_chunk)`) and behaviourally (a shared wrapper traces once over three identical-shape calls; a fresh wrapper traces three times). **Measured, same host/config/block:** in-block **100.9 s → 87.4 s (49.6 → 57.2 eps/s, +15.3 %)** on a 5-chunk block, where the fix avoids 3 of 5 compiles → **~4.5 s per avoided compile**. In production (`blocks_per_cell: 10`, 50 chunks per process) it avoids ~48 compiles ≈ **3.6 min per worker process**; across ~200 worker processes for a ten-run collection that is **~12 core-hours against ~56 core-hours of real work** — roughly a fifth of the total. |
+| 3 | **`device` unguarded** | Added to `MANIFEST_GUARDED_FIELDS` with the reasoning inline (bit-level results are lowering-dependent — my own ULP finding proves it). Schema doc §5 gains a "pairing is exact only per-device/per-lowering" paragraph noting that integer and boolean draws are exact everywhere and only float draws are affected. `test_device_is_manifest_guarded`. |
+| 4 | **Restore-guard degradation was a printed warning** | Metadata reading moved into `read_checkpoint_tree()`; the bare `except Exception` narrowed to the five concrete failure types. An unreadable checkpoint structure is now a **hard `ValueError`** unless `--allow-weak-restore-check` is passed, in which case the manifest records `restore_check: "weak_allowed"` (guarded, so a store cannot be half strict and half weak). Three tests: refusal by default with **no shard written**, the escape hatch recording itself in the manifest and being guarded, and — the one that matters — `test_c0_metadata_is_readable_so_the_strict_check_is_not_vacuous`, which **fails rather than skips** if orbax stops exposing the tree, so guard and tests cannot go vacuous together in silence. |
+| 5 | **Unknown spec keys silently ignored** | `load_spec` now rejects unknown keys **top-level** (against `MANDATORY ∪ OPTIONAL`) and **per-run** (against `RUN_KEYS = path, label, seed_base, allow_ambiguous_scene`), with the error text naming the illusory-pairing hazard. `test_spec_loader_rejects_unknown_keys` covers a top-level typo, the dangerous `seed_bases:` per-run typo, and that each allowed key still passes; `test_spec_loader_accepts_the_shipped_example` is the companion — a validator that rejects its own template is not a validator. |
+
+#### Tier 2 — the precision decision
+
+**6. Recommended precision flipped to `float32`.** There is still no code-level default
+anywhere (`required=True` in the CLI, `_req` in the spec loader), so this is the template
+plus documentation: `configs/trajectory_collection/example.yaml` now sets `float32` and
+carries the measured 12.8 % / 19.3 % figures and the ~100× (not ~400×) noise ratio; the
+collector docstring and the operator README say the same; the schema doc's "decision under
+review" box became the decision, with the reasoning preserved.
+
+**The dormancy consequence is now written down in three places** (guard code, spec
+template, schema doc §5): under `float32`, `assert_obs_representable` returns after the
+finiteness check, so **both magnitude clauses go dormant**. That is correct — `float32`
+cannot misrepresent these magnitudes — but it means a `float32` store carries **no recorded
+evidence about observation range**, so concluding later that a run "could have been
+`float16`" is not supported by anything the store contains.
+
+#### Tier 3 — cheap asserts
+
+| # | Item | Note |
+|---|---|---|
+| 7 | seed-space cliff | Added to `build_manifest`. **One correction to the stated mechanism**: the collision cliff is at **2³², not 2³¹**. Measured — `jnp.asarray(np.int64)` canonicalises `2**31+5` to `-2147483643`, but `PRNGKey` reads that back as uint32 `2147483653`, i.e. the *same* key, so `[2³¹, 2³²)` is a harmless no-op. At 2³² the uint32 itself wraps and `PRNGKey(2**32+5) == PRNGKey(5)` **exactly** — two different recorded `episode_seed` values, one identical episode, invisible to both the parity guard and the duplicate-seed check. I assert the stricter `seed_base + episodes < 2**31` anyway (no canonicalisation at all). `test_seed_space_cliff_is_refused` demonstrates the collision rather than asserting it from memory. |
+| 8 | `max_steps < 32768` | Added to `build_manifest`, naming the int16 columns it bounds. `test_max_steps_beyond_int16_is_refused`. |
+| 9 | `termination_reason != 0` | Added per chunk in `run_chunk`, with an error naming the documented latent env quirk it corresponds to. |
+| 10 | width-enforcement regression test | Two: `test_list_column_width_enforcement_fires` (writer side) and `test_validate_store_shapes_fires_on_a_wrong_width` (reader side, on a deliberately ragged shard). Both have clean-input companions. |
+
+#### Tier 4 — documentation and cosmetics
+
+11. Schema doc gains a **`termination_reason` has two documented latent quirks** section:
+    the injury-disabled instant-kill case (reason 0 on a real death — the collector now
+    refuses it) and the `overeating_death` case (reason 3 on non-terminal rows), with the
+    instruction to read the per-step column jointly with `terminated`, never alone.
+12. `example.yaml`: the non-existent `..._rppo_other_n107` replaced with the real
+    `20260816-152028_rppo_restpremNH_a03_n107`, clearly marked as carrying the override
+    only to show the syntax. "the ONLY permitted per-run key" corrected to the accurate
+    four-key list with the reason `seed_base` is the only *scientific* one.
+13. `load_spec` pre-flights `<run>/models/config.yaml` for every run, once, before any node
+    is launched. `test_spec_loader_preflights_run_paths` also covers a missing `path`
+    (previously a bare `KeyError`).
+14. `--dry-run` no longer deletes completion markers.
+    `test_dry_run_does_not_delete_completion_markers` plants a marker from a notional live
+    collection and asserts a dry run leaves it byte-identical.
+15. Positivity validators for `episodes`, `seed_base`, `npar`, `batch_size`,
+    `shard_episodes`, `blocks_per_cell`, plus type checks on `obs_precision` and `runs`.
+    Note the defaults had to move from `spec.get(k) or default` to `is None`, otherwise an
+    explicit `npar: 0` was silently replaced by the default before reaching the check — the
+    parametrised test caught that.
+16. `assert_scene_unambiguous` now returns `(scene_format, scene_ambiguous)`; the collector
+    no longer re-derives the predicate a third time.
+17. `build_table` derives `n_rows` from the first column and **asserts it is scalar**, so a
+    mis-shaped array column can no longer define its own row count.
+18. The non-degeneracy failure message now names the clip-boundary caveat (a property whose
+    mean sits on a clip bound with small std legitimately collapses to one value).
+19. `_stack_rows`'s broadcast branch marked defensive-only, with what it would mean if it
+    ever fired.
+
+**Not mine, handled as instructed**: the GPU-index limitation is now a one-line comment in
+three places (`load_spec`, `collect_worker.sh`, README) stating plainly that multi-GPU
+fan-out does not work today.
+
+#### Re-verification after the changes
+
+```
+$ python -m pytest tests/test_trajectory_collection.py -q -p no:randomly
+66 passed in 142.82s (0:02:23)
+
+$ python scripts/eval/traj_collect/gen_schema_doc.py --check
+docs/environment/TRAJECTORY_STORE_SCHEMA.md: up to date
+```
+
+V6 (SIGKILL + resume, re-run on the NAS after the changes): 3 blocks, 3,000 episodes,
+642,482 step rows, **zero `.tmp` leftovers, all six shards byte-identical to a clean run**,
+structure/shapes/draws all validate. Driver dry-run still expands 60 cells across 4 nodes
+and leaves no scratch behind.
+
+#### One thing I disagree with, and one correction
+
+- **Item 7's cliff is at 2³², not 2³¹** (see the table above). The assert I added is the
+  stricter 2³¹ bound anyway, so the fix is the same; I am flagging it only because the
+  stated mechanism ("a seed past the cliff wraps before key construction while
+  `episode_seed` records the unwrapped value") is right about the *consequence* but the
+  wrap it describes is benign until 2³².
+- **No disagreement on any item.** The one I would have pushed back on — item 2, on the
+  grounds that five compiles per block is not obviously fatal — turned out to be
+  measurably worth ~20 % of total collection compute once `blocks_per_cell` is taken into
+  account, so the reviewer's call was right and my instinct would have been wrong.
+
+*Review round implemented by: developer*
+
 
 ## Verification Report
 
-> **Verified by**: [agent/person]
-> **Date**: [date]
+> **Verified by**: `senior-developer`
+> **Date**: 2026-08-20
+> **Verdict**: ✅ **APPROVED FOR THE PHASE 1 PILOT.** Three items are routed before Phase 2 (the first full 10⁶-episode run); none of them blocks the pilot.
+
+### Plain-language verdict
+
+The pipeline does what the plan said it would. I re-ran every test myself rather than
+taking the developer's word for it, and got the same numbers: **46 of 46 new tests pass**,
+and the environment reset-parity gate that was previously failing on four scenarios is now
+**fully green (34 passed, 293 skipped)**.
+
+I checked the four things the developer said it had to change, and all four are genuinely
+forced rather than convenient. The most important one: Parquet really cannot store an
+"empty list" column of the kind the plan specified, and 18 of the project's 334 saved
+training configs describe worlds with no animals — so that column type had to change. I
+reproduced the failure myself.
+
+The fixture regeneration deserved the most scrutiny, because regenerating a fixture is also
+how you would make a real failure disappear. It is legitimate. I regenerated the four
+fixtures independently, using the project's own shipped generator rather than the
+developer's script, and got the same numbers back to within floating-point rounding noise,
+with **every single integer and boolean value identical**.
+
+Three things go back out. (a) One safety check — the one that catches "you loaded the wrong
+model into this checkpoint" — quietly weakens itself to a near-useless version if it cannot
+read the checkpoint's metadata, and nothing in the resulting data records that it did so;
+that should be hardened before a run costing several hours. (b) The example configuration
+file still advertises a storage saving (~38 %) that the developer's own measurement
+disproved (12.8 %). (c) The memory-usage concern the developer flagged turns out **not** to
+be a problem — the lab machines have far more RAM than the job needs.
+
+### Files verified
 
 | File | Change | Status | Notes |
 |------|--------|:------:|-------|
-| | | | |
+| `src/utils/trajectory_store.py` | NEW, 1084 lines | ✅ | Single source of truth as specified. `_req` used for every manifest read; no `.get(k, default)` in the module. `list<T>` deviation documented in-module at the point of use. |
+| `scripts/eval/traj_collect/traj_scan.py` | NEW, 389 lines | ✅ | Eager-entry `RuntimeError` present (§A5). Range guard placed after flatten, before write. `OBS_ABS_ERR_MAX` correction documented at the constant. |
+| `scripts/eval/traj_collect/collect_trajectories.py` | NEW, 563 lines | ✅ | Guard order matches §D14: scene guard before `load_env_params`. C5 draw-constancy check runs on every chunk. |
+| `scripts/eval/traj_collect/collect_worker.sh` | NEW, 71 lines | ✅ | Explicit conda interpreter; `cd ../../..` depth correct for the new two-level nesting. |
+| `scripts/eval/traj_collect/run_collection.py` | NEW, 240 lines | ✅ | Serial `run_command.py` launches; `_req` on the eight scientific spec keys. |
+| `scripts/eval/traj_collect/gen_schema_doc.py` | NEW, 104 lines | ✅ | Contract verified by regeneration — see below. |
+| `scripts/eval/traj_collect/README.md` | NEW | ✅ | Operator doc; no stale size claims. |
+| `configs/trajectory_collection/example.yaml` | NEW, 52 lines | ⚠️ | **Stale numbers.** Lines 24–25 still claim `float16` "saves ~38% store-wide" and sits "~400x below" injected noise. The developer's own C8/§4.2 measurements say **12.8 %** and **~100×**. Routed as item R2. |
+| `docs/environment/TRAJECTORY_STORE_SCHEMA.md` | NEW, 545 lines | ✅ | Tables generated from code (verified). Carries the corrected measured numbers and a "decision under review" box. |
+| `tests/test_trajectory_collection.py` | NEW, 1087 lines / 46 tests | ✅ | Every guard tested as firing, each with a non-firing companion. |
+| `tests/fixtures/trajectory_collection/` | NEW, 2 files | ✅ | Real dual-format config + provenance README (closes reviewer note N2). |
+| `docs/environment/SCRIPTS_DEPENDENCY_MAP.md` | MODIFIED | ✅ | Maintenance Contract satisfied — see below. |
+| `tests/env/fixtures/parity/observability_gates_S{1..4}.npz` | MODIFIED | ✅ | Regeneration independently verified legitimate — see below. |
+| `docs/develop/INDEX.md` | MODIFIED | ✅ | Regenerated by script, timestamp-only diff. |
 
-**Conclusion**: [one-line summary]
+**Diff-stat check.** `git diff --stat HEAD` shows 7 files, 362 insertions / 26 deletions, all
+in docs plus the four binary fixtures. No tracked source file was modified — consistent with
+the plan's "NOT MODIFIED (explicit)" list. No out-of-scope file appears. The untracked
+`docs/project/references/behavior_analysis/` is a parallel session's work, correctly
+disclaimed by the developer and left alone.
+
+### Gates executed by the verifier (actual output)
+
+| Gate | Command | Result |
+|---|---|---|
+| New suite | `pytest tests/test_trajectory_collection.py -q -p no:randomly` | **`46 passed in 105.75s`** — matches the reported 103.64 s |
+| Parity gate | `pytest tests/env/test_unified_parity.py -q` | **`34 passed, 293 skipped in 68.85s`** — matches the reported result; previously 4 failed |
+| Schema-doc contract | `gen_schema_doc.py --check`, then regenerate + `diff` | `up to date`, exit 0; regenerated file **byte-identical** to the committed doc |
+
+**The four guards are tested as FIRING, not merely passing on clean input.** Verified by
+reading each test body, not by name:
+
+| Guard | Firing tests | Non-vacuity companion |
+|---|---|---|
+| Scene ambiguity | 4 × `pytest.raises(ValueError, match="828b77e")`, incl. the whole real 12-config corpus and the collector CLI end-to-end | passes on `entities`-only, `legacy`-only and `none`; `--allow-ambiguous-scene` downgrade asserted via `pytest.warns` |
+| Observation range | 4 raising cases: injected out-of-range value, real location-sensor channel, non-finite, magnitude-40 channel below the outer backstop | 2 companions assert in-range data and the legitimate `1.34e-06` value do **not** trip it |
+| Manifest mismatch | parametrised over all 4 cases (env config, `seed_base`, `SCHEMA_VERSION`, `obs_precision`), each asserting no store file changed | identical resume asserted to be accepted |
+| Strict checkpoint restore | wrong `hidden_size`; `encoding_mode` flat-vs-hierarchical (different key set) | correct model accepted first, so "it raised" means something |
+
+Both restore-guard firing tests pass `checkpoint_tree=_real_checkpoint_tree()`, so the
+comparison **with teeth** (against a real on-disk checkpoint's metadata) is the one under
+test — not only the near-vacuous restored-tree comparison. That materially reduces the
+severity of the developer's honesty item 4; see below for what remains.
+
+**The bare-`pyarrow` read is genuinely non-circular.** `test_v9_bare_pyarrow_read_matches_
+the_schema_doc` imports only `pyarrow.parquet`, `json` and `re`; it hardcodes the Arrow type
+names (`halffloat`, `int16`, …) rather than importing them, and compares the file against
+the *schema doc's* generated table plus the manifest's dims. Confirmed by reading the body.
+
+### Deviation-by-deviation judgement
+
+**D1 — zero-width `fixed_size_list` → `list<T>`: FORCED, correctly handled. ✅**
+Reproduced independently on pyarrow 24.0.0. The precise behaviour is slightly different
+from the developer's description and worth recording: `pq.write_table` **succeeds** (512
+bytes on disk) and `pq.read_table` then fails with `ArrowInvalid: Expected all lists to be
+of size=0 but index 1 had size=1`. So it is an unreadable file rather than silently wrong
+data — either way the round trip is broken and the deviation is forced. A width-0
+`list<int16>` round-trips correctly (`[[], [], [], [], []]`), which is the fix. The width is
+**structurally** enforced, not merely asserted: `_list_array` builds offsets as a ramp of
+the manifest width, so ragged rows are unrepresentable, and a payload of the wrong total
+size raises — verified live: `_list_array(zeros(9), n_rows=5, width=2)` →
+`ValueError: list column payload has 9 values, expected 5 rows x width 2 = 10`.
+`validate_store_shapes` re-checks every shard. **One gap**: no regression test feeds a
+wrong-width payload and asserts the refusal — the width path is exercised only positively
+(V9, C10, `validate_store_shapes`). Routed as R3 (low).
+
+**D2 — absolute rather than relative observation-error budget: FORCED, sound. ✅**
+A relative criterion is the wrong instrument near zero, and the concrete case is decisive:
+`1.34e-06` fails a 1e-3 relative test at 2.2 % while its absolute error is `2.9e-08`. Since
+the store's stated error budget is absolute and quoted against absolute injected sensor
+noise, an absolute criterion is the internally consistent choice. `OBS_ABS_ERR_MAX = 1e-2`
+is falsifiable rather than decorative: float16's half-ulp exceeds 1e-2 from |x| ≈ 32, only
+~4.6× above the largest magnitude the reference config produces. The corrected value range
+**is** documented — the schema doc records olfaction reaching **6.95** and the worst
+measured round-trip error of `1.95e-03`, superseding the plan's "values in [0,1]" and
+"2.44e-04". *Minor*: the code comment at `traj_scan.py:65` says the guard fires at |x| ≈ 20
+(from the continuous half-ulp formula) while the report says ≈ 32 (the true first failing
+binade). 32 is correct; cosmetic only.
+
+**D3 — `vmap(jax_reset)` vs unbatched `jax_reset`: genuinely floating-point, not a logic
+bug. ✅ (and I found independent corroboration)**
+This was the item asked for my judgement, and the evidence is stronger than the developer
+knew. While auditing the fixture regeneration I regenerated the four parity fixtures myself
+with the project's shipped generator — a path that uses **unbatched `jax_reset` only, no
+`vmap` anywhere**, in a different process. My output differs from the developer's committed
+fixtures on `stepNNN_animal_property_sampled` by a maximum of **5.867e-08** — the same
+column, the same one-float32-ULP magnitude — with **zero** integer or boolean differences
+anywhere. Two unbatched runs disagreeing by exactly the signature attributed to `vmap`
+establishes that the effect is compilation-level FMA-fusion non-determinism attached to that
+column's scatter assembly, not something `vmap` does to the sampler. A logic bug would not
+reproduce between two runs of the same unbatched code, and would not leave every integer
+draw bit-identical. The bound is pinned by `test_v1_animal_property_divergence_is_one_
+float32_ulp`, which asserts both the magnitude (`≤ 6e-08`) and that **no other column joins
+it** — so spread or growth is caught rather than absorbed. The other 16 draw columns are
+asserted with `np.array_equal` (exact), including the five other property columns drawn by
+the same `_sample_property` helper. The plan's V1 exact-equality policy is therefore
+loosened for exactly one column, with a documented mechanism and a pinned bound. **I accept
+the loosening.** The Known-Bugs row the developer requested is still correct to file.
+
+**D4 — N1 predicate alignment: correct. ✅** `assert_scene_unambiguous` uses
+`env.get("entities") is not None`, byte-identical in meaning to `config_loader.py:429`.
+`test_n1_guard_predicate_matches_the_loader_exactly` asserts both the behaviour and that the
+loader's predicate string is still present in the source, so a future loader change surfaces
+here rather than silently diverging.
+
+### Fixture regeneration — audited independently, legitimate
+
+The mandate asked whether regeneration hid a real failure. Three independent checks say no.
+
+1. **The claimed cause is real.** `git show 84014e4` is a 4-file, 4-line commit changing
+   `random_start_pos: true → false` on exactly the four gate configs, with a message
+   describing the deliberate fix. Fixtures are from `3d20aab` (2026-05-28), the config
+   change from 2026-07-04. The commit archaeology holds.
+2. **Test coverage did not shrink.** The regenerated fixtures carry a different key set
+   (2618 vs 2921 keys) because they use the post-unified-animal-refactor schema. This is
+   **not** a weakening: `_fixture_subset` (pre-existing, documented) prefers the legacy
+   `pred_*`/`neutral_*` key and falls back to slicing the unified `animal_*` array by
+   `predator_indices`/`neutral_indices`, and **raises loudly if neither exists**. I
+   enumerated every key the test actually reads: the 404 "lost" keys are exactly
+   `pred_pos`/`neutral_pos`/`pred_property_sampled`/`neutral_property_sampled`, and the 202
+   "gained" keys are exactly the `animal_pos`/`animal_property_sampled` arrays they are
+   recovered from. `num_pred`/`num_neutral` are unchanged (1/2). 9 of the 34 fixtures were
+   already in this schema before the change, so the new form is the modern one, not a
+   bespoke one.
+3. **The shipped generator reproduces the committed fixtures.** I copied
+   `scripts/fixtures/generate_parity_fixtures.py` unmodified (except output dir and repo
+   root, which it computes from `__file__`), restricted it to the four gate configs, and
+   ran it. Key set: **identical, 2618**. Values: **every integer and boolean array
+   identical**; the only differences are float noise — worst relative difference
+   **1.413e-07**, all inside the test's own `rtol=atol=1e-5`, and dominated by the same
+   `animal_property_sampled` ULP effect discussed above. The developer's scratch script
+   produced what the shipped generator produces.
+
+Note for the record: the shipped generator has **no output-directory argument** and would
+regenerate all 34 fixtures if run as-is. Using a scratch script scoped to four files was the
+right call, not a shortcut.
+
+### Maintenance contracts
+
+- **`SCRIPTS_DEPENDENCY_MAP.md` — satisfied ✅.** New subpackage is exactly this document's
+  case, and it was updated in the same change: §0 records `scripts/eval/traj_collect/` as
+  the *second* two-level nesting with the `parents[3]` / `cd ../../..` depths spelled out;
+  §1a gains two bare-import edges (`collect_trajectories → traj_scan`, and the test's
+  `sys.path` insert); §3 gains five rows with stakes and rewrite-triggers; a new **Cluster
+  D** records the import/path coupling and states explicitly that it is disjoint from
+  Cluster B; the footer date is updated with a summary.
+- **Schema doc generated, not hand-written — satisfied ✅.** `gen_schema_doc.py --check`
+  exits 0, and regenerating produces a file byte-identical to the committed one.
+- **Config-system contracts — correctly not triggered ✅.** No change to
+  `config_loader.py`, `state.py` `EnvParams`, or any env YAML schema, so `CONFIG_GUIDE.md`,
+  `02_config_schema.md` and the `CONFIG_CRITICAL_SETTINGS.md` change log are not due. The
+  plan states this omission is deliberate and the diff confirms it.
+
+### Speed-change review — ✅ no regression
+
+This is a new writer, not a modification of an existing path, so the relevant bar is V8's
+`≥ 10 eps/s` floor. Measured **47.9–49.6 eps/s** in-block (39.2–42.6 including the fixed
+~17 s startup) against the §A8 per-episode baseline of **14.3 eps/s** — **+235 % in-block**.
+The measurement is sound for the purpose: same host, CPU, single process, same checkpoint
+(`59100070`) and config, `batch_size=1024`, and a 5,000-episode block is a long enough
+budget that the fixed startup is amortised and separately reported rather than dominating.
+Mean episode length came in at 204.8 steps against the plan's assumed 192, which the
+developer correctly propagated into a revised ≈ 5.6 core-hours/run.
+
+### Assessment of the developer's own honesty list
+
+| # | Self-reported weakness | My assessment | Action |
+|---|---|---|---|
+| 1 | `OBS_ABS_MAX = 1e4` subsumed by the 1e-2 error budget | **Confirmed and correctly characterised.** Clause 2 is checked first, so it is reachable, but only for values that would also trip clause 3 (which fires from \|x\| ≈ 32). It survives as a distinct message for a gross magnitude. Harmless. **But there is a consequence the developer did not connect** — see R4. | Accept as-is |
+| 2 | PRNG parity guard cannot catch a wrong seed *list* | **Correct, and adequately covered elsewhere.** Both sides consume the same seed list by construction, so the gap is real. It is closed by `test_seeds_advance_per_episode_and_are_unique`, V1's seed-to-row check (which has an explicit non-vacuity companion asserting a one-row roll *would* be caught), and `validate_store_structure`'s no-duplicate-seed pass over the whole store. Documented in the guard's own docstring. | Accept |
+| 3 | C3 is circular | **Correct, labelled, and genuinely compensated.** V9's bare-`pyarrow` read is non-circular by inspection (imports nothing from `trajectory_store`, hardcodes Arrow type names, compares against the doc and the manifest). | Accept |
+| 4 | `assert_restored_tree_matches` is near-vacuous without the checkpoint metadata tree | **Correct, and this is the one that needs strengthening.** The teeth *are* tested — both firing tests pass a real `checkpoint_tree` — so the check works. The problem is the degradation path: `collect_trajectories.py:174-180` catches a bare `Exception`, `print`s a warning, and continues with `checkpoint_tree=None`, which reduces the guard to a comparison of the restored tree against itself. Under `xargs -P 16` across ~160 workers with output going to per-node log files, a printed warning is not a control. Worse, **nothing in `_manifest.json` records which version of the check ran**, so a store built under the degraded check is indistinguishable afterwards from one built under the strict check. That is the same class of defect §D14b was written to prevent for the scene format. | **Route as R1 — strengthen before Phase 2** |
+
+### Flagged issue: peak RSS — ✅ acceptable, no change needed
+
+The developer flagged 2,554 MiB peak RSS against a 2.5 GB ceiling, caused by buffering a
+whole 5,000-episode block (5 chunks) before `pa.concat_tables` and writing —
+`collect_trajectories.py:527-548`. Confirmed by reading: peak scales with `shard_episodes`,
+not `batch_size`, exactly as described. **Checked actual node RAM** rather than reasoning
+about it:
+
+| Node | Total RAM | Available | Cores |
+|---|---:|---:|---:|
+| 101 | 128 GB | 116 GB | 36 |
+| 103 | 125 GB | 112 GB | 34 |
+| 104 | 125 GB | 112 GB | 36 |
+| 105 | 125 GB | 112 GB | 36 |
+| 106 | 257 GB | 200 GB | 36 |
+| 113 | 515 GB | 489 GB | 64 |
+
+At the default `npar: 16` (cpu), 16 × 2.55 GiB ≈ **41 GB**, which is **36 % of available RAM
+on the smallest node measured**. The 2.5 GB figure was a self-imposed plan ceiling, not a
+hardware constraint, and the hardware has roughly 3× the headroom needed. **No reduction in
+worker count is required and no rewrite to incremental `ParquetWriter` is justified.** The
+plan's `≤ 2.5 GB` checkpoint should simply be recorded as superseded by the measured node
+capacity. If `shard_episodes` is ever raised above 5,000, re-measure.
+
+### The pending float32 flip — what assumes float16
+
+The pre-registered rule selects `float32`: the measured store-wide saving is **12.8 %**,
+below the 20 % adoption threshold, and the rule was registered before the measurement. The
+developer correctly escalated rather than rationalising, and correctly changed no default.
+Code audit for float16 assumptions:
+
+| Location | Assumes float16? | Verdict |
+|---|---|---|
+| `collect_trajectories.py` `--obs-precision` | No — `required=True`, `choices=[...]` | ✅ clean |
+| `run_collection.py` spec loading | No — `obs_precision` read via `_req` | ✅ clean |
+| `trajectory_store.py` `_elem_type` / `_numpy_elem` | No — raises when `obs_precision` is not one of the two | ✅ clean |
+| `TRAJECTORY_STORE_SCHEMA.md` | No — carries the corrected 12.8 % figure and a "decision under review" box | ✅ clean |
+| `configs/trajectory_collection/example.yaml:23-25` | **Yes** — value `float16` plus comments claiming "~38 % store-wide" and "~400x below … noise" | ⚠️ **R2** |
+| `traj_scan.assert_obs_representable` | Structurally — at `float32` it returns after the finiteness check, so **both** magnitude clauses are dormant | ⚠️ **R4** |
+| Plan §D11/§D12 text | Yes — superseded predictions retained | Acknowledged as developer follow-up 5 |
+
+R4 is worth stating plainly because it is a consequence nobody has written down: **flipping
+the default to `float32` silently retires the observation range guard.** That is defensible
+— `float32` has no range problem worth guarding — but it means the four V5b firing cases
+cover a code path the production collection will no longer take, and an unbounded or
+runaway sensor channel would then be recorded rather than refused. The finiteness check
+still runs, which catches `inf`/`nan`.
+
+### Routed items
+
+| # | Item | Severity | Owner | Blocks |
+|---|---|---|---|---|
+| **R1** | Harden the checkpoint-restore degradation path: make an unreadable checkpoint-metadata tree a hard failure unless an explicit opt-out flag is passed (mirroring `--allow-ambiguous-scene`), and record `restore_check: "strict" \| "degraded"` in `_manifest.json` so a store built under the weak check is self-identifying. Narrow the bare `except Exception` while there. | Medium | `senior-developer` → `developer` | **Phase 2**, not the pilot |
+| **R2** | `configs/trajectory_collection/example.yaml:23-25` — replace the "~38 % store-wide / ~400x below noise" comments with the measured 12.8 % / ~100×, and set the example value to whatever precision the user decides (R5). | Low | `developer` | No |
+| **R3** | Add one regression test that a wrong-width payload is refused by `build_table` / `_list_array`. The enforcement is structural and works (verified live); it is simply untested. | Low | `developer` | No |
+| **R4** | Record in the schema doc that at `obs_precision: float32` the magnitude clauses of the range guard do not run, so only finiteness is checked. | Low | `developer` | No |
+| **R5** | **Decision for the user**: precision default. The pre-registered rule selects `float32` (12.8 % < 20 %). Cost of `float32` is ~15 % more bytes on a corpus now measured at ~8 GB/run rather than the budgeted 45 GB — i.e. ~1 GB per run, against a lossless store. My recommendation is to follow the pre-registered rule and use **`float32`**: the threshold existed precisely so this call would not be made after seeing the data, and the measurement removed the only argument for lossy storage. | Decision | user | Phase 1 spec |
+| **R6** | Known-Bugs row for the `animal_property_sampled` one-ULP FMA divergence (`core.py:1128-1140`), and closure of the model-size-flag row as verified-fixed (§6). Both confirmed by my own reproduction. | Low | `bug-curator` | No |
+| **R7** | C6's "≤ 2.5 GB" checkpoint is superseded by measured node capacity (41 GB of 112 GB available at `npar=16`). Record and close; no code change. | Info | `senior-developer` | No |
+| **R8** | §D15's recommendation that `train.py` record a training-time git SHA remains open and out of scope here. | Low | `senior-developer` | No |
+
+### What this verification did NOT cover
+
+- **V6 on the NAS** (`SIGKILL` mid-block, then resume) was operator-run by the developer and
+  not repeated by me. I verified its pytest analogues — `test_c9_resume_is_a_noop` and
+  `test_resume_after_a_lost_block_is_bit_identical` — both pass. The CIFS mount is confirmed
+  (`//192.168.0.250/cocoanlab01`, 70 % used, 62 TB free), so the fsync design is addressing a
+  real filesystem property.
+- **V2** (5-seed parity against the legacy per-episode loop) was operator-run and not
+  repeated; it needs a real checkpoint and a long serial loop.
+- **Phase 1 itself.** No collection has been run at any scale beyond the 5,000-episode
+  measurement block.
+- **The §A11 faithfulness assumption**, which the plan itself states no check can cover.
+  §D14's guard refuses ambiguous runs at the door; that guard is verified as firing.
+
+**Conclusion**: ✅ **Ready for the Phase 1 pilot.** All 46 new tests and the previously-red
+parity gate pass under my own execution; the four deviations are genuinely forced, correctly
+documented, and — for the one that loosens a pre-registered tolerance — independently
+corroborated as floating-point rather than logic; the fixture regeneration is legitimate,
+verified by re-deriving it with the shipped generator; the maintenance contracts are
+satisfied; and the flagged RSS concern is a non-issue against measured lab-node capacity.
+Before Phase 2, harden the restore-guard degradation path (R1) and settle the precision
+default (R5).
+
+*Verified by: senior-developer*
 
 ---
 

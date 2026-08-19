@@ -1,0 +1,986 @@
+agent:
+  K_epochs: 4
+  activation: relu
+  actor_fc_layers:
+  - 128
+  - 128
+  algorithm: RecurrentPPO
+  critic_fc_layers:
+  - 128
+  - 128
+  encoding_mode: hierarchical
+  entropy_coef: 0.01
+  eps_clip: 0.1
+  fc_layers:
+  - 128
+  - 128
+  frame_stack: 1
+  gae_lambda: 0.95
+  gamma: 0.95
+  hidden_size: 128
+  hierarchical_params:
+    default_mlp:
+    - 128
+    - 128
+    multimodal_hub:
+    - 128
+    - 128
+    unimodal_overrides:
+      olfaction:
+      - 128
+      - 128
+      visual:
+      - 128
+      - 128
+  lr_actor: 0.0005
+  lr_critic: 0.0001
+  max_grad_norm: 0.5
+  modulation:
+    type: null
+  return_mode: MC
+  rnn_type: GRU
+  sequence_length: 128
+  use_layer_norm: true
+  vf_coef: 0.5
+behavior_measures:
+  cue_radius: 3.0
+  enabled: true
+  eval_max_steps: 500
+  eval_n_episodes: 200
+  eval_obs_noise: training
+  eval_output_root: results/eval
+  eval_policy_mode: deterministic
+  eval_seeds:
+  - 15810353
+  - 48773805
+  - 66180795
+  - 74502574
+  - 80020205
+  - 94067870
+  - 125204184
+  - 137046513
+  - 145857092
+  - 163945743
+  - 170075129
+  - 184566854
+  - 188226768
+  - 191664964
+  - 193376308
+  - 194489917
+  - 197860369
+  - 202244314
+  - 208792607
+  - 227939461
+  - 245951460
+  - 253415745
+  - 271185814
+  - 275121931
+  - 279004308
+  - 300116173
+  - 300211767
+  - 327087749
+  - 331334161
+  - 345075200
+  - 346328508
+  - 354826746
+  - 356942049
+  - 358571615
+  - 392022359
+  - 406886645
+  - 417983442
+  - 429299595
+  - 432652533
+  - 460817075
+  - 487284116
+  - 487991439
+  - 502381220
+  - 512746651
+  - 514446424
+  - 527166791
+  - 593883019
+  - 594336918
+  - 595114158
+  - 604267306
+  - 619179888
+  - 630487793
+  - 647492281
+  - 652727865
+  - 670802254
+  - 689805533
+  - 699704628
+  - 709091226
+  - 717885406
+  - 727876280
+  - 735708086
+  - 746248854
+  - 761338719
+  - 776986664
+  - 781482251
+  - 787359109
+  - 795556160
+  - 796282693
+  - 818236852
+  - 832103482
+  - 864178267
+  - 872709139
+  - 877308582
+  - 878721193
+  - 882294417
+  - 897559571
+  - 929893138
+  - 932688238
+  - 934620677
+  - 937843452
+  - 938776597
+  - 942484272
+  - 944062963
+  - 952224741
+  - 957106590
+  - 958113306
+  - 967196436
+  - 967354525
+  - 985514123
+  - 991873799
+  - 994157307
+  - 1002275723
+  - 1008363426
+  - 1011671399
+  - 1012682731
+  - 1021568550
+  - 1064348453
+  - 1068008206
+  - 1068999196
+  - 1074497556
+  - 1075985461
+  - 1084512518
+  - 1085781156
+  - 1102145673
+  - 1130604998
+  - 1171300113
+  - 1173749072
+  - 1188802710
+  - 1190961761
+  - 1193242762
+  - 1196217438
+  - 1200888233
+  - 1212254291
+  - 1213835295
+  - 1214129971
+  - 1221362418
+  - 1233945443
+  - 1294585271
+  - 1303944408
+  - 1352408539
+  - 1353521562
+  - 1356488968
+  - 1363047213
+  - 1367435608
+  - 1382689816
+  - 1405375275
+  - 1405681632
+  - 1421454891
+  - 1426602464
+  - 1427756342
+  - 1435384430
+  - 1438414600
+  - 1455819992
+  - 1465647934
+  - 1466836457
+  - 1468235992
+  - 1474200732
+  - 1495336619
+  - 1496303882
+  - 1497586439
+  - 1503807855
+  - 1504361615
+  - 1514331119
+  - 1539871430
+  - 1540770720
+  - 1551254893
+  - 1580016184
+  - 1596387605
+  - 1599364551
+  - 1627981025
+  - 1631871624
+  - 1634535063
+  - 1642822537
+  - 1648932250
+  - 1656896192
+  - 1662057958
+  - 1671565831
+  - 1675819613
+  - 1676602827
+  - 1678403331
+  - 1683408585
+  - 1688060241
+  - 1689907232
+  - 1707061845
+  - 1708709736
+  - 1711206424
+  - 1728218298
+  - 1728507683
+  - 1748095465
+  - 1764532445
+  - 1766867110
+  - 1777324408
+  - 1787264314
+  - 1788162810
+  - 1788288546
+  - 1803345591
+  - 1807519525
+  - 1832669144
+  - 1836270334
+  - 1837539165
+  - 1843166519
+  - 1843824993
+  - 1906728919
+  - 1917963003
+  - 1928628491
+  - 1934070333
+  - 1944623249
+  - 1970642946
+  - 1981113450
+  - 1990212659
+  - 2014450024
+  - 2019291965
+  - 2060924130
+  - 2065659505
+  - 2077711329
+  - 2084558134
+  - 2095133046
+  - 2110414631
+  - 2131733184
+  - 2139123294
+  motif_features:
+  - net_displacement
+  - path_length
+  - threat_distance_change_rate
+  - min_threat_distance
+  - bush_occupancy_fraction
+  - eat_events_per_window
+  - action_entropy
+  - mode_action_fraction
+  - stay_in_place_fraction
+  - drive_injury_change
+  motif_kmeans_k: 6
+  motif_kmeans_seed: 42
+  motif_standardise: zscore_pooled
+  motif_window_K: 7
+  obs_window: 5
+body:
+  death_penalty: 100
+  eating_nutrition_cost: 1.0
+  eating_reward_penalty: 0.0
+  food_nutrition_gain: 6
+  injury_smoothing_duration: 3
+  max_injury: 100
+  max_nutrition: 100
+  max_satiation: 100
+  metabolic_cost: 1.0
+  nutrition_to_satiation_scaling_factor: 1.0
+  overeating_death: false
+  random_start_injury: false
+  random_start_nutrition: false
+  random_start_satiation: false
+  recovery_accel_rate: 0.5
+  recovery_base_rate: 0.1
+  satiation_setpoint: 100
+  start_nutrition: 100
+  start_satiation: 100
+  use_homeostatic_reward: true
+  with_injury: true
+  with_nutrition: true
+  with_satiation: true
+environment:
+  eat_action_enabled: true
+  entities:
+  - attack_delay: 3
+    behaviour: hunt
+    class: predator
+    count: 1
+    damage:
+    - 5.0
+    - 120.0
+    detection_range: 10
+    disengage_on_contact: true
+    hunt_stamina_threshold: 0.3
+    lose_interest_multiplier: 3.0
+    max_stamina: 60
+    move_interval: 1
+    nociception_intensity: 0.9
+    patrol_area:
+    - - 1
+      - 1
+    - - 10
+      - 10
+    properties:
+    - 0.0
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    spawn_area:
+    - - 1
+      - 1
+    - - 10
+      - 10
+    stamina_recovery_rate: 1.0
+    tag: full
+  - attack_delay: 3
+    behaviour: hunt
+    class: neutral
+    count: 1
+    damage:
+    - 0.0
+    - 0.0
+    detection_range: 10
+    disengage_on_contact: true
+    hunt_stamina_threshold: 0.3
+    lose_interest_multiplier: 3.0
+    max_stamina: 60
+    move_interval: 1
+    nociception_intensity: 0.0
+    patrol_area:
+    - - 1
+      - 1
+    - - 10
+      - 10
+    properties:
+    - 0.0
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    spawn_area:
+    - - 1
+      - 1
+    - - 10
+      - 10
+    stamina_recovery_rate: 1.0
+    tag: rab
+  height: 10
+  location_areas:
+  - area:
+    - - 1
+      - 1
+    - - 10
+      - 10
+    type: grass
+  - area:
+    - - 0
+      - 0
+    - - 0
+      - 0
+    type: sand
+  max_steps: 500
+  neutral_animals:
+  - count: 1
+    move_interval: 1
+    name: rabbit
+    nociception_intensity: 0.1
+    patrol_area:
+    - - 1
+      - 1
+    - - 5
+      - 5
+    properties:
+    - 0.0
+    - 0.5
+    - 0.7
+    - 0.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.4
+    - 0.4
+    - 0.0
+    - 0.0
+    spawn_area:
+    - - 1
+      - 1
+    - - 5
+      - 5
+  - count: 1
+    move_interval: 1
+    name: rabbit
+    nociception_intensity: 0.1
+    patrol_area:
+    - - 6
+      - 6
+    - - 10
+      - 10
+    properties:
+    - 0.0
+    - 0.5
+    - 0.7
+    - 0.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.4
+    - 0.4
+    - 0.0
+    - 0.0
+    spawn_area:
+    - - 6
+      - 6
+    - - 10
+      - 10
+  obstacles:
+  - area:
+    - - 1
+      - 1
+    - - 5
+      - 5
+    blocking: false
+    count: 3
+    damage:
+    - 1
+    - 5
+    name: rock
+    nociception_intensity: 0.9
+    properties:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - area:
+    - - 1
+      - 6
+    - - 5
+      - 10
+    blocking: false
+    count: 3
+    damage:
+    - 1
+    - 5
+    name: rock
+    nociception_intensity: 0.9
+    properties:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - area:
+    - - 6
+      - 1
+    - - 10
+      - 5
+    blocking: false
+    count: 3
+    damage:
+    - 1
+    - 5
+    name: rock
+    nociception_intensity: 0.9
+    properties:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - area:
+    - - 6
+      - 6
+    - - 10
+      - 10
+    blocking: false
+    count: 3
+    damage:
+    - 1
+    - 5
+    name: rock
+    nociception_intensity: 0.9
+    properties:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - area:
+    - - 5
+      - 15
+    - - 5
+      - 15
+    blocking: true
+    count: 0
+    damage:
+    - 0.1
+    - 0.5
+    name: tree
+    nociception_intensity: 0.1
+    properties:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - area:
+    - - 1
+      - 1
+    - - 5
+      - 5
+    blocking: false
+    count: 3
+    damage:
+    - 0.0
+    - 0.0
+    hides_agent: true
+    name: bush
+    nociception_intensity: 0.0
+    properties:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - area:
+    - - 1
+      - 6
+    - - 5
+      - 10
+    blocking: false
+    count: 3
+    damage:
+    - 0.0
+    - 0.0
+    hides_agent: true
+    name: bush
+    nociception_intensity: 0.0
+    properties:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - area:
+    - - 6
+      - 1
+    - - 10
+      - 5
+    blocking: false
+    count: 3
+    damage:
+    - 0.0
+    - 0.0
+    hides_agent: true
+    name: bush
+    nociception_intensity: 0.0
+    properties:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - area:
+    - - 6
+      - 6
+    - - 10
+      - 10
+    blocking: false
+    count: 3
+    damage:
+    - 0.0
+    - 0.0
+    hides_agent: true
+    name: bush
+    nociception_intensity: 0.0
+    properties:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+  placement:
+    mode: per_entity
+  predators:
+  - attack_delay: 3
+    count: 1
+    damage:
+    - 15.0
+    - 45.0
+    detection_range: 5
+    hunt_stamina_threshold: 0.7
+    lose_interest_multiplier: 1.5
+    max_stamina: 30
+    move_interval: 1
+    name: predator
+    nociception_intensity: 0.9
+    patrol_area:
+    - - 1
+      - 1
+    - - 10
+      - 10
+    properties:
+    - 0.0
+    - 0.7
+    - 0.5
+    - 0.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.4
+    - 0.4
+    - 0.0
+    - 0.0
+    spawn_area:
+    - - 1
+      - 1
+    - - 10
+      - 10
+    stamina_recovery_rate: 1
+  random_start_pos: true
+  resources:
+  - count: 2
+    damage:
+    - 0.0
+    - 0.0
+    max_consumption: 12
+    name: food
+    nociception_intensity: 0.0
+    properties:
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    regeneration_delay: 0
+    spawn_area:
+    - - 1
+      - 1
+    - - 5
+      - 5
+    type: food
+  - count: 2
+    damage:
+    - 0.0
+    - 0.0
+    max_consumption: 12
+    name: food
+    nociception_intensity: 0.0
+    properties:
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    regeneration_delay: 0
+    spawn_area:
+    - - 1
+      - 6
+    - - 5
+      - 10
+    type: food
+  - count: 2
+    damage:
+    - 0.0
+    - 0.0
+    max_consumption: 12
+    name: food
+    nociception_intensity: 0.0
+    properties:
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    regeneration_delay: 0
+    spawn_area:
+    - - 6
+      - 6
+    - - 10
+      - 10
+    type: food
+  - count: 2
+    damage:
+    - 0.0
+    - 0.0
+    max_consumption: 12
+    name: food
+    nociception_intensity: 0.0
+    properties:
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    regeneration_delay: 0
+    spawn_area:
+    - - 6
+      - 1
+    - - 10
+      - 5
+    type: food
+  rest_action_enabled: true
+  start_pos:
+  - 5
+  - 5
+  width: 10
+episodes: 100
+perceptual_noise:
+  enabled: false
+  modalities:
+    collision:
+      clip_max: 1.0
+      clip_min: 0.0
+      injury_noise_scale: 0.0
+      mode: constant
+      sigma: 0.01
+    extero_nociception:
+      clip_max: 100.0
+      clip_min: 0.0
+      injury_noise_scale: 1.5
+      mode: state_dependent
+      sigma: 0.1
+    injury:
+      clip_max: 1.0
+      clip_min: 0.0
+      injury_noise_scale: 1.5
+      mode: state_dependent
+      sigma: 0.0
+    interoceptive_nociception:
+      clip_max: 1.0
+      clip_min: 0.0
+      injury_noise_scale: 1.5
+      mode: state_dependent
+      sigma: 0.1
+    location:
+      clip_max: 1.0
+      clip_min: -1.0
+      injury_noise_scale: 0.0
+      mode: constant
+      sigma: 0.01
+    nutrition:
+      clip_max: 1.0
+      clip_min: 0.0
+      injury_noise_scale: 1.5
+      mode: state_dependent
+      sigma: 0.0
+    olfaction:
+      clip_max: 100.0
+      clip_min: 0.0
+      injury_noise_scale: 1.5
+      mode: state_dependent
+      sigma: 0.2
+    proprioception:
+      clip_max: 1.0
+      clip_min: 0.0
+      injury_noise_scale: 0.0
+      mode: constant
+      sigma: 0.05
+    satiation:
+      clip_max: 1.0
+      clip_min: 0.0
+      injury_noise_scale: 1.5
+      mode: state_dependent
+      sigma: 0.1
+    visual:
+      clip_max: 100.0
+      clip_min: 0.0
+      injury_noise_scale: 1.5
+      mode: state_dependent
+      sigma: 0.2
+seed: 42
+sensory:
+  collision_sensor_range: 1
+  decay_power: 2.0
+  injury_observable: false
+  interoceptive_convolution_enabled: true
+  interoceptive_kernel_length: 12
+  interoceptive_kernel_tau: 3.0
+  interoceptive_nociception_enabled: true
+  location_sensor: false
+  nociception_enabled: true
+  nociception_size: 1
+  nutrition_observable: false
+  olfactory_enabled: true
+  proprioception_enabled: true
+  sensor_radius: 20
+  using_sensory: true
+  vector_size: 5
+  visual_sensor_enabled: true
+  visual_sensor_range: 0
+tag: recurrent_ppo_08-singlePredRabbit_disengage_s42
+testing:
+  auto_render_after_eval: true
+  evaluation_episodes: 1
+  num_envs: 1
+  record_stats: true
+  record_true_observations: true
+  render_video: true
+  seed: 8217
+training:
+  auto_analysis: false
+  checkpoint_frequency: 10000
+  device: auto
+  episodes: 100
+  eval_stats_episodes: 100
+  eval_stats_num_envs: 10
+  eval_video_episodes: 3
+  log_accumulate: true
+  log_interval: 10
+  max_checkpoints_to_keep: 20
+  num_envs: 128
+  seed: 42
+  stats_during_training: false
+  video_during_training: true
+visualization:
+  activations:
+    activation_cmap: magma
+    activation_range:
+    - 0.0
+    - 4.0
+    attribution_cmap: seismic
+    attribution_range:
+    - -1.0
+    - 1.0
+    bg_color: '#1A1A1A'
+    dpi: 100
+    enabled: false
+    header_height: 0.6
+    label_color: '#B0B0B0'
+    row_height: 0.8
+    save_h5: true
+    text_color: '#E0E0E0'
+    with_lrp: false
+  enabled: true
+  font_family: sans-serif
+  fps: 5
+  icon_scale: 1.0
+  icons:
+    agent: agent
+    agent_bush: bush_agent
+    agent_food: agent_food
+    agent_hiding_predator: agent_danger
+    agent_predator: agent_predator
+    bush: bush
+    food: food
+    hiding_predator: danger
+    neutral: neutral
+    predator: predator
+    rock: rock
+    tree: tree
+  learning_curves:
+    bg_color: '#F8F9FA'
+    colors:
+      epsilon: '#FCC419'
+      milestone: '#FA5252'
+      reward_main: '#4C6EF5'
+      reward_raw: '#A5D8FF'
+      steps_main: '#20C997'
+      steps_raw: '#C3FAE8'
+    dpi: 150
+    figsize:
+    - 12
+    - 12
+    window_divisor: 100
+  local_view_size: 5
+  q_table:
+    arrow_color_threshold: 0.7
+    bg_color: '#F8F9FA'
+    cmap: viridis
+    dpi: 150
+    food_color: '#51CF66'
+    label_color: '#495057'
+    title_color: '#343A40'
+  video_dpi: 300
+wandb:
+  disabled: false
+  entity: sungwoolee
+  group: hypervigilance
+  job_type: prod
+  mode: online
+  name: recurrent_ppo_08-singlePredRabbit_disengage_s42
+  project: grid_world_pain
