@@ -235,20 +235,24 @@ Measured directly, on a realistic layout (1,000 episodes × 192 steps × 22 obst
 | obstacle position columns, kept per-step | 0.08 MB |
 | same, hoisted to per-episode | 0.02 MB |
 | saving **on those columns** | 75 % |
-| those columns as a share of total payload | **~1 %** (0.08 MB against a 21.5 MB observation block) |
-| **net saving on the store** | **~0.75 %** |
+| those columns as a share of total payload | **~0.5 %** (0.08 MB against a 17.37 MB `float16` observation block, §D11) |
+| **net saving on the store** | **well under 1 %** |
 
-Three-quarters of one percent — in exchange for schema complexity and a join at read time on every analysis wanting agent-versus-obstacle geometry, which is the single most common question this store will be asked. **Recorded here so nobody re-proposes it.**
+Well under one percent — in exchange for schema complexity and a join at read time on every analysis wanting agent-versus-obstacle geometry, which is the single most common question this store will be asked. **Recorded here so nobody re-proposes it.**
 
-Supporting column-level measurements on 200,000 real rows, zstd-compressed, showing why the redundancy was already gone before the optimisation was considered:
+Supporting column-level measurements on 200,000 real rows, showing why the redundancy was already gone before the optimisation was considered:
 
-| Column shape | CSV | Parquet + zstd | Ratio |
+| Column shape | CSV | Parquet + zstd | Ratio **vs CSV** |
 |---|---:|---:|---:|
 | constant integer (an obstacle position that never moves) | 391 KB | **2 KB** | 213× |
 | mostly-`False` boolean flag | 1,162 KB | **11 KB** | 104× |
 | 6-value low-cardinality string | 911 KB | **71 KB** | 13× |
 
-The general rule, and the one that should govern any future schema debate: *in a columnar store, never size from raw byte counts, and do not restructure the schema to remove redundancy the encoder already removes for free.* Integer, boolean, and constant columns are effectively free. **Float columns are the only ones that cost anything (§D11).**
+> **⚠️ Denominator warning — this table is CSV-denominated, not raw-binary-denominated.** CSV is a text encoding and is itself several times larger than packed binary (an `int16` costs 2 bytes raw but ~3–4 characters as text; a bool costs 1 byte raw but 5 characters as `"True,"`). **These ratios must never be divided into raw binary byte counts.** Doing so is what produced the wrong conclusion recorded in §D12. When sizing this store, use raw-binary-denominated figures only.
+>
+> The obstacle measurement above happens to survive the correction because it was also measured raw-denominated: 0.08 MB compressed against `192,000 rows × 88 B = 16.9 MB` raw is **211× vs raw binary**. Genuinely constant columns really are free. Varying low-cardinality columns are cheap but not free — see §D11's non-float estimate.
+
+The general rule, and the one that should govern any future schema debate: *do not restructure the schema to remove redundancy the encoder already removes for free, and always check what a compression ratio is denominated in before using it.* Constant and near-constant integer / boolean columns are effectively free. **Float columns are the only ones that cost real bytes (§D11).**
 
 The corollary is why this is a net simplification rather than a concession. The hoisting draft required a permanent regression test asserting that obstacles never move — a correctness assumption baked into the store — purely to protect a 0.75 % saving. **Deleting the optimisation deletes the assumption and the test with it.** If moving obstacles are ever added, this store records the movement correctly, with no schema change and no silent corruption.
 
@@ -416,62 +420,67 @@ Final checkpoint only, but the spec format accepts a list without redesign (`che
 
 ##### The one fact that governs the whole budget
 
-**Only float columns cost anything.** Everything else — integers, booleans, positions, timers, counters, the episode key, the step index — is collapsed by Parquet's encodings to a rounding error. This is measured, not assumed (§D4.1: 213× on a constant integer, 104× on a sparse boolean, 13× on a 6-value low-cardinality column).
+**Only float columns cost real bytes.** Integers, booleans, positions, timers, counters, the episode key, and the step index are collapsed by Parquet's encodings to a small fraction of their raw size — a genuinely constant column measures **211× smaller than raw binary** (§D4.1). Varying low-cardinality columns are cheap but not free.
 
-Floats resist compression, and **smoothness does not help**. A smooth, autocorrelated float column and a pure-random float column both compress at **1.9×**, because the low-order mantissa bits are effectively random even in a smooth signal and those bits are most of the bytes. An earlier draft of this plan asserted that real sensor data would compress better than a worst-case benchmark; **that claim is false and must not be repeated.** Use 1.9× for every varying float column.
+**Floats barely compress, and smoothness does not help.** Measured on a realistic observation block — `192,000 rows × 54 values`, autocorrelated within episode, values in `[0,1]`, `fixed_size_list`, zstd — i.e. exactly the schema above:
+
+| | size | bytes / value | vs raw |
+|---|---:|---:|---:|
+| raw `float32`, uncompressed | 41.47 MB | 4.00 | — |
+| Parquet `float32` + zstd | 33.76 MB | **3.26** | 1.23× |
+| Parquet `float16` + zstd | 17.37 MB | **1.68** | 2.38× |
+
+**`float16` saves 48.6 % against `float32`** on this block (1.94× smaller). A pure-noise control gave 52.9 %, confirming that autocorrelation in real sensor data buys essentially nothing.
+
+The mechanism is worth stating because it is counter-intuitive: `float32` gets its 1.23× almost entirely from its redundant exponent byte; `float16` has already had that redundancy removed by the cast and so compresses hardly at all. That erodes the 2.00× raw-size advantage of half precision — but only to 1.94×. It does not cancel it.
 
 Consequence: since the user chose to record **both** the noised observation and the noise-free ground truth (54 float values per step, 27 dimensions each), **the observation block dominates the store and is the only lever that changes the bill.**
 
-##### Per-step arithmetic, anchored on the compressed measurement
+##### Per-step arithmetic
 
-The only directly-measured anchor that matches this schema is the 1,000-episode × 192-step layout of §D4.1: the two observation columns at `float16` occupied **21.5 MB** over `192,000` rows.
+| Block | Content | `float32` obs | `float16` obs | Basis |
+|---|---|---:|---:|---|
+| Observations | `obs_noised[27]` + `obs_true[27]` = 54 values | **176.0** | **90.7** | measured: 3.26 / 1.68 B per value |
+| Other floats | `reward` 1, body + `damage` 5, `animal_stamina` 4 = 10 `float32` values | 32.6 | 32.6 | 3.26 B per value |
+| Non-float | `episode_seed`, `t`, `action`, agent, `rest_streak`, 8 bools, `termination_reason`, animals, resources, obstacles — 186 raw B | ~17 | ~17 | estimate, see note |
+| **Compressed bytes / step row** | | **≈ 226** | **≈ 140** | |
 
-`21.5 MB / 192,000 rows = 112 B per row` for 54 stored `float16` values — against **108 raw bytes**. The `float16` observation block is, in other words, **essentially incompressible**: on-disk size ≈ raw size. That is exactly what the mantissa argument predicts, and it is the number to build the budget on.
-
-| Block | Content | Compressed B / step row | Basis |
-|---|---|---:|---|
-| Observations, `float16` | `obs_noised[27]` + `obs_true[27]` | **112** | measured (21.5 MB / 192,000 rows) |
-| Observations, `float32` | same, 4 bytes/value | **~114** | 216 raw ÷ 1.9× measured float ratio |
-| Other floats | `reward` 1, body + `damage` 5, `animal_stamina` 4 = 10 `float32` values | **~21** | 40 raw ÷ 1.9× |
-| Non-float | `episode_seed`, `t`, `action`, agent, `rest_streak`, 8 bools, `termination_reason`, animals, resources, obstacles (186 raw B) | **~10** | obstacle columns measured at 0.44 B/row; rest bounded by the 13× worst case |
-| **Total** | | **≈ 143 (f16) / ≈ 145 (f32)** | |
+*Non-float note (an estimate, not a measurement — C8 measures it).* Built bottom-up in raw-binary terms: obstacles 88 raw B at the measured 211× → 0.4 B; `episode_seed` is 193 identical consecutive values and `t` is a perfect ramp, both ~0 under RLE / delta encoding; 8 mostly-`False` bools ~0.4 B; `action` (6 values) ~0.4 B; the varying low-cardinality integer block (agent, animals, resources, timers, counters, 79 raw B) at a conservative ~4–8× → ~15 B. Total ~17 B. This is the one figure in the table not backed by a direct measurement, and it is small enough that a 2× error moves the per-run total by under 8 %.
 
 | | `float32` observations | `float16` observations |
 |---|---:|---:|
-| Compressed bytes / step row | 145 | 143 |
+| Compressed bytes / step row | 226 | 140 |
 | Rows per episode (`T + 1`) | 193 | 193 |
-| Compressed KB / episode (steps) | 28.0 | 27.6 |
-| Compressed KB / episode (episode row)¹ | 0.87 | 0.87 |
-| **Per run (10⁶ episodes)** | **≈ 28 GB** | **≈ 28 GB** |
-| **10 runs** | **≈ 280 GB** | **≈ 280 GB** |
+| Compressed KB / episode (steps) | 43.6 | 27.0 |
+| Compressed KB / episode (episode row)¹ | 1.34 | 1.34 |
+| **Per run (10⁶ episodes)** | **≈ 45 GB** | **≈ 28 GB** |
+| **10 runs** | **≈ 450 GB** | **≈ 285 GB** |
 
-¹ The episode row is 407 `float32` values (dominated by the obstacle property columns, 286 of them) plus 119 non-float bytes → ~866 B compressed. Per-episode floats stay `float32` regardless of `obs_precision` (§D4.2). Where obstacle-property std is zero these columns are *constant across every episode* and compress far better; 866 B is a ceiling.
+¹ The episode row is 407 `float32` values (dominated by the obstacle property columns, 286 of them) plus 119 non-float raw bytes → ~1.34 KB compressed. Per-episode floats stay `float32` regardless of `obs_precision` (§D4.2). Where obstacle-property std is zero these columns are *constant across every episode* and compress far better; 1.34 KB is a ceiling.
 
-##### ⚠️ A contradiction in the measured inputs — flagged, not silently resolved
+**Store-level saving from half precision: ~38 %** (45 GB → 28 GB). This is lower than the 48.6 % measured on the observation block alone, because the per-episode record and the non-observation columns do not change. 38 % is the number the precision decision is actually made on, and it clears the pre-registered 20 % threshold comfortably (§D12).
 
-The two measurements supplied to this plan are mutually inconsistent, and the inconsistency lands squarely on the one remaining size lever:
+##### How the two earlier estimates in this plan were both wrong
 
-| Measurement | Implies, per stored float value |
-|---|---|
-| "varying float columns compress at **1.9×**, smoothness does not help" | `float32`: 4 ÷ 1.9 = **2.1 B** |
-| "`float16` observation block = **21.5 MB** over 192,000 rows × 54 values" | `float16`: **2.07 B** |
+Recorded because the failure mode is reusable, not to assign blame — **both errors were denominator errors, in opposite directions, and both survived because a ratio was quoted without its denominator.**
 
-**Both land at ~2.1 compressed bytes per float value.** If that is right, then half precision saves ~2 %, not ~50 % — the mantissa bits are incompressible either way, so cutting them in half is offset by zstd having less to remove. This is physically coherent: `float32` compresses well *because* it carries a highly-redundant exponent byte; `float16` has already had that redundancy removed by the cast, which is why it barely compresses further.
+| Claim | Error | Correct |
+|---|---|---|
+| "floats compress 1.9×" → `4 ÷ 1.9 = 2.1` compressed B/value → half precision saves ~2 % | The 1.9× was measured **against CSV text**, not raw binary (same denominator as the 213× / 104× / 13× column figures). Dividing a CSV-denominated ratio into a raw binary byte count is meaningless. | `float32` is **3.26** compressed B/value (1.23× vs raw) |
+| "~113 GB (`float32`) vs ~23 GB (`float16`)" → half precision saves ~79 % | That benchmark cast **every** float column, including `float64` ones, down to `float16`, inflating the apparent gain. | the real saving is **48.6 %** on the observation block, **~38 %** store-wide |
 
-The same two measurements, however, were also reported as a headline of **~113 GB (`float32`) vs ~23 GB (`float16`)** per run — a 4.9× gap. That gap is only reachable if the 113 GB figure is *raw uncompressed* and the 23 GB figure is *compressed*, which would be comparing different things.
+The directional intuition that `float32`'s redundant exponent byte is what compresses was correct — `float32` gets 1.23× while `float16` gets essentially none — it simply erodes half precision's 2.00× raw advantage to 1.94× rather than cancelling it.
 
-**This plan does not pick a winner.** The consequence is material — it decides whether an irreversible precision loss buys 2 % or 50 % — so it is settled by measurement, not by argument. See the extended checkpoint C8 and §D12.
-
-**Planning envelope until C8 lands: ~28 GB per run, ~280 GB for ten runs**, with an upper bound of ~113 GB / ~1.1 TB if the pessimistic reading holds. Every point in that envelope is affordable (below).
+**Rule for this document and any successor: never quote a compression ratio without naming its denominator, and never mix CSV-denominated and raw-denominated figures in one calculation.**
 
 ##### Disk is not a constraint — do not scope around it
 
-`/media/nas01` has **59 TB free** of 192 TB (70 % used). The worst case in the envelope above is ~1.1 TB for ten runs — **under 2 % of free space**. No design decision in this plan may be justified by saving disk, and no scope reduction may be proposed for disk reasons. Pre-flight `df -h /media/nas01` anyway, because the NAS is shared.
+`/media/nas01` has **59 TB free** of 192 TB (70 % used). The largest figure above is ~450 GB for ten runs at full precision — **under 1 % of free space**. No design decision in this plan may be justified by saving disk, and no scope reduction may be proposed for disk reasons. Pre-flight `df -h /media/nas01` anyway, because the NAS is shared.
 
 The two real constraints are:
 
 1. **Write throughput** during collection (bounded by rollout compute, §D6, not by bytes).
-2. **Full-corpus read time** for every future analysis. This is the standing cost: a store that is 2× smaller is scanned 2× faster, forever, by every question anyone asks it. This — not disk — is the only argument that could justify the lossy precision choice in §D12, **and it only applies if the store actually gets smaller**, which §D11's contradiction puts in doubt.
+2. **Full-corpus read time** for every future analysis. This is the standing cost: a store that is ~38 % smaller is scanned ~38 % faster, forever, by every question anyone asks it. This — not disk — is the argument that carries the precision decision in §D12.
 
 ##### Data-loss exposure and the protective rules
 
@@ -523,26 +532,49 @@ Storing observations at half precision is therefore a **scientific decision abou
 | Round-trip bit-identical | yes | **no** |
 | Overflow threshold | ~3.4e38 | **65,504** |
 
-For already-noisy sensor readings a worst-case absolute error of `2.44e-04` is very likely irrelevant — the perceptual noise the environment deliberately injects is orders of magnitude larger. But "very likely irrelevant" is a judgement that belongs in the record, not in a compression ratio.
+##### Decision: `float16`, because the quantisation error sits ~1000× below the signal's own noise floor
 
-**Design:**
+**Default: `obs_precision: float16`.** Two independent reasons, and the second is the stronger one.
 
-- **`obs_precision` is a mandatory spec key** — `float16` or `float32`, read through `_req(spec, 'obs_precision')`, **no fallback default** (project Configuration Protocol). A collection cannot be launched without someone stating which precision they chose.
-- The chosen value is written to `_manifest.json` and is the element type of step columns 35–36. **An analysis can always tell which precision it is reading**, and a mixed-precision corpus is self-describing rather than silently inconsistent.
-- Switching to full precision is a **spec-file edit, not a code change**. The store path already partitions by `env_fp`; `obs_precision` is additionally a manifest-guarded field (§D3), so resuming a `float16` store with `float32` is a hard `ValueError`, never a silent mix within one store.
-- **Recommended value: `float32` — see the reversal note below.**
+*Size.* Half precision saves **48.6 %** on the observation block and **~38 %** store-wide (§D11), clearing the 20 % threshold this plan pre-registered before the measurement was taken. That is a permanent ~38 % reduction in the scan cost of every future analysis.
 
-##### Recommendation reversal: prefer `float32` unless C8 proves otherwise
+*The error is not merely "acceptable" — it is far below the resolution the data actually carries.* The environment deliberately injects perceptual noise, and the per-modality standard deviations in the representative training config (§A9) are:
 
-An earlier draft of this plan recommended `float16` on the assumption that it roughly halves the store. **§D11's measured anchor does not support that assumption**: a `float16` observation block was measured at ~2.07 compressed bytes per value, and `float32` at ~2.1 compressed bytes per value under the measured 1.9× float ratio. If those two numbers are both right, half precision buys **~2 %**, not ~50 %.
+| Modality | injected noise σ |
+|---|---:|
+| Olfaction | 0.20 |
+| Visual | 0.20 |
+| Satiation, interoceptive nociception, extero nociception | 0.10 |
+| Proprioception | 0.05 |
+| Collision, location | 0.01 |
 
-The decision then becomes trivial. The only argument for `float16` was read-time (§D11), and read-time only improves if the store actually shrinks. Against a ~2 % gain sits an **irreversible** `2.44e-04` worst-case error on a quantity — the observation the policy consumed — that is the primary independent variable of every perception-related analysis this store exists to enable. **Do not trade an irreversible loss for two percent.**
+The `float16` quantisation error is `2.44e-04`. Against the dominant sensor channels that is **~400–800× below the injected noise**, and against the quietest channel (σ = 0.01) still **~40× below**. For the *noised* observation the quantisation is therefore invisible beneath noise the environment itself added on purpose. For the *noise-free* ground-truth observation there is no injected noise to hide under, but `2.44e-04` remains far below any meaningful resolution of a sensor whose inputs are grid positions and bounded property vectors.
 
-**Therefore: default `obs_precision: float32`.** Choose `float16` only if checkpoint C8's paired measurement shows a saving above **20 %**, which is the point where read-time starts to matter enough to weigh against lossiness. C8 is extended to require that paired measurement — the same 5,000 real episodes written both ways, compared on disk — *before* any large collection starts. This costs ~6 minutes of compute and settles a question that is otherwise unanswerable from the plan.
+**Precision loss is a non-issue here, and the ratio above is why.** This is a recorded judgement with a stated basis, not an assumption.
 
-Nothing else in the design changes either way: the schema, the manifest guard, and the reader are precision-agnostic by construction.
+##### The real hazard is RANGE, not precision — enforced as a runtime guard
 
-**Half precision is not unconditionally safe** and the guard is a real check, not a formality. The `Location` sensor emits raw grid coordinates and any future sensor emitting magnitudes above **65,504** would silently become `inf`. The representative config of §A9 has the location sensor **off**, so verification V5 must be run on at least one config that has it **on**.
+`float16` fails badly rather than gracefully when values leave its range: it overflows to `inf` above **65,504**, and underflows to subnormals below **6.1e-05**. Most observation channels are bounded in `[0,1]`, but **not all are guaranteed to be** — the location sensor emits raw grid coordinates, and any future unbounded channel would be silently mangled. (Note that *relative* precision is constant at ~4.9e-04 across the whole normal range, so gradual precision loss with magnitude is not the risk; range is.)
+
+**A store that silently clipped an out-of-range channel is worse than a store that is twice as large.** This is therefore promoted from a test case to a **hard runtime guard that fails the collection**, not a post-hoc check:
+
+- **Where**: in the collector, after the scan and the host flatten, **before** the shard is written. Because shards are written by atomic rename (§D3), a raised guard leaves nothing on disk.
+- **When**: every chunk, whenever `obs_precision == float16`. Skipped entirely for `float32` apart from the finiteness assertion.
+- **What it asserts**, on the `float32` observations the scan already produced:
+  1. `isfinite(obs_f16).all()` — catches overflow to `inf`.
+  2. `max|obs_f32| ≤ OBS_ABS_MAX`, a stated module constant set to **1e4** — comfortably above any bounded sensor, comfortably below the 65,504 overflow cliff, so a later chunk cannot creep over the edge unnoticed.
+  3. `max( |obs_f32 − float32(float16(obs_f32))| / maximum(|obs_f32|, 1e-6) ) ≤ 1e-3` — the round-trip relative error, which additionally catches subnormal underflow.
+- **On failure**: raise with a message naming the offending **observation index**, its value, and — resolved through `get_observation_breakdown(params)` — the **sensor name** that index belongs to. The operator learns "dimension 22 (Visual) exceeded the safe range at 1.2e5", not "assertion failed".
+- **Cost**: two reductions over the chunk's observation array (~1.4×10⁷ elements at `batch_size = 1024`), against a ~72 s scan. Negligible.
+
+Verification V5 tests that this guard **actually fires** — see the Verification Plan — rather than merely testing fidelity on data that happens to be in range.
+
+**Design (unchanged, and it is what makes this a one-line flip rather than a redesign):**
+
+- **`obs_precision` is a mandatory spec key** — `float16` or `float32`, read through `_req(spec, 'obs_precision')`, **no fallback default** (project Configuration Protocol). A collection cannot be launched without someone stating which precision they chose, because the choice is lossy.
+- The chosen value is written to `_manifest.json` and is the element type of step columns 35–36. **An analysis can always tell which precision it is reading.**
+- `obs_precision` is a manifest-guarded field (§D3): resuming a `float16` store with `float32` is a hard `ValueError`, so no store can end up half one and half the other.
+- The reader is precision-agnostic by construction. Switching precision is a **spec-file edit, not a code change**.
 
 #### D13. Seed policy — shared by default, overridable per run
 
@@ -606,6 +638,7 @@ The `nnx.jit`-wrapped batched scan kernel emitting exactly the fixed key set. De
 - `_reset_row(states0, params)` — builds the `t = 0` row group (§D2).
 - `_prng_parity_guard(params, keys, states0)` — the `lax.map`-based, one-sync-per-chunk guard replacing `eval_rollout.py:405-415`.
 - `_flatten_to_rows(scan_out, reset_rows, T)` — fully vectorised NumPy flatten + downcast to the schema dtypes, replacing the Python loop at `eval_rollout.py:456-475`.
+- `OBS_ABS_MAX = 1e4` and `assert_obs_representable(obs_f32, obs_precision, params)` — the **hard runtime range guard** of §D12. Called once per chunk, after the flatten and **before** the shard write. Raises `ValueError` naming the offending observation index, its value, and the sensor it belongs to (resolved via `get_observation_breakdown(params)`). A raise leaves no shard on disk, because writes are atomic-rename. Do **not** downgrade this to a warning and do **not** move it after the write.
 
 #### NEW — `scripts/eval/traj_collect/collect_trajectories.py`
 
@@ -613,7 +646,7 @@ Single-run, single-process collector. Flags:
 
 `--run` (required, path to the training run dir) · `--checkpoint` (`final` or an explicit step; numeric-max selection per §D9) · `--out-root` · `--episodes` · `--seed-base` · `--blocks` (`lo:hi` block range for this worker) · `--batch-size` · `--shard-episodes` · `--obs-precision {float16,float32}` (**required, no default** — §D12) · `--device {cpu,gpu}` · `--quiet`
 
-Flow: resolve checkpoint → load env from `<run>/models/config.yaml` (never from `configs/`) → compute `env_fp` → create-or-validate the store manifest → for each incomplete block in range: for each chunk of `batch_size`: `vmap(jax_reset)` → parity guard → `nnx.jit` scan → vectorised flatten → accumulate → write both shards atomically. Policy is deterministic argmax, always.
+Flow: resolve checkpoint → load env from `<run>/models/config.yaml` (never from `configs/`) → compute `env_fp` → create-or-validate the store manifest → for each incomplete block in range: for each chunk of `batch_size`: `vmap(jax_reset)` → PRNG parity guard → `nnx.jit` scan → vectorised flatten → **`assert_obs_representable` range guard (§D12)** → accumulate → write both shards atomically. Policy is deterministic argmax, always.
 
 Checkpoint-loading and rollout are kept behind two seams — `load_policy(agent_type, ckpt) -> (model, initial_state_fn)` and `policy_step(model, obs, h) -> (action, h)` — so Dreamer-SRL can be added later. **rPPO is the only supported and tested algorithm in this change**; `agent_type != "rppo"` raises `NotImplementedError` with a pointer to this section. No Dreamer support is claimed.
 
@@ -638,7 +671,9 @@ seed_base: 1000000         # MANDATORY — shared by every run below so comparis
                            #             defines the episode population; never defaulted
 checkpoints: [final]       # MANDATORY — list form, accepts explicit steps later
 nodes: [101, 103, 104, 105]  # MANDATORY
-obs_precision: float32     # MANDATORY — 'float16' or 'float32'; a LOSSY choice, never defaulted (§D12)
+obs_precision: float16     # MANDATORY — 'float16' or 'float32'; a LOSSY choice, never defaulted (§D12).
+                           #             float16 saves ~38% store-wide; its 2.44e-04 error sits ~400x
+                           #             below the environment's own injected sensor noise.
 device: cpu                # optional, default 'cpu'
 npar: 16                   # optional, default derived from device (§D7)
 batch_size: 1024           # optional, default derived from device (§D7)
@@ -670,9 +705,9 @@ runs:                      # MANDATORY
 7. Caveats, in a section titled **Known caveats — read before analysing**:
    - **Resource properties are an episode-level approximation.** `res_property_sampled_init` is the draw *at reset*; the environment re-draws it on every regeneration (`core.py:808-809`). An analysis treating food properties as constant within an episode is making an approximation. **Where it breaks**: any episode in which a resource was consumed and regenerated — detectable per step from `res_cons_count` incrementing and `res_active` toggling `False → True`. The approximation is exact for the window before the first regeneration, and degrades with the number of regenerations, so it is worst in long episodes with a short `res_reg_delay` and best in short ones. Analyses that condition on resource property should either restrict to the pre-first-regeneration window or report the regeneration count as a covariate.
    - The `agent_in_bush` comparability warning (§D8).
-   - **Observation precision**: how to read `obs_precision` from the manifest, and the `2.44e-04` worst-case absolute error if it says `float16` (§D12).
+   - **Observation precision**: how to read `obs_precision` from the manifest; the `2.44e-04` worst-case absolute error if it says `float16`, stated against the environment's own injected noise (σ = 0.01–0.20, so the quantisation is ~40–800× below it); and the fact that a collection-time range guard hard-fails rather than silently clipping, so an out-of-range channel cannot be sitting in the store unnoticed (§D12).
    - `animal_damage` is per-step, not per-episode (§A2) — only its bounds are in the manifest.
-8. A short **"why the schema looks like this"** note carrying the §D4.1 measurements: integers and booleans are effectively free under Parquet encoding; floats cost ~2 compressed bytes per value regardless of smoothness *and largely regardless of stored precision*; hoisting static entity positions was measured at a **0.75 %** net saving and rejected; and raw-byte accounting must never be used to size a compressed columnar store. This section exists to stop the next reader from "optimising" the schema.
+8. A short **"why the schema looks like this"** note carrying the measurements: constant integer / boolean columns are effectively free (211× vs raw binary), floats cost **3.26** compressed bytes per value at `float32` and **1.68** at `float16` regardless of smoothness, hoisting static entity positions was measured at a **0.75 %** net saving and rejected, and **a compression ratio is meaningless without its denominator** — mixing CSV-denominated and raw-denominated figures is what produced two wrong answers during this plan's drafting. This section exists to stop the next reader from "optimising" the schema.
 9. **Maintenance Contract**: any change to the fixed key set, any dtype change, and any row-convention change **must** bump `SCHEMA_VERSION` in `src/utils/trajectory_store.py` and update this document in the same commit. Readers hard-fail on an unknown `SCHEMA_VERSION`.
 
 #### NEW — `scripts/eval/traj_collect/README.md`
@@ -717,11 +752,12 @@ Verified by the implementing agent **during** implementation:
 - [ ] **C5 — Realised draws are constant within an episode.** Assert every episode-level draw read at reset equals the same field on the final state (they must be, per `core.py:818-828`) — a cheap in-loop guard that catches a wrong state being snapshotted.
 - [ ] **C6 — Peak RSS.** Measure peak RSS of one worker at `batch_size=1024` and confirm ≤ 2.5 GB (§D5 predicts ~1.8 GB). Report the number.
 - [ ] **C7 — Throughput.** Time one 5,000-episode block; report episodes/s and compare against the 14.3 eps/s baseline of §A8. Report as a before/after speed number in the Implementation Report.
-- [ ] **C8 — Precision decision: the paired size measurement.** *(Blocking — must complete before any large collection.)* Write **the same 5,000 real episodes twice**, once with `obs_precision: float32` and once with `float16`, and report for each: on-disk bytes for the whole shard, on-disk bytes for the two observation columns alone, and compressed bytes per stored float value. Then extrapolate to 10⁶ episodes.
-  - This settles the contradiction flagged in §D11 (does half precision buy ~2 % or ~50 %?) with a direct paired observation instead of an argument.
-  - **Decision rule, fixed in advance so the result cannot be rationalised**: if `float16` saves **> 20 %** of total store size, adopt it; otherwise keep `float32`, because a `2.44e-04` irreversible error is not worth a small percentage when disk is free (§D12).
-  - Also report the realised whole-store compression ratio. If it is worse than 1.5×, stop and report before collecting at scale.
-  - Cost: ~12 minutes of compute. Do not skip it and do not substitute an estimate.
+- [ ] **C8 — Confirm the precision saving on real sensor data.** *(Confirmation, not a gate — the default is already `float16`, §D12.)* Write **the same 5,000 real episodes twice**, once with `obs_precision: float32` and once with `float16`, and report for each: on-disk bytes for the whole shard, on-disk bytes for the two observation columns alone, and compressed bytes per stored float value.
+  - Expected from the synthetic benchmark (§D11): **3.26 B/value** at `float32`, **1.68 B/value** at `float16`, **48.6 %** saving on the observation block, **~38 %** store-wide. This checkpoint confirms those hold on real sensor data rather than on a synthetic autocorrelated walk.
+  - **Escalate rather than silently proceed** if the store-wide saving comes in **below 20 %** — that would fall under the pre-registered adoption threshold and the default should revert to `float32`. Report the number either way; do not rationalise a near-miss.
+  - Also report the realised non-float bytes/row against the ~17 B estimate of §D11, which is the one unmeasured figure in the budget.
+  - Cost: ~12 minutes of compute. Do not substitute an estimate.
+- [ ] **C8b — The `float16` range guard fires.** Confirm the runtime guard (§D12) raises, names the offending observation index, and resolves it to a sensor name — see V5. Confirm no shard is left on disk after the raise.
 - [ ] **C9 — Resume is a no-op.** Run the same block range twice; assert the second run writes nothing and completes in under 30 s.
 - [ ] **C10 — Zero-slot environment.** Collect 20 episodes from a config with `A = 0` (no animals) and confirm the animal columns are present as zero-length lists and the reader does not branch.
 
@@ -763,11 +799,19 @@ and assert it equals the recorded `agent_in_bush`.
 
 *(An earlier draft carried a further test asserting that obstacle positions never move, because the store depended on hoisting them to episode level. That dependency is gone — positions are recorded per step (§D4.1) — so the test has been dropped rather than kept as dead weight. If moving obstacles are ever added, this store records them correctly and V4 keeps passing.)*
 
-### V5 — Observation precision: fidelity and overflow
+### V5 — Observation precision: the range guard fires, and fidelity holds
 
-Replay a sample of states, recompute `get_observation` at `float32`, and compare against the store. When the manifest says `obs_precision: float16`, assert `max |obs_f32 − obs_stored| ≤ 2.44e-04` in absolute terms on values in `[0,1]` (the verified `float16` worst case, §D12) and, separately, `isfinite(obs_stored).all()`. When it says `float32`, assert **bit-identical** round-trip — compression is lossless, so anything else is a writer bug.
+Two halves. The second is the one that matters, because it tests the *guard* rather than the happy path.
 
-**Fails on**: any sensor emitting magnitudes above 65,504, which silently becomes `inf` under `float16` — in particular the `Location` sensor on a large grid. **Must be run on at least one config with the location sensor enabled**, since the representative config of §A9 has it off. Also fails on a `float32` store that is not bit-exact, which would mean an unintended downcast somewhere in the writer.
+**(a) Fidelity on in-range data.** Replay a sample of states, recompute `get_observation` at `float32`, compare against the store. When the manifest says `float16`, assert `max |obs_f32 − obs_stored| ≤ 2.44e-04` on values in `[0,1]`. When it says `float32`, assert a **bit-identical** round-trip — compression is lossless, so anything else is a writer bug.
+
+**(b) The runtime guard actually raises (§D12).** Drive an out-of-range observation and assert the collection **fails** rather than silently clipping:
+
+- Run with a config whose **location sensor is enabled on a large grid**, so a real channel carries large magnitudes. The representative config of §A9 has it off, so this must be a separate config.
+- Additionally inject a synthetic out-of-range value (monkeypatch one observation element above `OBS_ABS_MAX`) to exercise the guard deterministically, independent of whether any real config currently exceeds it.
+- Assert: the collector raises; the message names the **observation index** and the resolved **sensor name**; and **no shard file exists on disk** afterwards (the atomic-rename property, §D3).
+
+**Fails on**: a missing or mis-thresholded guard, a guard that warns instead of raising, a guard placed after the shard write, an unhelpful error message, or a `float32` store that is not bit-exact (which would mean an unintended downcast in the writer). Part (b) is the check that stands between us and a store that silently mangled a channel — the failure mode that would be undetectable at read time and would invalidate every analysis touching that sensor.
 
 ### V6 — Resume and atomicity under a hard kill
 
@@ -815,12 +859,13 @@ All four questions this plan opened have been decided by the user. Recorded here
 | 2 | Resource properties: reset draw only, or per step? | **Reset draw only (`_init`).** Do not pay the extra payload. The caveat is prominent in the schema doc, regeneration stays detectable per step from the consumption counters, and the doc states explicitly that treating food properties as an episode constant is an approximation and where it breaks. | §D4.2 cols 19–20; schema doc §7 |
 | 3 | `seed_base` shared across runs, or per run? | **Shared by default, overridable per run.** Shared gives paired comparisons at zero cost; the override exists for runs whose environment differs structurally, where the same key does not produce the same draw and the pairing would be illusory rather than real. Effective value recorded per run in the manifest and guarded on resume. | §D13 |
 | 4 | Store root? | **`results/trajectories/`.** Disk is not a constraint; the data-loss exposure and the protective rules are stated, along with the fact that the manifest-plus-resume design makes a partial loss recoverable by re-running only the missing shards. | §D11 "Data-loss exposure" |
+| 5 | Observation precision — `float16` or `float32`? | **`float16`.** Settled by a compressed-vs-compressed measurement: 48.6 % saving on the observation block, ~38 % store-wide, clearing the 20 % threshold pre-registered before the measurement was taken. The `2.44e-04` quantisation error sits ~400–800× below the noise the environment already injects into the dominant sensor channels. The real hazard is **range**, not precision, and it is now a hard runtime guard rather than a post-hoc test. | §D12, §D11 |
 
 ## Open Questions
 
-Only one remains, and it is settled by measurement rather than by discussion.
+**None outstanding.** All five questions this plan opened have been decided, the last of them (precision) by direct measurement after both of the initial estimates turned out to be wrong in opposite directions — a history preserved in §D11 because the underlying trap (quoting a compression ratio without its denominator) is reusable.
 
-1. **Observation precision — `float16` or `float32`?** Deliberately *not* resolved in this document, because the two measurements available to it disagree about whether half precision saves ~2 % or ~50 % (§D11). The plan's current default is **`float32`** (lossless; a `2.44e-04` irreversible error is not worth a small percentage when disk is free), and **checkpoint C8 is a blocking, pre-registered paired measurement** with the decision rule fixed in advance: adopt `float16` only if it saves more than 20 % of total store size. Nothing else in the design depends on the outcome — the schema, manifest guard, and reader are precision-agnostic.
+Checkpoint C8 remains in the plan as a **confirmation on real sensor data** of a decision already taken on a synthetic benchmark, with an explicit escalation rule if it disagrees. It does not gate the start of implementation.
 
 ---
 
