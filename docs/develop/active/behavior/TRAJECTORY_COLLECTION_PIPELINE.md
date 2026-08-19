@@ -891,3 +891,18 @@ Checkpoint C8 remains in the plan as a **confirmation on real sensor data** of a
 | | | | |
 
 **Conclusion**: [one-line summary]
+
+---
+
+## Feedback from plan-reviewer
+
+> **Date**: 2026-08-19 · **Verdict**: **NOT READY** — two Critical findings, both cheap to fix. Full review: [[plan_trajectory_collection]] (`docs/reviews/plan_trajectory_collection.md`).
+
+1. **🔴 F1 — training-world faithfulness is assumed, never verified.** §A10 declares the saved resolved config the source of truth, but the collector re-loads it through **today's** `load_env_params`, whose legacy-scene precedence (`config_loader.py:429-435`) can rebuild, for pre-`828b77e` runs whose dump carries both scene formats, the scene the trainer *discarded*. V1 and V2 both consume the same `params`, so both are circular with respect to config loading. Required: a hard-fail guard when a saved config contains both a non-empty legacy scene block and an `entities:` block; a documented applicability boundary (runs trained after 2026-07-23); run creation date recorded in the manifest.
+2. **🔴 F2 — the red reset-parity gate is unacknowledged.** `tests/env/test_unified_parity.py` fails at step 0 on a clean tree (KNOWN_BUGS.md:73, twice-confirmed, unowned) — standing evidence that env reset behaviour drifted at least once. Triage it before the first production collection, and add the code-drift caveat (training-time git SHA is unrecorded) to the schema doc.
+3. **🟡 F3–F6**: strict checkpoint-restore structural check (silent-unmodulated-agent + model-size-flag bugs); a doc↔code schema check plus one bare-pyarrow read (C3 is circular through the shared schema module); a named pilot→validate→scale sequence with V1/V3/V4 run on the *production* store; a whole-store bounds-and-variation check on the realised-draw columns.
+4. **🟢 F7–F10**: §D7's GPU scan-buffer figure should be ~2.4 GB, not ~1.8 GB; §D4.1 col 13's "Open Question 1" pointer is stale (damage was decided); pre-state the V1 float-equality tolerance policy; state the explicit conda interpreter in `collect_worker.sh` and label the bush-dwell snippet's output a 0–1 fraction.
+
+Known-bug hazards 2 (fixed-seed repetition), 3 (stale-data blends), and 4 (derived-measure smuggling) are genuinely closed by the design as written.
+
+*Reviewed by: plan-reviewer*
