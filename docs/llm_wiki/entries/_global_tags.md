@@ -3,7 +3,7 @@
 > Check this file before inventing a new tag. If a suitable tag already exists, use it exactly as written.
 > Tag drift leads to missed recall — use the canonical form.
 
-**Last updated**: 2026-08-06
+**Last updated**: 2026-08-20
 
 ---
 
@@ -57,6 +57,7 @@ These are not yet active — they become active when first used in an insight. R
 ---
 
 ## Change history
+- 2026-08-20: 1 insight into `env_entities` (`20260820_1606_reset_ulp_divergence_is_compiler_fusion`) reused existing tags `learned_lesson`, `refutation`, `meta` — no new tags promoted. Added `refutation` to env_entities top-tags.
 - 2026-08-06: 3 insights from the dreamer-integration Gate-2 session (2 dreamer_diagnosis: 0304/0305; 1 cluster_ops: 0306) reused existing tags `dreamer`, `learned_lesson`, `decision`, `meta`, `design`, `training_runner` — no new tags promoted.
 - 2026-07-28: 5 insights from the agent-team maintenance session (4 subagent_engineering: 1643/1644/1645/1647; 1 cluster_ops: 1646) reused existing tags `subagent`, `meta`, `decision`, `design`, `learned_lesson` — no new tags promoted.
 - 2026-07-26: 6 insights from the decay_power-drift + config-governance + results-refresh + dreamer-imagination session (3 config_system: 0415/0416/0419; 2 behavior_measures: 0417/0418; 1 subagent_engineering: 0420) reused existing tags `config`, `design`, `decision`, `meta`, `learned_lesson`, `dreamer`, `subagent` — no new tags promoted. Added `dreamer` to behavior_measures top-tags.

@@ -61,4 +61,5 @@ When a refactor moves a training system to a new entry point (or any change that
 ## Backlinks
 - [[20260806_0304_dreamer_sampler_seeding_full_determinism_recipe]] (dreamer_diagnosis, 2026-08-06) — Dreamer runs were never same-seed reproducible because the replay sampler drew b
 - [[20260806_0306_gpu_claim_and_nas_git_lock_protocol]] (cluster_ops, 2026-08-06) — Three cluster-ops rules from the Dreamer Gate-2 arc: a free-looking GPU can alre
+- [[20260820_1606_reset_ulp_divergence_is_compiler_fusion]] (env_entities, 2026-08-20) — Two runs of the same environment-reset code can disagree by one float32 last-bit
 <!-- END BACKLINKS -->
