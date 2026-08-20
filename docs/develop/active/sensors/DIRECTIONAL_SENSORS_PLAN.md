@@ -201,6 +201,23 @@ Per-entity, optional, on every resource / entity / obstacle entry (default `none
   silently become `none`.
 - Empty entity lists produce `jnp.zeros(0, dtype=jnp.int32)`, matching the existing zero-row pattern.
 
+#### `src/environment/sensor.py` — on-source rule (option B)
+
+```python
+# BEFORE (sensor.py:14):
+decay = jnp.where(dist < 0.001, 2.0, 1.0 / (jnp.power(dist, decay_power) + 1e-10))
+
+# AFTER: the same value, with its meaning stated -- "on the source" == "half a cell away".
+# At decay_power=1.0 this is bit-identical to the literal 2.0 in float32 (verified), so
+# byte-parity holds and no existing test changes. At any other gamma it stays on the curve
+# where the constant does not.
+_ON_SOURCE = 1.0 / jnp.power(0.5, decay_power)
+decay = jnp.where(dist < 0.001, _ON_SOURCE, 1.0 / (jnp.power(dist, decay_power) + 1e-10))
+```
+
+Add to the parity test suite: assert `1/(0.5**1.0) == 2.0` bitwise in float32, so the equivalence
+this rests on is checked rather than remembered.
+
 #### `src/environment/sensor.py`
 
 **(a) new — per-cell olfaction**, called from `get_observation`:
@@ -231,8 +248,27 @@ def sense_olfaction_cells(state, params):
     return jax.vmap(at)(cells).flatten()      # [C*V]
 ```
 
-Note the summation order (`res + animal + obs`) is preserved from the current code so float
-accumulation is bit-identical at range 0.
+**Specification details that must not drift:**
+
+1. **Offsets come from the existing `get_visual_offsets(r)`** — the same function vision uses, so the
+   two senses share a cell ordering and the renderer can draw both with one routine. Order at r=1 is
+   `[centre, north, east, south, west]`; at r=2 it is `[centre, N, E, W, S, then the outer ring]`.
+   Note the inner ring's order **differs between r=1 and r=2** (S and W swap), because `r == 1` takes
+   a hard-coded early return. That is pre-existing and already baked into vision's layout; olfaction
+   inherits it deliberately rather than diverging.
+2. **The three-pool structure is preserved at every range** — `res_chem + animal_chem + obs_chem`,
+   in that order, evaluated per cell. Not flattened into one concatenated matmul. This keeps float
+   accumulation order identical to today, so the centre cell is bit-identical to the current single
+   sample at *every* range, not just at range 0. Verified: `[0.5, 0, 0, 0, 0]` from both paths,
+   byte-for-byte.
+3. **Distances and the `sensor_radius` cutoff are measured from each cell**, not from the agent. On a
+   10×10 grid with `sensor_radius: 20` the cutoff never binds, but the per-cell form is what makes
+   the sensor correct if the grid or the radius ever changes.
+4. **Out-of-bounds cells are zeroed** across all `vector_size` channels, using the same
+   `is_in_bounds` mask `sense_visual` already builds. Per the user's decision; see the note above
+   about the resulting wall cue.
+5. **Flatten cell-major**: `[C, V] -> C*V` with cell 0's channels first. `get_observation_breakdown`
+   reports `C * V` for Olfaction, and the noise system and renderer both slice on that assumption.
 
 **(b) `sense_visual` (line ~145)** — add the blur branch. Note the false branch is **not** untouched:
 the activity mask moves from `all_props` onto `W`, and a gate multiply is added to both paths. Parity
@@ -435,6 +471,7 @@ answered by the user (2026-08-20); the fourth is still open.**
 |---|---|---|
 | — | `visual_sensor_range` for blur runs | **2** (13 cells, 104 visual dims, observation 27 → 123). The smallest diamond with room for the kernel to place an off-axis lobe, and the range both Fig 2 and Fig 3 were measured on. |
 | — | `olfactory_sensor_range` | **1** (5 cells, 25 olfaction dims, observation 27 → 47). Cheapest range that gives direction, and per Fig 3 the *most accurate* one while perceptual noise is off — which is the default. |
+| 2 | The on-source decay rule | **Option B — express the constant as a half-cell floor, `1 / (0.5^γ)`.** Verified bit-identical to the hard-coded `2.0` in float32 at the shipped γ=1, so parity holds and no test changes; correct at every other γ, where the constant silently is not. Study: [[ONSOURCE_RULE_STUDY]]. |
 | 1 | Out-of-bounds olfactory cells | **Zero them, matching the visual sensor.** This overrides the plan's recommendation to sample anyway. Consequence to record: the resulting asymmetry is a usable wall cue carried in a chemical channel, so any behaviour analysis attributing wall-avoidance or edge-hugging to olfaction must account for it. Implement with the same `is_in_bounds` mask `sense_visual` already builds. |
 
 Combined observation with both settings: 27 − 8 − 5 + 104 + 25 = **143 dims**.
@@ -445,7 +482,6 @@ Each has a recommendation; none is implemented until confirmed.
 
 | # | Question | Recommendation |
 |---|---|---|
-| 2 | **The on-source decay-2.0 rule.** *(Now studied in detail — see [[ONSOURCE_RULE_STUDY]], which recommends option B: express the constant as a half-cell floor `1/(0.5^γ)`, bit-identical at the shipped γ and correct at every other.)* `sense_resource` returns 2.0 when the sampling point sits exactly on a source. Today only the agent's cell can trigger it; with a diamond, any cell can, so a factor-two discontinuity that fires rarely starts firing often. [[OLFACTORY_EXPANSION_STUDY]] left this open and the first draft silently resolved it to "keep". | **Keep for now**, because changing it breaks range-0 parity — the one property the whole plan is built on. Revisit as a separate change with its own parity story. |
 | 3 | **The three continuous blur knobs are unfingerprinted.** Curriculum stages could differ in ρ or radial scale — a large same-dimension semantics change — without rejection, while a `visual_blur_enabled` flip is rejected. (Pre-existing sibling: `visual_vector_size` is also unfingerprinted.) | **Accept, and say so in the code comment.** Fingerprinting floats is brittle and would forbid legitimate schedules. But the asymmetry should be deliberate rather than accidental. |
 | 4 | **Fingerprinting `visual_blur_enabled` forecloses a sharp→blurred curriculum.** That is correct per the check's stated purpose — semantics must not change mid-run — but it removes an experiment someone might want. | **Accept.** A perceptual-degradation curriculum would need its own weight-compatibility story anyway. |
 
