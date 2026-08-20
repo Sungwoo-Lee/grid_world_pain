@@ -481,18 +481,20 @@ answered by the user (2026-08-20); the fourth is still open.**
 | — | `visual_sensor_range` for blur runs | **2** (13 cells, 104 visual dims, observation 27 → 123). The smallest diamond with room for the kernel to place an off-axis lobe, and the range both Fig 2 and Fig 3 were measured on. |
 | — | `olfactory_sensor_range` | **1** (5 cells, 25 olfaction dims, observation 27 → 47). Cheapest range that gives direction, and per Fig 3 the *most accurate* one while perceptual noise is off — which is the default. |
 | 2 | The on-source decay rule | **Option B — express the constant as a half-cell floor, `1 / (0.5^γ)`.** Verified bit-identical to the hard-coded `2.0` in float32 at the shipped γ=1, so parity holds and no test changes; correct at every other γ, where the constant silently is not. Study: [[ONSOURCE_RULE_STUDY]]. |
+| 3 | Continuous blur knobs unfingerprinted | **Accept, and say so in the code comment.** ρ, radial scale and σ floor stay out of the modality fingerprint: fingerprinting floats is brittle and would forbid legitimate schedules. The asymmetry against `visual_blur_enabled` — which *is* fingerprinted — must be a deliberate comment at the fingerprint site, not an accident a later reader has to reverse-engineer. Same applies to the pre-existing unfingerprinted `visual_vector_size`. |
+| 4 | Fingerprinting `visual_blur_enabled` forecloses a sharp→blurred curriculum | **Accept.** Correct per the check's stated purpose — observation semantics must not change mid-run. A perceptual-degradation curriculum would need its own weight-compatibility story and should be designed deliberately rather than enabled by an omission. |
 | 1 | Out-of-bounds olfactory cells | **Zero them, matching the visual sensor.** This overrides the plan's recommendation to sample anyway. Consequence to record: the resulting asymmetry is a usable wall cue carried in a chemical channel, so any behaviour analysis attributing wall-avoidance or edge-hugging to olfaction must account for it. Implement with the same `is_in_bounds` mask `sense_visual` already builds. |
 
 Combined observation with both settings: 27 − 8 − 5 + 104 + 25 = **143 dims**.
 
+**All four are now answered.** Nothing in this plan is waiting on a user decision.
+
 ### Still open
 
-Each has a recommendation; none is implemented until confirmed.
+_(none)_
 
 | # | Question | Recommendation |
 |---|---|---|
-| 3 | **The three continuous blur knobs are unfingerprinted.** Curriculum stages could differ in ρ or radial scale — a large same-dimension semantics change — without rejection, while a `visual_blur_enabled` flip is rejected. (Pre-existing sibling: `visual_vector_size` is also unfingerprinted.) | **Accept, and say so in the code comment.** Fingerprinting floats is brittle and would forbid legitimate schedules. But the asymmetry should be deliberate rather than accidental. |
-| 4 | **Fingerprinting `visual_blur_enabled` forecloses a sharp→blurred curriculum.** That is correct per the check's stated purpose — semantics must not change mid-run — but it removes an experiment someone might want. | **Accept.** A perceptual-degradation curriculum would need its own weight-compatibility story anyway. |
 
 ## Author response to plan-reviewer
 
@@ -517,8 +519,11 @@ one-width-plus-ρ parameterisation were upheld as evidence-backed — the review
 that `σ_⊥ = (scale/ρ)·d` is algebraically the study's own fixed-angular-blur form under different
 knob names. Mask-after-blur was **not** upheld, and is the Critical finding above.
 
-Status remains **PLANNED**. It should not move to IN PROGRESS until the four user decisions are
-answered.
+**Update 2026-08-20**: all four user decisions are answered (see above), and two further findings
+have landed since the review — [[ONSOURCE_RULE_STUDY]] resolving the on-source rule to option B, and a
+precision benchmark that **reversed implementation note 1** (the `[C,E,2]` guidance). The second is a
+change the review did not ask for and has not seen, which is exactly the kind of late edit that
+warrants a second pass. Status stays **PLANNED** pending re-review.
 
 ## Implementation Report
 
