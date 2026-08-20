@@ -86,6 +86,7 @@ from src.models.ppo_trainer import train_iteration_ppo
 from src.utils.config import get_default_config, Config, dump_config_yaml
 from src.utils.checkpoint_restore import restore_rppo_training_state
 from src.utils.async_render import new_render_state, poll_render, drain_render
+from src.utils.provenance import write_provenance
 
 # Orbax
 import orbax.checkpoint as ocp
@@ -845,6 +846,20 @@ def main():
     
     models_dir = os.path.join(results_dir, "models")
     os.makedirs(models_dir, exist_ok=True)
+
+    # --- Code provenance ------------------------------------------------------------
+    # Written HERE, at directory-creation time, NOT at the end of training: a run killed
+    # after ten minutes must still carry its provenance, and the runs most worth
+    # investigating later are exactly the ones that died.
+    #
+    # DELIBERATELY BEST-EFFORT — this is the one place the project's no-fallback-defaults
+    # rule does NOT apply. If git is unavailable, the repo is in an odd state, or the
+    # subprocess fails, the fields record the string "unknown" and training continues.
+    # A run that dies at startup because `git` was missing would be strictly worse than a
+    # run carrying an incomplete note. Do not "fix" this into a hard failure.
+    prov_path = write_provenance(models_dir, argv=sys.argv)
+    if prov_path and not args.quiet:
+        print(f"Provenance saved to: {prov_path}")
 
     # Experiment eval during training: process/bookkeeping state, plus fix #2
     # (resume double-logging) -- pre-seed "already logged" with every result.json that
@@ -2486,7 +2501,11 @@ def main():
                                 if config.get_mandatory('training.auto_analysis') and eval_s_flag:
                                     if args.debug:
                                         print(f"  [ANALYSIS] Triggering automated behavior analysis...")
-                                    import subprocess, sys
+                                    # (`subprocess` and `sys` are already imported at
+                                    # module level; a redundant local import here made
+                                    # `sys` a LOCAL of main() for its whole body, so any
+                                    # earlier use of `sys` in main() raised
+                                    # UnboundLocalError.)
                                     analysis_cmd = [
                                         sys.executable, "analysis/agentActionAnalysis.py",
                                         "--results_dir", results_dir,

@@ -40,8 +40,8 @@ catch, but a float32 store therefore carries no recorded evidence about observat
 from __future__ import annotations
 
 import argparse
+import json
 import os
-import subprocess
 import sys
 import time
 import warnings
@@ -57,6 +57,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from src.utils import trajectory_store as ts
 from src.utils.config import Config
+from src.utils.provenance import git_commit
 from src.utils.trajectory_store import (
     EPISODE_COLUMNS, SCHEMA_VERSION, STEP_COLUMNS,
     assert_manifest_compatible, assert_restored_tree_matches, assert_scene_unambiguous,
@@ -74,12 +75,50 @@ DEFAULT_BATCH_SIZE = {"cpu": 1024, "gpu": 8192}
 # ── Provenance ────────────────────────────────────────────────────────────────
 
 def _git_sha() -> str:
+    """Full HEAD sha of THIS collection session, or "unknown".
+
+    Thin wrapper over the shared helper in src/utils/provenance.py (one git-provenance
+    implementation project-wide). Output format unchanged.
+    """
+    return git_commit(short=False, cwd=PROJECT_ROOT)
+
+
+def read_training_provenance(run_dir: Path) -> dict:
+    """Read `<run_dir>/models/provenance.json`, written by train.py at run startup.
+
+    Three states, and they mean DIFFERENT things — a reader must be able to tell them
+    apart, so they are not collapsed:
+
+      * file present, git readable → the real sha / dirty flag / start time;
+      * file present but a field is the string "unknown" → the run WAS stamped, but git
+        could not be read on that node at that moment;
+      * file ABSENT → `training_git_sha` etc. are `None`. Every run trained before this
+        stamp existed (2026-08-20) is in this state. `None` means "pre-stamp run", which
+        is emphatically not the same claim as "stamped, but unknown".
+
+    Absence is NEVER an error: the whole existing `results/` corpus lacks the file and
+    the collector must keep working on it.
+    """
+    path = run_dir / "models" / "provenance.json"
     try:
-        r = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True,
-                           cwd=PROJECT_ROOT, timeout=30)
-        return r.stdout.strip() if r.returncode == 0 else "unknown"
-    except Exception:
-        return "unknown"
+        with open(path) as f:
+            p = json.load(f)
+        if not isinstance(p, dict):
+            return {"training_git_sha": None, "training_git_dirty": None,
+                    "training_started_utc": None}
+        return {
+            "training_git_sha": p.get("git_sha", "unknown"),
+            "training_git_dirty": p.get("git_dirty", "unknown"),
+            "training_started_utc": p.get("started_utc", "unknown"),
+        }
+    except FileNotFoundError:
+        return {"training_git_sha": None, "training_git_dirty": None,
+                "training_started_utc": None}
+    except Exception as e:            # unreadable / corrupt JSON — still not fatal
+        warnings.warn(f"Could not read {path}: {e}. Recording training provenance as "
+                      f"absent (null).", stacklevel=2)
+        return {"training_git_sha": None, "training_git_dirty": None,
+                "training_started_utc": None}
 
 
 # ── Checkpoint selection (plan §D9) ───────────────────────────────────────────
@@ -301,6 +340,10 @@ def build_manifest(*, cfg, params, run_dir: Path, ckpt_dir: Path, ckpt_step: int
         "obs_precision": obs_precision,
         "collection_git_sha": _git_sha(),
         "collected_at": datetime.now(timezone.utc).isoformat(),
+        # Training-time provenance, read back from <run_dir>/models/provenance.json.
+        # null  = the run predates the stamp (no file)  |  "unknown" = stamped, git
+        # unreadable at train time. See read_training_provenance().
+        **read_training_provenance(run_dir),
         "scene_format": scene_format,
         "scene_ambiguous": bool(scene_ambiguous),
         "restore_check": restore_check,

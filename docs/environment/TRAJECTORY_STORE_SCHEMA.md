@@ -131,6 +131,7 @@ recoverable by re-running shards. Fields:
 | `scene_format`, `scene_ambiguous` | which scene block the loader used, and whether the ambiguity guard was overridden (§6) |
 | `restore_check` | `"strict"` (the checkpoint's own structure was compared against the rebuilt model) or `"weak_allowed"` (the operator passed `--allow-weak-restore-check`, so that comparison may have been skipped — treat the agent's architecture as unverified) |
 | `collection_git_sha`, `collected_at` | provenance of the *collection* |
+| `training_git_sha`, `training_git_dirty`, `training_started_utc` | provenance of the *training run*, copied from `<run_dir>/models/provenance.json` (written by `train.py` at startup since 2026-08-20). **`null` and `"unknown"` mean different things**: `null` = the run predates the stamp, so no file existed — this is the whole pre-2026-08-20 `results/` corpus and is not an error; `"unknown"` = the run WAS stamped but `git` could not be read on that node at that moment. `training_git_dirty: true` means uncommitted edits to tracked files were present at training start, so `training_git_sha` does **not** fully describe the code that ran — treat it as an upper bound, not an identity |
 | `animal_tags`, `animal_classes`, `animal_behaviours`, `resource_names`, `obstacle_names` | human labels, so array index `i` means something |
 | `observation_breakdown` | `{sensor name: dimension}` for the `D`-wide observation columns |
 | `animal_damage`, `animal_is_damaging`, `obs_hides_agent`, `obs_blocking`, `res_type`, `res_damage`, `obs_damage` | static per-entity parameters that are join partners for the draws |
@@ -360,15 +361,23 @@ condition, and an analyst cannot infer it from the data:
 > recorded in the two manifests before claiming or denying pairing.
 > **Never assume pairing from run labels.**
 
-**Pairing is exact only per-device and per-lowering.** Two stores collected with the same
-`seed_base` on *different* devices are paired in distribution but not necessarily
-bit-for-bit: `vmap(jax_reset)` and unbatched `jax_reset` already disagree by one float32
-ULP on `animal_property_sampled`, purely from how XLA fuses a scatter, and a different
-backend can differ the same way. `device` is therefore a manifest-guarded field — one
-store cannot mix CPU-collected and GPU-collected blocks — and a cross-store comparison
-should check `device` alongside `env_fp` and `seed_base` before asserting exact equality of
-any float draw. Integer and boolean draws (slot counts, sight ranges, move intervals,
-activation masks) are exact everywhere.
+**Pairing is exact only per-device and per-compilation.** Two stores collected with the
+same `seed_base` on *different* devices are paired in distribution but not necessarily
+bit-for-bit, because **the environment's own reset is not bit-reproducible across
+compilations**: two runs of `jax_reset` on the same seed can differ by one float32 ULP
+(≤ 5.96e-08) on `animal_property_sampled`. The cause is compiler-level arithmetic
+reordering — XLA may emit `mean + std · noise` as a separate multiply and add, or fuse it
+into a single fused multiply-add, which carries more intermediate precision — and a
+different backend can make that choice differently. It is a property of the environment,
+not of this pipeline. Full evidence chain, including the refutation of the initial
+"batching did it" explanation:
+[`docs/llm_wiki/entries/env_entities/20260820_1606_reset_ulp_divergence_is_compiler_fusion.md`](../llm_wiki/entries/env_entities/20260820_1606_reset_ulp_divergence_is_compiler_fusion.md).
+
+`device` is therefore a manifest-guarded field — one store cannot mix CPU-collected and
+GPU-collected blocks — and a cross-store comparison should check `device` alongside
+`env_fp` and `seed_base` before asserting exact equality of any float draw. **Integer and
+boolean draws (slot counts, sight ranges, move intervals, activation masks) are exact
+everywhere**, so any analysis keyed on those is unaffected.
 
 ---
 
@@ -516,13 +525,24 @@ exactly **12 of 334** saved configs are affected, all dated 2026-05-29 to 2026-0
 **Check `scene_format` and `scene_ambiguous` in the manifest before trusting a store built
 from an older run.**
 
-### Code drift between training and collection is unrecorded
+### Code drift between training and collection — recorded only for runs trained after 2026-08-20
 
 This store records reset-time state under whatever environment code existed **at
-collection time**. The training-time code version is unrecorded anywhere in the project —
-`train.py` writes no training-time git SHA. Use `collection_git_sha` together with
-`run_dir_name` and `train_config_mtime` to **bound** what may have changed in between,
-rather than assuming nothing did.
+collection time**.
+
+Since 2026-08-20 `train.py` writes `<run_dir>/models/provenance.json` at startup (git sha,
+short sha, branch, dirty flag, start time, Python version, argv), and this collector copies
+it into the manifest as `training_git_sha` / `training_git_dirty` / `training_started_utc`.
+For such a run, the pair (`training_git_sha`, `collection_git_sha`) **names both ends of
+the drift** — subject to `training_git_dirty`, which if `true` says uncommitted edits were
+present and the training sha is only an upper bound on what actually ran.
+
+For every run trained **before** that date those three fields are `null` — no file existed,
+which is not an error and is deliberately distinguishable from the `"unknown"` a stamped
+run records when `git` could not be read. For those runs the training-time code version is
+unrecorded anywhere in the project: use `collection_git_sha` together with `run_dir_name`
+and `train_config_mtime` to **bound** what may have changed in between, rather than
+assuming nothing did.
 
 As of 2026-08-20 the reset-parity gate (`tests/env/test_unified_parity.py`) is **fully
 green (34/34 executed scenarios)**. It had four failures — all

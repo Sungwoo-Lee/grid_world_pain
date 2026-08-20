@@ -450,12 +450,19 @@ MANIFEST_GUARDED_FIELDS = (
     "dims",
     "max_steps",
     "checkpoint_path",
-    # `device` is guarded because bit-level results are LOWERING-dependent, not merely
-    # algorithm-dependent: `vmap(jax_reset)` and unbatched `jax_reset` already disagree by
-    # one float32 ULP on `animal_property_sampled`, purely from how XLA fuses a scatter
-    # (plan Implementation Report §4.3).  A store started on CPU and resumed on GPU could
-    # therefore hold bit-inconsistent blocks for what the manifest claims is one
-    # homogeneous episode population, with nothing in the data to reveal it.
+    # `device` is guarded because bit-level results are COMPILATION-dependent.  The
+    # environment's own reset is already not bit-reproducible across compilations: two
+    # runs of `jax_reset` on the same seed can differ by one float32 ULP (<= 5.96e-08) on
+    # `animal_property_sampled`, because XLA is free to emit `mean + std * noise` either
+    # as a separate multiply and add or as a single fused multiply-add, and FMA carries
+    # more intermediate precision.  Which form it picks depends on how the surrounding
+    # code lowers.  This is a property of the ENVIRONMENT under different compilations —
+    # NOT of batching and not of this pipeline, which merely happened to notice it.  Full
+    # evidence chain, including the refutation of the initial `vmap` explanation:
+    # docs/llm_wiki/entries/env_entities/20260820_1606_reset_ulp_divergence_is_compiler_fusion.md
+    # A store started on CPU and resumed on GPU would therefore hold bit-inconsistent
+    # blocks for what the manifest claims is one homogeneous episode population, with
+    # nothing in the data to reveal it.
     "device",
     # Whether the STRICT checkpoint-restore structural check was required for this store
     # ("strict") or was allowed to degrade ("weak_allowed", i.e. the operator passed
@@ -659,7 +666,9 @@ SCENE_AMBIGUITY_HELP = (
     "by taking the merged base config's newer `entities:` scene and discarding the "
     "legacy list; today's loader takes the legacy branch instead. Nothing in the run "
     "directory records which branch actually built the world it trained in — train.py "
-    "writes no training-time git SHA — so reloading this config may rebuild the scene "
+    "wrote no training-time git SHA until 2026-08-20, so every run predating that (which "
+    "is every run this guard is about) has no models/provenance.json to consult — so "
+    "reloading this config may rebuild the scene "
     "the trainer DISCARDED, and every recorded episode would be of a different world "
     "with no internal signal that anything is wrong. See "
     "docs/develop/active/behavior/TRAJECTORY_COLLECTION_PIPELINE.md §A11. "

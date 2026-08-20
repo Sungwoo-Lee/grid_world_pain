@@ -618,8 +618,8 @@ def test_c2_checkpoint_selection_is_numeric_not_lexicographic():
 # V1 — realised draws against an independent replay (the primary correctness check)
 # ══════════════════════════════════════════════════════════════════════════════
 
-# The ONE realised-draw column on which `vmap(jax_reset)` and unbatched `jax_reset`
-# are not bit-identical, and the measured bound on that difference.  See
+# The ONE realised-draw column on which two runs of `jax_reset` are not bit-identical
+# ACROSS COMPILATIONS, and the measured bound on that difference.  See
 # `test_v1_animal_property_divergence_is_one_float32_ulp` for the diagnosis.
 _XLA_DIVERGENT_DRAW_COLUMN = "animal_property_sampled"
 _XLA_DIVERGENCE_ABS_MAX = 6e-08          # one float32 ULP at magnitude 1.0 (2**-24)
@@ -636,8 +636,10 @@ def test_v1_realised_draws_match_an_independent_unbatched_replay(store):
 
     THE ONE DOCUMENTED EXCEPTION is `animal_property_sampled`, and it was diagnosed rather
     than waved through — see `test_v1_animal_property_divergence_is_one_float32_ulp` for
-    the mechanism and the measured bound.  Every other column, including the other five
-    float property columns drawn by the same `_sample_property` helper, is exact.
+    the mechanism and the measured bound.  It is a compiler-fusion effect in the
+    environment's own reset, not a property of this replay path.  Every other column,
+    including the other five float property columns drawn by the same `_sample_property`
+    helper, is exact.
     """
     import jax
     from src.environment.config_loader import load_env_params
@@ -662,31 +664,46 @@ def test_v1_realised_draws_match_an_independent_unbatched_replay(store):
                 continue
             assert np.array_equal(got, want), (
                 f"episode_seed={seed}, column {col}: store {got!r} != independent "
-                f"unbatched replay {want!r}")
+                f"replay {want!r}")
 
 
 def test_v1_animal_property_divergence_is_one_float32_ulp():
-    """DIAGNOSIS + BOUND for the one column where the batched and unbatched reset paths
-    are not bit-identical.
+    """DIAGNOSIS + BOUND for the one column where two runs of the environment's reset are
+    not bit-identical.
 
-    What: `vmap(jax_reset)` and `jax_reset` disagree on `animal_property_sampled` for a
-    minority of elements — measured 242 of 5,120 over 256 episodes on the reference
+    WHAT: `jax_reset` on the same seed can yield a different `animal_property_sampled` for
+    a minority of elements — measured 242 of 5,120 over 256 episodes on the reference
     training config — by at most **5.96e-08 absolute**, i.e. one float32 ULP at magnitude
-    1.0.  No other realised-draw column diverges at all, including
-    `res_property_sampled` and `obs_property_sampled`, which are drawn by the SAME
-    `_sample_property` helper.
+    1.0.  Every integer and boolean draw is always exact, and no other realised-draw column
+    diverges at all — including `res_property_sampled` and `obs_property_sampled`, drawn by
+    the SAME `_sample_property` helper.
 
-    Why: `animal_property_sampled` is the only one of the three assembled with a
-    `jnp.zeros_like(...).at[idx].set(...)` scatter (`src/environment/core.py:1128-1140`,
-    the N2 per-class split).  Under `vmap` that scatter lowers differently and XLA fuses
-    the `mean + std * noise` expression differently (fused multiply-add vs separate
-    multiply and add), which changes the last bit.  It is pre-existing environment/XLA
-    behaviour, independent of this pipeline, and it is invisible to the existing eval
-    tooling because `eval_rollout.py` does not record property draws.
+    WHY: **compiler-level arithmetic reordering.**  XLA may emit `mean + std * noise`
+    either as a separate multiply and add, or fused into a single fused multiply-add.  FMA
+    carries more intermediate precision, so the two forms differ in the last bit, and which
+    one XLA picks depends on how the surrounding code lowers.  `animal_property_sampled` is
+    the one property column assembled next to a `jnp.zeros_like(...).at[idx].set(...)`
+    scatter (`src/environment/core.py:1128-1140`, the N2 per-class split), and that
+    neighbouring scatter changes the fusion decision — which is exactly why its five
+    siblings using the same helper are unaffected.
+
+    NOT BATCHING.  The first explanation offered was that `vmap` was responsible; that was
+    **refuted**.  `senior-developer` reproduced the same divergence — same column, same
+    <=5.867e-08 magnitude, zero integer or boolean differences — using the project's
+    shipped parity-fixture generator, which calls unbatched `jax_reset` only and contains
+    no `vmap` anywhere.  Two unbatched runs disagreeing by exactly the effect blamed on
+    batching eliminates batching as the cause.  This is a property of the ENVIRONMENT under
+    different compilations, not of the batched collector — the pipeline merely happened to
+    be the thing that noticed, because `eval_rollout.py` never recorded property draws.
+
+    Full evidence chain (do not restate it here — link it):
+    docs/llm_wiki/entries/env_entities/20260820_1606_reset_ulp_divergence_is_compiler_fusion.md
 
     This test PINS the bound: if the divergence ever grows beyond one ULP, or spreads to
     another column, that is a different phenomenon and must be re-diagnosed rather than
-    absorbed into a wider tolerance.
+    absorbed into a wider tolerance.  It compares a batched against an unbatched reset only
+    because that is a cheap way to get two DIFFERENT COMPILATIONS of the same code in one
+    process — the batching is the instrument, not the cause.
     """
     import jax
     from src.environment.config_loader import load_env_params
@@ -696,15 +713,18 @@ def test_v1_animal_property_divergence_is_one_float32_ulp():
     params = load_env_params(Config(_base_cfg()))
     seeds = np.arange(2_000_000, 2_000_032, dtype=np.int64)
     keys = jax.vmap(jax.random.PRNGKey)(seeds)
-    batched = traj_scan._draw_block(jax.vmap(jax_reset, in_axes=(None, 0))(params, keys))
+    # Two different COMPILATIONS of the same reset code. The batched form is used here
+    # purely because it is the cheapest way to obtain a second lowering in-process; the
+    # divergence is not caused by batching (see the docstring).
+    compiled_a = traj_scan._draw_block(jax.vmap(jax_reset, in_axes=(None, 0))(params, keys))
 
     worst = 0.0
     other_cols_exact = True
     for i, s in enumerate(seeds.tolist()):
-        ref = traj_scan._draw_block(jax_reset(params, jax.random.PRNGKey(s)))
+        compiled_b = traj_scan._draw_block(jax_reset(params, jax.random.PRNGKey(s)))
         for col in ts.DRAW_COLUMNS:
-            a = np.asarray(batched[col])[i].reshape(-1)
-            b = np.asarray(ref[col]).reshape(-1)
+            a = np.asarray(compiled_a[col])[i].reshape(-1)
+            b = np.asarray(compiled_b[col]).reshape(-1)
             if a.size == 0:
                 continue
             if col == _XLA_DIVERGENT_DRAW_COLUMN:
@@ -714,9 +734,9 @@ def test_v1_animal_property_divergence_is_one_float32_ulp():
                 other_cols_exact = False
 
     assert other_cols_exact, (
-        "a realised-draw column other than animal_property_sampled now diverges between "
-        "the batched and unbatched reset paths — this is a NEW phenomenon, diagnose it "
-        "rather than widening the tolerance")
+        "a realised-draw column other than animal_property_sampled now differs between "
+        "two compilations of jax_reset — this is a NEW phenomenon, diagnose it rather "
+        "than widening the tolerance")
     assert worst <= _XLA_DIVERGENCE_ABS_MAX, (
         f"animal_property_sampled divergence grew to {worst:.3e}, beyond the documented "
         f"one-ULP bound {_XLA_DIVERGENCE_ABS_MAX:.3e}")
@@ -1260,8 +1280,10 @@ def test_atomic_write_leaves_no_tmp_file(tmp_path):
 
 
 def test_device_is_manifest_guarded(tmp_path):
-    """Bit-level results are LOWERING-dependent (see the animal_property ULP finding), so
-    a store must not be startable on CPU and resumed on GPU."""
+    """Bit-level results are COMPILATION-dependent — the environment's own reset differs
+    by one float32 ULP on `animal_property_sampled` between compilations (compiler fusion;
+    see `test_v1_animal_property_divergence_is_one_float32_ulp`) — so a store must not be
+    startable on CPU and resumed on GPU."""
     store_dir = collect(tmp_path / "root", _base_cfg(), episodes=8)
     m = ts.read_manifest(store_dir)
     assert m["device"] == "cpu"
@@ -1318,6 +1340,55 @@ def test_max_steps_beyond_int16_is_refused():
             ckpt_step=0, dims=ct.env_dims(params), seed_base=0, n_episodes=10,
             shard_episodes=5000, batch_size=1024, device="cpu", obs_precision="float32",
             scene_format="entities", scene_ambiguous=False)
+
+
+def test_manifest_carries_training_provenance(tmp_path):
+    """The manifest must record WHICH CODE trained the checkpoint it rolled out.
+
+    `train.py` writes `<run>/models/provenance.json` at startup (since 2026-08-20); the
+    collector copies it into the manifest. Both states are asserted, because they are
+    different claims and a reader must be able to tell them apart:
+
+      * REAL_RUN was trained BEFORE the stamp existed → `null` (absent, not an error);
+      * a run WITH the stamp → the real sha / dirty flag / start time.
+
+    The helper-level three-state coverage (including `"unknown"`) lives in
+    tests/test_provenance.py.
+    """
+    import shutil
+    import collect_trajectories as ct
+    from src.environment.config_loader import load_env_params
+    from src.utils.provenance import write_provenance
+
+    cfg = _base_cfg()
+    params = load_env_params(Config(copy.deepcopy(cfg)))
+    kw = dict(cfg=cfg, params=params, ckpt_dir=REAL_RUN / "models" / "0", ckpt_step=0,
+              dims=ct.env_dims(params), seed_base=0, n_episodes=10, shard_episodes=5000,
+              batch_size=1024, device="cpu", obs_precision="float32",
+              scene_format="entities", scene_ambiguous=False)
+
+    # (a) pre-stamp run — null sentinel, and NOT an error.
+    assert not (REAL_RUN / "models" / "provenance.json").exists(), (
+        "REAL_RUN acquired a provenance stamp — pick another pre-stamp run for this half")
+    m_absent = ct.build_manifest(run_dir=REAL_RUN, **kw)
+    assert m_absent["training_git_sha"] is None
+    assert m_absent["training_git_dirty"] is None
+    assert m_absent["training_started_utc"] is None
+
+    # (b) stamped run — the real values.
+    fake_run = tmp_path / "stamped_run"
+    (fake_run / "models").mkdir(parents=True)
+    shutil.copy(REAL_RUN / "models" / "config.yaml", fake_run / "models" / "config.yaml")
+    write_provenance(fake_run / "models", argv=["train.py", "--config", "x.yaml"])
+    truth = json.loads((fake_run / "models" / "provenance.json").read_text())
+
+    m_present = ct.build_manifest(run_dir=fake_run, **kw)
+    assert m_present["training_git_sha"] == truth["git_sha"] != "unknown"
+    assert m_present["training_git_dirty"] == truth["git_dirty"]
+    assert m_present["training_started_utc"] == truth["started_utc"]
+
+    # Additive only: the collection-side provenance is untouched by this.
+    assert m_present["collection_git_sha"] == m_absent["collection_git_sha"] != "unknown"
 
 
 def test_list_column_width_enforcement_fires():

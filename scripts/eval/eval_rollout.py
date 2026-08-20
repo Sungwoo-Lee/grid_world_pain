@@ -50,18 +50,17 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.environment.config_loader import Config, load_env_params, load_behavior_measure_cfg, load_env_config
 from src.environment.core import jax_reset, jax_step
 from src.environment.sensor import get_observation, get_observation_breakdown
+from src.utils.provenance import git_commit
 
 
 def _get_git_commit() -> str:
-    try:
-        import subprocess
-        result = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
-            capture_output=True, text=True, cwd=PROJECT_ROOT
-        )
-        return result.stdout.strip() if result.returncode == 0 else "unknown"
-    except Exception:
-        return "unknown"
+    """Short HEAD sha, or "unknown". Thin wrapper kept for call-site stability.
+
+    Delegates to the shared helper in src/utils/provenance.py (which train.py's startup
+    stamp also uses) so the project has ONE git-provenance implementation. Output format
+    is unchanged: the same abbreviated sha string, "unknown" on any failure.
+    """
+    return git_commit(short=True, cwd=PROJECT_ROOT)
 
 
 

@@ -1328,25 +1328,42 @@ a magnitude-40 channel is *refused* while still far below the backstop.
 
 #### 4.3 V1's exact-equality policy holds for 16 of 17 columns, not 17
 
-`vmap(jax_reset)` and unbatched `jax_reset` are **not bit-identical** on
-`animal_property_sampled`. Measured over 256 episodes: 242 of 5,120 elements differ, by at
+Two compilations of `jax_reset` are **not bit-identical** on `animal_property_sampled`.
+Measured over 256 episodes: 242 of 5,120 elements differ, by at
 most **5.96e-08 absolute** — exactly one float32 ULP at magnitude 1.0. **No other draw
 column diverges at all**, including `res_property_sampled` and `obs_property_sampled`,
 which are drawn by the *same* `_sample_property` helper.
 
-Diagnosed rather than waved through, as the plan demands. `animal_property_sampled` is the
-only one of the three assembled with a `jnp.zeros_like(...).at[idx].set(...)` scatter
-(`core.py:1128-1140`, the N2 per-class split). Under `vmap` that scatter lowers differently
-and XLA fuses `mean + std * noise` differently (fused multiply-add vs separate multiply and
-add), changing the last bit. It is **pre-existing environment/XLA behaviour, independent of
-this pipeline**, and invisible to the existing eval tooling only because `eval_rollout.py`
-does not record property draws.
+> **Cause corrected 2026-08-20 — this section originally blamed `vmap`, and that was
+> wrong.** The heading and the measurement above stand; the explanation below is the
+> corrected one. `senior-developer` reproduced the same divergence — same column, same
+> ≤5.867e-08 magnitude, zero integer or boolean differences — using the project's shipped
+> parity-fixture generator, which calls **unbatched `jax_reset` only and contains no
+> `vmap` anywhere**. Two unbatched runs disagreeing by exactly the effect attributed to
+> batching eliminates batching as the cause.
+
+Diagnosed rather than waved through, as the plan demands. The cause is **compiler-level
+arithmetic reordering**: XLA may emit `mean + std * noise` either as a separate multiply
+and add, or fused into a single fused multiply-add, which carries more intermediate
+precision — so the two forms differ in the last bit, and which one XLA picks depends on how
+the surrounding code lowers. `animal_property_sampled` is the one property column assembled
+next to a `jnp.zeros_like(...).at[idx].set(...)` scatter (`core.py:1128-1140`, the N2
+per-class split), and that neighbouring scatter changes the fusion decision — which is
+exactly why its five siblings using the same helper are unaffected.
+
+It is **a property of the environment's reset under different compilations**, not of the
+batched collector and not of this pipeline, which merely happened to be the thing that
+noticed — the existing eval tooling never saw it only because `eval_rollout.py` does not
+record property draws. Full evidence chain:
+[[20260820_1606_reset_ulp_divergence_is_compiler_fusion]]
+(`docs/llm_wiki/entries/env_entities/20260820_1606_reset_ulp_divergence_is_compiler_fusion.md`).
 
 `test_v1_animal_property_divergence_is_one_float32_ulp` pins the bound and asserts no other
 column joins it, so growth or spread is caught rather than absorbed. Per the plan's rule,
 **this loosening is documented here and requires your sign-off.** It is also a candidate
 Known-Bugs row — I cannot spawn `bug-curator`; a grep of the registry found no existing row
-for it, so **`bug-curator` should record it**.
+for it, so **`bug-curator` should record it** (as a compilation-reproducibility property of
+`jax_reset`, not as a `vmap` bug).
 
 #### 4.4 N1 resolved by matching the loader exactly
 
@@ -1553,6 +1570,56 @@ and leaves no scratch behind.
   account, so the reviewer's call was right and my instinct would have been wrong.
 
 *Review round implemented by: developer*
+
+---
+
+### 9. Stale-cause cleanup (2026-08-20) — the in-code docs named the refuted explanation
+
+A wiki capture of the ULP finding surfaced that the **code still taught the refuted
+cause**. The guard, the pinned bound and every assertion were correct; only the wording
+was stale — but a stale comment is worse than none here, because a future reader would
+have been taught "batching did it" by the code itself and would then have had to
+re-derive the refutation from scratch.
+
+**Corrected to name compiler-level arithmetic reordering** (XLA may emit
+`mean + std * noise` as a separate multiply and add or fuse it into a single
+multiply-add, which carries more intermediate precision; the choice depends on how
+surrounding code lowers, and `animal_property_sampled` is the one property column
+adjacent to the `.at[idx].set()` scatter at `core.py:1128-1140` — which is why its five
+siblings using the same helper are unaffected):
+
+| File | What was corrected |
+|---|---|
+| `src/utils/trajectory_store.py` (`MANIFEST_GUARDED_FIELDS`, `device`) | "LOWERING-dependent … `vmap` vs unbatched … how XLA fuses a scatter" → compilation-dependent, with the FMA mechanism named and the explicit statement that this is a property of the environment, **not of batching and not of this pipeline** |
+| `tests/test_trajectory_collection.py` — `_XLA_DIVERGENT_DRAW_COLUMN` comment | "on which `vmap(jax_reset)` and unbatched `jax_reset` are not bit-identical" → "on which two runs of `jax_reset` are not bit-identical **across compilations**" |
+| `tests/…::test_v1_realised_draws_match_an_independent_unbatched_replay` | docstring now says the exception is a compiler-fusion effect in the environment's reset, not a property of the replay path |
+| `tests/…::test_v1_animal_property_divergence_is_one_float32_ulp` | docstring rewritten: WHAT / WHY (compiler fusion) / **NOT BATCHING**, including how the `vmap` explanation was refuted (the shipped parity-fixture generator reproduces it with no `vmap` anywhere). Local variables renamed `batched`/`ref` → `compiled_a`/`compiled_b`, with a comment that batching is **the instrument, not the cause** — it is simply the cheapest way to obtain a second lowering in-process |
+| same file, the "no other column joins it" assertion message | "diverges between the batched and unbatched reset paths" → "differs between two compilations of `jax_reset`" |
+| `tests/…::test_device_is_manifest_guarded` | docstring now says COMPILATION-dependent and points at the diagnosis test |
+| `docs/environment/TRAJECTORY_STORE_SCHEMA.md` §5 | "per-device and per-lowering … how XLA fuses a scatter" → per-device and **per-compilation**, with the mechanism, the "property of the environment, not of this pipeline" statement, and the reassurance that integer and boolean draws are exact everywhere |
+| this report, §4.3 | a correction banner marking the original `vmap` attribution as wrong, the corrected mechanism, and the `bug-curator` hand-off reworded to "a compilation-reproducibility property of `jax_reset`, not a `vmap` bug" |
+
+**The pinned bound (`6e-08`) and the "no other column joins it" assertion are unchanged**,
+as instructed. Every location now links the wiki entry rather than restating the evidence:
+[[20260820_1606_reset_ulp_divergence_is_compiler_fusion]]
+(`docs/llm_wiki/entries/env_entities/20260820_1606_reset_ulp_divergence_is_compiler_fusion.md`).
+
+I also swept for any remaining comment implying the divergence is specific to the batched
+collector: the only surviving `vmap` mentions in these files are genuine mechanics (the
+PRNG parity guard's vmap-vs-`lax.map` key check, which is a different and still-correct
+claim; the `--device` table's "one big vmap batch"; and the test bodies' actual vmap
+calls). None of them attribute the ULP divergence.
+
+```
+$ python -m pytest tests/test_trajectory_collection.py -q -p no:randomly
+67 passed in 125.03s (0:02:05)
+
+$ python scripts/eval/traj_collect/gen_schema_doc.py --check
+docs/environment/TRAJECTORY_STORE_SCHEMA.md: up to date
+```
+
+*Stale-cause cleanup by: developer*
+
 
 
 ## Verification Report
