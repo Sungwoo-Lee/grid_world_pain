@@ -88,6 +88,42 @@ Range 2 more than triples the observation and leaves three quarters of it as olf
 make the chemical sense larger than everything else in the agent's world combined. Whatever Fig 3 says
 about accuracy, this is the counterweight.
 
+## Cost, and why there is nothing to optimise
+
+Benchmarked against the real environment, `num_envs: 128`, via
+[`olfactory_expansion_study/bench_olfaction.py`](olfactory_expansion_study/bench_olfaction.py). Three
+candidate implementations, checked for **both** speed and bit-exactness against today's single-point
+sensor:
+
+| implementation | bit-identical at range 0 | range 0 | range 1 | range 2 | range 3 |
+|---|---|---|---|---|---|
+| today, single point | — (baseline) | 11.0 µs | — | — | — |
+| **A — vmap the untouched `sense_resource`** (plan's choice) | ✅ | 10.0 µs | 11.0 µs | 10.7 µs | 12.9 µs |
+| B — explicit broadcast, pools separate | ✅ | 10.0 µs | 10.3 µs | 10.6 µs | 13.1 µs |
+| C — one concatenated `[C,E] @ [E,V]` matmul | ❌ **max diff 2.4e-07** | 8.5 µs | 11.7 µs | 10.9 µs | 14.2 µs |
+
+`env.step` on the same machine: **398 µs**.
+
+**The diamond is free.** Expanding from one sampling point to five costs **0.00% of `env.step`** — the
+marginal cost is inside the measurement noise. Even 25 cells costs +0.47%. As with the visual kernel,
+the delta does not scale with cell count although the arithmetic scales 25×, which is the signature of
+a launch-bound rather than FLOP-bound operation.
+
+**The obvious optimisation is a trap.** Form C — the single concatenated matmul that mirrors the
+visual sensor and looks like the "proper JAX way" — is **not faster at any range that matters**, and
+it **breaks bit-exactness**: concatenating the three entity pools changes the floating-point
+accumulation order, giving a max absolute difference of 2.4e-07 against today's value. That would
+forfeit range-0 byte-parity, the property the entire plan rests on, in exchange for nothing.
+
+Forms A and B are both bit-identical and indistinguishable in speed. The plan keeps A because it
+reuses `sense_resource` verbatim, so there is no second copy of the formula to drift.
+
+Micro-optimisations that were considered and rejected: `rsqrt` for the γ=1 case, working in squared
+distance to avoid the square root, and fusing the olfactory and visual weight matrices into one pass.
+Each changes the arithmetic form, each therefore risks the last bit, and each would save a fraction of
+an operation that is already unmeasurable. There is no speed argument available here — only a parity
+one.
+
 ## Superposition (Fig 4)
 
 Contributions add before the agent ever sees them, so the sensor returns the gradient of the **sum** —
