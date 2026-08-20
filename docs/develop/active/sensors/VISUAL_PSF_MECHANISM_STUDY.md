@@ -151,6 +151,59 @@ observation with 104 visual dimensions is a harder representation to learn than 
 paid in environment steps, not microseconds. Argue about `visual_sensor_range` on learning grounds;
 the performance argument does not exist.
 
+## Implementation variants — parity and speed, measured
+
+[`visual_psf_study/bench_visual_variants.py`](visual_psf_study/bench_visual_variants.py) tests the two
+paths separately, because they have different obligations.
+
+**The OFF path must be bit-identical to today, and is.** The plan restructures it — the activity mask
+moves from `all_props` onto the weight matrix `W`, and a mask-gate multiply is added to both paths —
+so parity was a claim to verify rather than assume. Measured on GPU against the real environment:
+**bit-identical at ranges 0, 1 and 2**, max absolute difference exactly 0. (The plan review had only
+CPU micro-checks; this closes that gap.) The reason is that `matches` and `all_active` are exactly 0.0
+or 1.0, so reordering their multiplication is exact in IEEE arithmetic.
+
+**The ON path is new behaviour with no parity obligation**, so it can be chosen on speed and accuracy.
+Four formulations, `env.step` = 352 µs for scale:
+
+| variant | range 0 | range 1 | range 2 |
+|---|---|---|---|
+| exact match (today) | 8.7 µs | 12.8 µs | 13.7 µs |
+| V1 — projections as `cells @ u.T`, normalise `W` | 9.9 µs | 16.1 µs | 17.0 µs |
+| **V2 — `(c − e)` first, then contract** | 11.4 µs | **13.8 µs** | 17.7 µs |
+| V3 — fold normalisation into `props` | 9.9 µs | 18.1 µs | 17.8 µs |
+| V4 — `rsqrt` for the unit vector | 9.9 µs | 16.6 µs | 17.4 µs |
+
+Every variant sits within a few µs of the others and within ~1% of `env.step`. There is no meaningful
+speed choice to make.
+
+### The finding that matters: GPU matmul precision
+
+V1 and V2 are algebraically identical but disagreed by **5.4e-04** — far above float32 rounding. A
+float64 reference showed the two projection formulas differ by only ~1.6× in accuracy, nowhere near
+enough to explain it. The actual cause:
+
+| `jax_default_matmul_precision` | V1 vs V2, max abs diff |
+|---|---|
+| default (unset) | 5.379e-04 |
+| `'highest'` | 3.576e-07 |
+
+**V1's `[C,2] @ [2,E]` projection runs in reduced precision (TF32) by default on this hardware**,
+keeping roughly three decimal digits. V2 expresses the same contraction in a form XLA does not route
+through the reduced-precision path.
+
+**This reverses implementation note 1 below, which said never to materialise the `[C, E, 2]`
+displacement tensor.** That advice was written to save memory traffic; measurement shows the tensor is
+free at these sizes (V2 is the *fastest* variant at range 1) and that avoiding it via a matmul costs
+three decimal digits. **Use V2.**
+
+Two caveats worth carrying forward. First, 5e-04 is 400× smaller than the perceptual-noise σ of 0.2,
+so this was never going to corrupt the science — but it would make a geometry unit test flaky and
+could make results differ across GPU models. Second, and pre-existing: `sense_visual`'s
+`matches @ all_props` runs under the same default. It is harmless today because the shipped visual
+properties are one-hot 0/1 vectors, exactly representable in TF32 — but it becomes a real source of
+error for anyone who configures non-trivial `visual_properties` or sets `visual_properties_std > 0`.
+
 ## Implementation notes for the JAX version
 
 Four things the reference implementation gets right, each of which is easy to get wrong:

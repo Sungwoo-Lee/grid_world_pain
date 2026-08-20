@@ -129,8 +129,12 @@ w      = exp( -v∥²/(2σ_∥²) - v⊥²/(2σ_⊥²) ) / (2π σ_∥ σ_⊥)
 
 Four implementation constraints, each of which is a real trap:
 
-1. **Never materialise `[C, E, 2]`.** Since `v·û = c·û − e·û`, both projections come from small
-   matmuls (`cell_coords @ u.T`) minus a per-entity constant. Working set stays `[C, E]`.
+1. **Compute `v = c − e` first, then contract it** — do *not* use the `cells @ u.T` matmul trick.
+   The first draft said the opposite, to avoid materialising `[C, E, 2]`. Measurement reversed it:
+   the tensor is free at these sizes (it is the *fastest* variant at range 1), while the matmul form
+   silently runs in reduced precision (TF32) on GPU and loses three decimal digits — 5.4e-04 against
+   3.6e-07 with `jax_default_matmul_precision='highest'`. Harmless for the science, fatal for a
+   geometry unit test. See [[VISUAL_PSF_MECHANISM_STUDY]] §Implementation variants.
 2. **`sigma_floor` is mandatory, not cosmetic.** Mass normalisation divides by `2π σ_∥ σ_⊥`; an entity
    on the agent's own cell gives `d = 0`, `σ_∥ = 0`, and an infinite peak. A floor of half a cell is
    the grid's sampling limit and independently the point past which anisotropy stops buying
@@ -412,6 +416,11 @@ disclosed here rather than discovered by whoever next re-evaluates an old run.
 
 ## Checkpoints
 
+- [ ] **CP0 — OFF-path parity is already verified.** The restructured exact-match path (activity mask
+      moved onto `W`, plus the mask gate) measured **bit-identical** to today's `sense_visual` on GPU
+      at ranges 0, 1 and 2. Re-confirm after implementation with
+      `visual_psf_study/bench_visual_variants.py`; it should stay exact, because the values involved
+      are exactly 0.0 and 1.0.
 - [ ] **CP1 — parity before anything else.** With stock `default.yaml`, dump the full observation
       vector for a fixed seed and 20 steps, before and after the change. Must be **bit-identical**.
       Compare saved arrays, not a recomputation from source.
@@ -439,7 +448,7 @@ New, under `tests/env/`:
 |---|---|
 | `test_olfaction_range0_parity.py` | `olfactory_sensor_range: 0` gives observations bit-identical to a stored pre-change reference |
 | `test_visual_blur_disabled_parity.py` | `visual_blur_enabled: false` likewise, **including** the moved activity mask |
-| `test_visual_psf_kernel.py` | CP3 + CP4 as unit assertions on the weight matrix |
+| `test_visual_psf_kernel.py` | CP3 + CP4 as unit assertions on the weight matrix. **Must pin `jax_default_matmul_precision`**, or exact-geometry assertions are flaky at the 1e-4 level on GPU |
 | `test_visual_mask.py` | With blur ON, a `far`-masked entity at distance ≥ 1 contributes **exactly zero to every cell including the centre** (the leak regression test); it contributes normally when the agent stands on it; `all` zeroes everything; `none` unchanged; an unknown string raises at load |
 | `test_olfaction_diamond.py` | At range 1 with a single source, the cell toward the source reads higher than the cell away from it, for several bearings |
 | `test_modality_fingerprint.py` | Two configs with **identical obs_dim** but different `visual_blur_enabled` are rejected by the curriculum-stage validator, in both `train.py` and `dreamer_srl_main.py`. Must assert the *fingerprint* error, not the obs_dim error — a test built on `olfactory_sensor_range` passes without the change and proves nothing |
