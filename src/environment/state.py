@@ -263,6 +263,20 @@ class EnvParams:
     nociception_enabled: bool = struct.field(pytree_node=False)
     location_sensor_enabled: bool = struct.field(pytree_node=False)
 
+    # --- v3.1 directional sensors -------------------------------------------
+    # Shape-determining -> static. 0 reproduces the pre-v3.1 single-point sample.
+    olfactory_sensor_range: int = struct.field(pytree_node=False)
+    # Selects the visual code path at trace time. False == exact cell match.
+    visual_blur_enabled: bool = struct.field(pytree_node=False)
+    # Continuous blur knobs are TRACED: sweeping them must not recompile jax_step.
+    visual_blur_radial_scale: float   # sigma_parallel  = scale * distance
+    visual_blur_anisotropy: float     # rho = sigma_par / sigma_perp; 1.0 == isotropic
+    visual_blur_sigma_floor: float    # cells; the grid's sampling limit
+    # Per-entity visibility: 0 = none, 1 = far (visible only when co-located), 2 = all
+    res_visual_mask: jnp.ndarray      # [num_res]    int32
+    animal_visual_mask: jnp.ndarray   # [N]          int32
+    obs_visual_mask: jnp.ndarray      # [num_obs]    int32
+
     # Hidden-state observability flags
     injury_observable: bool = struct.field(pytree_node=False)
     nutrition_observable: bool = struct.field(pytree_node=False)

@@ -768,11 +768,11 @@ def main() -> None:
     # -----------------------------------------------------------------------
     # 4b. Pre-flight obs/action + modality-fingerprint check (curriculum only)
     # Ported from train.py:483-534. Validates that all stage configs produce
-    # the same obs_dim, action_dim, and 13-field modality fingerprint so the
+    # the same obs_dim, action_dim, and 18-field modality fingerprint so the
     # retained weights fit every stage. Fails fast with a descriptive error.
     # -----------------------------------------------------------------------
     def _modality_fingerprint(p):
-        """13-field tuple of sensor enables + shape params affecting obs layout.
+        """18-field tuple of sensor enables + shape params affecting obs layout.
 
         Ported verbatim from train.py:L485-L503.
         If any two stages produce different fingerprints, obs semantics differ
@@ -792,6 +792,22 @@ def main() -> None:
             p.injury_observable,
             p.nutrition_observable,
             p.sensor_range,
+            # v3.1 directional sensors. olfactory_sensor_range changes obs_dim (so
+            # the dim check already catches it) -- included as defence in depth.
+            # visual_blur_enabled and the per-entity visual_mask arrays change what
+            # the observation MEANS at an identical dim count, which is the case
+            # the dim check cannot catch and the only reason this tuple exists.
+            # Masks go in as tuples of ints: appending a jnp array would silently
+            # break the `!=` comparison below, which is tuple equality.
+            p.olfactory_sensor_range,
+            p.visual_blur_enabled,
+            tuple(int(x) for x in p.res_visual_mask),
+            tuple(int(x) for x in p.animal_visual_mask),
+            tuple(int(x) for x in p.obs_visual_mask),
+            # NOT fingerprinted, deliberately: visual_blur_radial_scale /
+            # _anisotropy / _sigma_floor are continuous, and fingerprinting floats
+            # would forbid legitimate schedules. Same pre-existing choice applies
+            # to visual_vector_size.
         )
 
     if schedule is not None:

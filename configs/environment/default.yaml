@@ -190,6 +190,12 @@ sensory:
   sensor_radius: 20
   vector_size: 5
   decay_power: 1.0
+  # v3.1 directional olfaction. 0 = the pre-v3.1 single sample at the agent's own
+  # cell (byte-identical). >0 samples the same field at every cell of a Manhattan
+  # diamond, so the readings carry a gradient and therefore a direction.
+  # Out-of-bounds cells read zero, matching the visual sensor.
+  # Dimensions = (2r^2 + 2r + 1) * vector_size.
+  olfactory_sensor_range: 0
   #Collision sensor
   collision_sensor_range: 1
   #Location sensor
@@ -201,6 +207,22 @@ sensory:
   visual_sensor_enabled: true
   visual_sensor_range: 0
   visual_vector_size: 8   # width of per-entity visual property vectors (v3.0+); default 8 preserves byte-parity
+  # v3.1 anisotropic point-spread blur. false = exact cell match, byte-identical
+  # to pre-v3.1. When true, each entity is written into cells with a gaussian
+  # weight elongated ALONG the agent->entity ray, so distance becomes vague while
+  # bearing stays sharp. Needs visual_sensor_range >= 1 to have anywhere to spread.
+  visual_blur_enabled: false
+  visual_blur_radial_scale: 0.5    # sigma_parallel = scale * distance
+  visual_blur_anisotropy: 3.0      # rho = sigma_par / sigma_perp; 1.0 == isotropic
+  # Half a cell is the grid's sampling limit. Required, not cosmetic: mass
+  # normalisation divides by 2*pi*sigma_par*sigma_perp, so an entity on the agent's
+  # own cell would otherwise give an infinite peak.
+  visual_blur_sigma_floor: 0.5
+  # NOTE: radial_scale / anisotropy / sigma_floor are deliberately NOT part of the
+  # curriculum modality fingerprint (train.py, dreamer_srl_main.py) -- they are
+  # continuous and fingerprinting floats would forbid legitimate schedules.
+  # visual_blur_enabled and per-entity visual_mask ARE fingerprinted, because they
+  # change observation semantics at an identical dimension count.
   visual_background_properties:   # grass / sand / plain
     - [1,0,0,0,0,0,0,0]
     - [0,1,0,0,0,0,0,0]

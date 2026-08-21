@@ -11,7 +11,13 @@ def sense_resource(agent_pos, res_pos, res_active, res_property, radius, decay_p
     # Handle singularity (agent ON resource)
     # Original: dist < 0.001 -> decay = 2.0
     # Else: 1.0 / (dist ** decay_power)
-    decay = jnp.where(dist < 0.001, 2.0, 1.0 / (jnp.power(dist, decay_power) + 1e-10))
+    # On-source value: "standing on it" == "half a cell away", the grid's sampling
+    # limit. At decay_power=1.0 this is bit-identical to the literal 2.0 this
+    # replaced (1/0.5 == 2.0 exactly in float32), so byte-parity holds for every
+    # config at the shipped decay power. At other gammas it stays on the curve,
+    # where the constant did not.  [ONSOURCE_RULE_STUDY]
+    on_source = 1.0 / jnp.power(0.5, decay_power)
+    decay = jnp.where(dist < 0.001, on_source, 1.0 / (jnp.power(dist, decay_power) + 1e-10))
     
     # Mask by radius and activity
     mask = jnp.logical_and(res_active, dist <= radius)
@@ -20,6 +26,41 @@ def sense_resource(agent_pos, res_pos, res_active, res_property, radius, decay_p
     weighted_props = res_property * decay[:, None] * mask[:, None]
     obs = jnp.sum(weighted_props, axis=0)
     return obs
+
+def _sense_olfaction_at(point, state: EnvState, params: EnvParams):
+    """The three-pool olfactory sum evaluated at ONE sampling point.
+
+    Kept as three separate sense_resource calls summed in the original order
+    (res + animal + obs) so float accumulation is bit-identical to pre-v3.1.
+    """
+    return (sense_resource(point, state.res_pos, state.res_active,
+                           state.res_property_sampled, params.sensor_radius, params.sensor_decay)
+            + sense_resource(point, state.animal_pos, state.animal_active,
+                             state.animal_property_sampled, params.sensor_radius, params.sensor_decay)
+            + sense_resource(point, state.obs_pos, state.obs_active,
+                             state.obs_property_sampled, params.sensor_radius, params.sensor_decay))
+
+
+def sense_olfaction_cells(state: EnvState, params: EnvParams):
+    """Olfactory field sampled at every cell of a Manhattan diamond (v3.1).
+
+    olfactory_sensor_range == 0 takes a static fallback to the original
+    single-point expression, so parity does not depend on vmap-of-one compiling
+    identically. Out-of-bounds cells read zero across all channels, matching the
+    visual sensor. Flattened cell-major: cell 0's channels, then cell 1's, ...
+    """
+    if params.olfactory_sensor_range == 0:          # static branch, trace time
+        return _sense_olfaction_at(state.agent_pos, state, params)
+
+    offsets = get_visual_offsets(params.olfactory_sensor_range)   # [C,2]
+    cells = state.agent_pos + offsets
+    # Built here rather than reused from sense_visual: the two sensors have
+    # INDEPENDENT ranges, so their cell sets and in-bounds masks differ.
+    in_bounds = jnp.all(jnp.logical_and(
+        cells >= 0, cells < jnp.array([params.height, params.width])), axis=-1)   # [C]
+    per_cell = jax.vmap(lambda pt: _sense_olfaction_at(pt, state, params))(cells)  # [C,V]
+    return (per_cell * in_bounds[:, None]).flatten()
+
 
 def sense_collision(agent_pos, state: EnvState, params: EnvParams):
     """Manhattan Collision Sensor (checks OOB and blocking obstacles)."""
@@ -143,6 +184,54 @@ def get_visual_offsets(sensor_range):
     
     return offsets_arr
 
+def _psf_weights(cell_coords, all_pos, agent_pos, params: EnvParams):
+    """Anisotropic point-spread weights, [num_cells, Total_E].
+
+    A gaussian elongated ALONG the agent->entity ray: sigma_par grows with the
+    entity's distance so WHERE it is becomes vague, while sigma_perp stays tight
+    so WHICH WAY it is stays sharp. Normalised by the kernel's full analytic mass
+    (2*pi*sp*st) so only the fraction landing inside the diamond is reported --
+    that is what makes distant entities fade.  [VISUAL_PSF_MECHANISM_STUDY]
+
+    v = c - e is computed BEFORE projecting, rather than as (c.u - e.u): the
+    latter routes geometry through a matmul, which runs in reduced precision on
+    Ampere-class GPUs and loses ~3 decimal digits.
+    """
+    ap = agent_pos.astype(jnp.float32)
+    pos = all_pos.astype(jnp.float32)                                  # [E,2]
+    rel = pos - ap
+    d = jnp.sqrt(jnp.maximum(jnp.sum(rel * rel, axis=-1), 1e-12))      # [E]
+    u = jnp.where((d > 1e-6)[:, None], rel / d[:, None],
+                  jnp.array([1.0, 0.0], dtype=jnp.float32))            # [E,2] radial
+    t = jnp.stack([-u[:, 1], u[:, 0]], axis=-1)                        # [E,2] tangential
+
+    floor = params.visual_blur_sigma_floor
+    sp = jnp.maximum(params.visual_blur_radial_scale * d, floor)       # [E]
+    st = jnp.maximum(sp / params.visual_blur_anisotropy, floor)        # [E]
+
+    v = cell_coords.astype(jnp.float32)[:, None, :] - pos[None, :, :]  # [C,E,2]
+    vpar = jnp.einsum('ced,ed->ce', v, u)
+    vperp = jnp.einsum('ced,ed->ce', v, t)
+    W = jnp.exp(-(vpar * vpar) * (0.5 / (sp * sp))[None, :]
+                - (vperp * vperp) * (0.5 / (st * st))[None, :])
+    return W / (2.0 * jnp.pi * sp * st)[None, :]
+
+
+def _visual_mask_gate(agent_pos, all_pos, all_mask):
+    """Per-entity visibility gate, broadcast over cells -> [1, Total_E].
+
+    Gates on the ENTITY's Manhattan distance from the agent, not the cell's.
+    Under exact matching the two are equivalent; under blur they are not, and
+    gating per cell would leave a 'far'-masked entity leaking its blur tail into
+    the agent's own cell.  0 = none, 1 = far, 2 = all.
+    """
+    d_e = jnp.sum(jnp.abs(all_pos - agent_pos), axis=-1)               # [E]
+    keep = jnp.where(all_mask == 2, 0.0,
+                     jnp.where(all_mask == 1,
+                               (d_e < 1).astype(jnp.float32), 1.0))
+    return keep[None, :]
+
+
 def sense_visual(agent_pos, state: EnvState, params: EnvParams):
     """Matmul-optimized Visual Sensor (configurable per-entity appearance vectors).
 
@@ -218,21 +307,31 @@ def sense_visual(agent_pos, state: EnvState, params: EnvParams):
     res_props = state.res_visual_property_sampled        # [num_res, V]
     obs_props = state.obs_visual_property_sampled        # [num_obs, V]
     parts_props = [res_props]
+    parts_mask = [params.res_visual_mask]
     if num_animal > 0:
         # Each animal uses its per-episode sampled visual property vector
         animal_props = state.animal_visual_property_sampled  # [N, V]
         parts_props.append(animal_props)
+        parts_mask.append(params.animal_visual_mask)
     parts_props.append(obs_props)
+    parts_mask.append(params.obs_visual_mask)
     all_props = jnp.concatenate(parts_props, axis=0)  # [Total_E, V]
+    all_mask = jnp.concatenate(parts_mask, axis=0)    # [Total_E] int
 
-    # Apply activity mask
-    all_props = all_props * all_active[:, None]
-
-    # Compute Matches [num_cells, Total_E]
-    matches = jnp.all(cell_coords[:, None, :] == all_pos[None, :, :], axis=-1)
+    # Weight matrix [num_cells, Total_E]: gaussian point-spread when blur is on,
+    # exact cell match otherwise. The OFF branch is bit-identical to pre-v3.1 --
+    # the activity mask moved from all_props onto W, which is exact because both
+    # matches and all_active are exactly 0.0 or 1.0.
+    if params.visual_blur_enabled:                     # static branch, trace time
+        W = _psf_weights(cell_coords, all_pos, agent_pos, params)
+    else:
+        W = jnp.all(cell_coords[:, None, :] == all_pos[None, :, :],
+                    axis=-1).astype(jnp.float32)
+    W = W * all_active[None, :].astype(jnp.float32)
+    W = W * _visual_mask_gate(agent_pos, all_pos, all_mask)
 
     # Sum properties: [num_cells, Total_E] @ [Total_E, V] -> [num_cells, V]
-    vis_entities = jnp.matmul(matches.astype(jnp.float32), all_props)
+    vis_entities = jnp.matmul(W, all_props)
 
     # Final assembly
     total_vis = vis_background + vis_entities
@@ -318,11 +417,10 @@ def get_observation(state: EnvState, params: EnvParams, apply_noise=True):
     # 5. Olfaction Sensor (Resources + Animals + Obstacles)
     # B2 fix: unified animal_chem replaces separate pred_chem + neutral_chem calls.
     if params.olfactory_enabled:
-        res_chem = sense_resource(state.agent_pos, state.res_pos, state.res_active, state.res_property_sampled, params.sensor_radius, params.sensor_decay)
-        # Use per-episode masks so inactive animals/obstacles contribute zero olfaction (PER_EPISODE_ENV_VARIANCE)
-        animal_chem = sense_resource(state.agent_pos, state.animal_pos, state.animal_active, state.animal_property_sampled, params.sensor_radius, params.sensor_decay)
-        obs_chem = sense_resource(state.agent_pos, state.obs_pos, state.obs_active, state.obs_property_sampled, params.sensor_radius, params.sensor_decay)
-        obs_parts.append(res_chem + animal_chem + obs_chem)
+        # v3.1: sampled at every cell of a Manhattan diamond of radius
+        # olfactory_sensor_range. At range 0 this is the pre-v3.1 single sample,
+        # bit-identical. Per-episode active masks keep inactive entities silent.
+        obs_parts.append(sense_olfaction_cells(state, params))
     
     # 6. Collision
     obs_parts.append(sense_collision(state.agent_pos, state, params))
@@ -368,7 +466,9 @@ def get_observation_breakdown(params: EnvParams):
     
     # 5. Olfaction
     if params.olfactory_enabled:
-        breakdown["Olfaction"] = int(params.res_property.shape[-1])
+        n_olf_cells = (2 * (params.olfactory_sensor_range ** 2)
+                       + 2 * params.olfactory_sensor_range + 1)
+        breakdown["Olfaction"] = int(n_olf_cells * params.res_property.shape[-1])
     
     # 6. Collision
     num_coll_cells = 2 * (params.sensor_range**2) + 2 * params.sensor_range + 1
@@ -410,7 +510,22 @@ def build_sensory_viz(obs, state, params, true_obs=None):
             olf_obs = obs[ptr:ptr+dim]
             olf_true = true_obs[t_ptr:t_ptr+dim] if true_obs is not None else olf_obs
             ptr += dim; t_ptr += dim
-            viz.append({'name': 'Olfactory', 'vector': olf_obs, 'true_vector': olf_true, 'type': 'spectrum', 'labels': ['GRS', 'SND', 'PLN', 'FOD', 'DNG', 'PRD', 'RCK', 'NEU']})
+            _V = int(params.res_property.shape[-1])
+            # Chemical channels, NOT the visual ones. The previous label list was
+            # the eight VISUAL channel names applied to a 5-wide chemical vector;
+            # it was inert because draw_spectrum_pod ignores labels, but the
+            # diamond renderer below does not.
+            _olf_labels = (['FOOD', 'AN-A', 'AN-B', 'BUSH', 'TREE'] if _V == 5
+                           else [f'C{i}' for i in range(_V)])
+            if params.olfactory_sensor_range > 0:
+                # v3.1: one reading per diamond cell -> render as a spatial grid,
+                # the same pod the visual sensor uses.
+                viz.append({'name': 'Olfactory', 'vector': olf_obs, 'true_vector': olf_true,
+                            'type': 'visual_grid', 'num_features': _V,
+                            'range': params.olfactory_sensor_range, 'labels': _olf_labels})
+            else:
+                viz.append({'name': 'Olfactory', 'vector': olf_obs, 'true_vector': olf_true,
+                            'type': 'spectrum', 'labels': _olf_labels})
         
         elif sensor_name == "Extero Nociception":
             noc_obs = float(obs[ptr])

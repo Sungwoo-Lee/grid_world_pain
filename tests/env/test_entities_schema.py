@@ -115,6 +115,11 @@ sensory:
   nutrition_observable: false
   sensor_radius: 5.0
   decay_power: 1.0
+  olfactory_sensor_range: 0
+  visual_blur_enabled: false
+  visual_blur_radial_scale: 0.5
+  visual_blur_anisotropy: 3.0
+  visual_blur_sigma_floor: 0.5
   collision_sensor_range: 1
   visual_sensor_enabled: false
   visual_sensor_range: 1

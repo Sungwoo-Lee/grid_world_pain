@@ -273,6 +273,11 @@ body:
 
 
 sensory:
+  olfactory_sensor_range: 0
+  visual_blur_enabled: false
+  visual_blur_radial_scale: 0.5
+  visual_blur_anisotropy: 3.0
+  visual_blur_sigma_floor: 0.5
   using_sensory: true
   #Olfactory sensor
   olfactory_enabled: true
