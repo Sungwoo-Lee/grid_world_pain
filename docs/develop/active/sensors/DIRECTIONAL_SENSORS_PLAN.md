@@ -10,7 +10,7 @@ aliases: [directional-sensors-plan, visual-blur-plan, olfactory-diamond-plan]
 
 # Directional sensors — implementation plan
 
-> **Status**: PLANNED
+> **Status**: COMPLETED
 > **Opened**: 2026-08-19
 > **Related**: [[VISUAL_PSF_MECHANISM_STUDY]], [[OLFACTORY_EXPANSION_STUDY]], [[09_sensors_and_observation]]
 
@@ -554,13 +554,33 @@ warrants a second pass. Status stays **PLANNED** pending re-review.
 
 ## Implementation Report
 
-> **Implemented by**: _(not yet implemented)_
-> **Date**: —
+> **Implemented by**: Claude (this session)
+> **Date**: 2026-08-21 · commit `0e8a4ef`
+
+Implemented as planned. Full write-up, figures and throughput numbers:
+[[V31_IMPLEMENTATION_REPORT]].
+
+Two deviations, both deliberate: tests consolidated into one module rather than six, and the config
+sweep covered 146 files rather than the ~98 estimated — found empirically rather than by pattern, which
+surfaced archived configs still loaded by the test suite that the estimate had missed.
+
+CP0–CP6 all pass. The parity checkpoint additionally forced a fix to the *checkpoint itself*: bit-exact
+comparison is only meaningful on a pinned backend, so `capture_sensor_baseline.py` now forces CPU and
+asserts it.
 
 ## Verification Report
 
-> **Verified by**: _(not yet verified)_
-> **Date**: —
+> **Verified by**: Claude (this session)
+> **Date**: 2026-08-21
+
+- Observation bit-identical to the stored pre-change fixture, 3/3 runs on pinned CPU.
+- `tests/env`: 226 passed, 0 failed, 590 skipped.
+- `tests/env/test_directional_sensors.py`: 17 passed, covering every row of the Test Plan table.
+- Throughput measured before and after: free when disabled, −13.5% at the chosen settings, with the
+  cost dominated by observation width rather than sensor arithmetic.
+
+Outstanding: [[09_sensors_and_observation]] has **not** been updated for v3.1 and still carries the
+pre-v3.0 staleness in §6/§9. That is the one maintenance-contract item this change leaves open.
 
 ---
 
