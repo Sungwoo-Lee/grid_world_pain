@@ -3,7 +3,7 @@ title: "Directional sensors — per-cell olfaction + anisotropic visual point-sp
 topic: sensors
 status: active
 created: 2026-08-19
-last_updated: 2026-08-19
+last_updated: 2026-08-20
 phase: null
 aliases: [directional-sensors-plan, visual-blur-plan, olfactory-diamond-plan]
 ---
@@ -219,8 +219,9 @@ _ON_SOURCE = 1.0 / jnp.power(0.5, decay_power)
 decay = jnp.where(dist < 0.001, _ON_SOURCE, 1.0 / (jnp.power(dist, decay_power) + 1e-10))
 ```
 
-Add to the parity test suite: assert `1/(0.5**1.0) == 2.0` bitwise in float32, so the equivalence
-this rests on is checked rather than remembered.
+Add to the parity test suite: assert bit-equality of the **traced `jnp` expression as written**, not
+of a numpy scalar — `jnp.where(d < 0.001, 1.0/jnp.power(0.5, 1.0), ...)` against the literal `2.0`
+under `jit` — so the equivalence is checked in the form the sensor actually evaluates.
 
 #### `src/environment/sensor.py`
 
@@ -249,7 +250,12 @@ def sense_olfaction_cells(state, params):
               + sense_resource(p, state.obs_pos,    state.obs_active,    state.obs_property_sampled,
                                params.sensor_radius, params.sensor_decay))
 
-    return jax.vmap(at)(cells).flatten()      # [C*V]
+    # Out-of-bounds cells read zero (user decision, 2026-08-20), matching vision.
+    # Built here rather than reused from sense_visual: the two sensors have
+    # INDEPENDENT ranges, so their cell sets and in-bounds masks differ.
+    in_bounds = jnp.all(jnp.logical_and(
+        cells >= 0, cells < jnp.array([params.height, params.width])), axis=-1)   # [C]
+    return (jax.vmap(at)(cells) * in_bounds[:, None]).flatten()      # [C*V]
 ```
 
 **Specification details that must not drift:**
@@ -290,7 +296,7 @@ by construction" language was wrong:
     else:
         W = jnp.all(cell_coords[:, None, :] == all_pos[None, :, :], axis=-1).astype(jnp.float32)
     W = W * all_active[None, :]                          # activity mask, both paths
-    W = W * _visual_mask_gate(offsets, all_mask)         # none/far/all
+    W = W * _visual_mask_gate(agent_pos, all_pos, all_mask)   # none/far/all, by ENTITY distance
     vis_entities = jnp.matmul(W, all_props)
 ```
 
@@ -373,7 +379,15 @@ fingerprint-specific rejection (see Test Plan), or it passes without the change 
     )
 ```
 
-The "13-field" wording becomes 15 — but only where it actually appears, which is
+**Per-entity `visual_mask` is also a same-dimension semantics knob** and must be fingerprinted for
+the same reason `visual_blur_enabled` is: a stage flipping a predator from `none` to `all` changes
+what the observation means without changing its size, and would otherwise pass both validators. It is
+discrete and shape-stable, so unlike the continuous blur knobs it can be fingerprinted cleanly — but
+it must go in as a **tuple of Python ints**, not the `jnp` arrays held in `EnvParams`. Appending a
+traced array to the fingerprint tuple silently breaks the `fp_i != stage0_fingerprint` comparison,
+which is an equality test on a tuple.
+
+The "13-field" wording becomes 16 — but only where it actually appears, which is
 `dreamer_srl_main.py:771,775`. `train.py`'s docstring does not carry the phrase, and neither does
 `tests/env/test_no_recompile.py` (whose docstring is about animal-class recompiles). The first draft
 named two edit sites that do not exist.
@@ -383,7 +397,7 @@ named two edit sites that do not exist.
 Making the five `sensory.*` keys mandatory has consequences the first draft did not state.
 
 **Historical runs become un-evaluatable.** Every run dumps its fully merged config to
-`models/config.yaml` (`train.py:881-883`), and the evaluation path loads that snapshot and merges
+`models/config.yaml` (`train.py:896-898`), and the evaluation path loads that snapshot and merges
 only the *evaluation* and *visualization* defaults on top of it (`evaluation.py:_load_eval_config`,
 line ~132-140) — never `configs/environment/default.yaml`. A pre-change snapshot therefore lacks the
 new keys, and `load_env_params` raises `ValueError` on every historical run.
@@ -418,9 +432,9 @@ disclosed here rather than discovered by whoever next re-evaluates an old run.
 
 - [ ] **CP0 — OFF-path parity is already verified.** The restructured exact-match path (activity mask
       moved onto `W`, plus the mask gate) measured **bit-identical** to today's `sense_visual` on GPU
-      at ranges 0, 1 and 2. Re-confirm after implementation with
-      `visual_psf_study/bench_visual_variants.py`; it should stay exact, because the values involved
-      are exactly 0.0 and 1.0.
+      at ranges 0, 1 and 2. Note the re-run is **new-vs-new** — the benchmark carries its own copy
+      of both paths — so it is a consistency check, not the parity net. CP1's stored pre-change
+      fixture is the only thing that compares against the real baseline.
 - [ ] **CP1 — parity before anything else.** With stock `default.yaml`, dump the full observation
       vector for a fixed seed and 20 steps, before and after the change. Must be **bit-identical**.
       Compare saved arrays, not a recomputation from source.
@@ -450,7 +464,7 @@ New, under `tests/env/`:
 | `test_visual_blur_disabled_parity.py` | `visual_blur_enabled: false` likewise, **including** the moved activity mask |
 | `test_visual_psf_kernel.py` | CP3 + CP4 as unit assertions on the weight matrix. **Must pin `jax_default_matmul_precision`**, or exact-geometry assertions are flaky at the 1e-4 level on GPU |
 | `test_visual_mask.py` | With blur ON, a `far`-masked entity at distance ≥ 1 contributes **exactly zero to every cell including the centre** (the leak regression test); it contributes normally when the agent stands on it; `all` zeroes everything; `none` unchanged; an unknown string raises at load |
-| `test_olfaction_diamond.py` | At range 1 with a single source, the cell toward the source reads higher than the cell away from it, for several bearings |
+| `test_olfaction_diamond.py` | At range 1 with a single source, the cell toward the source reads higher than the cell away from it, for several bearings. **Plus: with the agent on a boundary, every out-of-bounds cell reads exactly zero across all `vector_size` channels** — without this the suite stays green while olfaction reads through walls |
 | `test_modality_fingerprint.py` | Two configs with **identical obs_dim** but different `visual_blur_enabled` are rejected by the curriculum-stage validator, in both `train.py` and `dreamer_srl_main.py`. Must assert the *fingerprint* error, not the obs_dim error — a test built on `olfactory_sensor_range` passes without the change and proves nothing |
 
 Extend: `test_no_recompile.py` (CP5), `test_visual_parity.py` / `test_visual_properties.py` /
@@ -491,7 +505,32 @@ Combined observation with both settings: 27 − 8 − 5 + 104 + 25 = **143 dims*
 
 ### Still open
 
-_(none)_
+**The on-source change is not parity-preserving repo-wide.** Option B was approved on the stated
+premise that γ = 1.0 everywhere and γ ≠ 1 was hypothetical. That premise is false. Eleven live
+non-archive configs ship `decay_power: 2.0`, where option B changes the on-source reading from 2.0 to
+4.0 on roughly a third of steps:
+
+| config | count |
+|---|---|
+| `configs/continual/nmn_double_return_stages/*.yaml` | 5 |
+| `configs/verification/observability_gates_S1–S4.yaml` | 4 |
+| `configs/verification/olfaction_parity_{neutral,predator}.yaml` | 2 |
+
+γ = 2.0 was also the *historical default* — `configs/environment/experiment/olfactory_ambiguity_lindecay/`
+is an entire experiment family defined by switching 2.0 → 1.0, and the `nutrition_sweep_d2` probes
+carry comments describing 2.0 as inherited. This is a live part of the experimental record, not a
+corner case. The last two rows are the olfactory **parity verification** configs, whose whole purpose
+is to detect exactly this kind of drift.
+
+Options, pending a decision:
+
+| | Approach | Consequence |
+|---|---|---|
+| **A** | Gate behind `sensory.onsource_mode: constant \| half_cell`, default `constant` | No config changes; corrected form opt-in per experiment; one more config key. Consistent with the rest of this plan, where every new behaviour ships off |
+| B | Apply unconditionally and disclose | 11 configs change; needs entries in the critical-settings change log and the affected experiment docs |
+| C | Revert to the hard-coded `2.0` | Nothing changes; the latent trap stays, documented but unfixed |
+
+Nothing else in this plan is blocked on a decision.
 
 | # | Question | Recommendation |
 |---|---|---|
