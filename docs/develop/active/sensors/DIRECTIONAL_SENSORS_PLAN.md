@@ -505,35 +505,23 @@ Combined observation with both settings: 27 − 8 − 5 + 104 + 25 = **143 dims*
 
 ### Still open
 
-**The on-source change is not parity-preserving repo-wide.** Option B was approved on the stated
-premise that γ = 1.0 everywhere and γ ≠ 1 was hypothetical. That premise is false. Eleven live
-non-archive configs ship `decay_power: 2.0`, where option B changes the on-source reading from 2.0 to
-4.0 on roughly a third of steps:
+_(none — all decisions resolved as of 2026-08-21.)_
 
-| config | count |
-|---|---|
-| `configs/continual/nmn_double_return_stages/*.yaml` | 5 |
-| `configs/verification/observability_gates_S1–S4.yaml` | 4 |
-| `configs/verification/olfaction_parity_{neutral,predator}.yaml` | 2 |
+**On-source rule, resolved:** apply option B **unconditionally**. No config gate, no
+`onsource_mode` key. The user's decision (2026-08-21) is that preserving the eleven
+`decay_power: 2.0` configs is not a requirement.
 
-γ = 2.0 was also the *historical default* — `configs/environment/experiment/olfactory_ambiguity_lindecay/`
-is an entire experiment family defined by switching 2.0 → 1.0, and the `nutrition_sweep_d2` probes
-carry comments describing 2.0 as inherited. This is a live part of the experimental record, not a
-corner case. The last two rows are the olfactory **parity verification** configs, whose whole purpose
-is to detect exactly this kind of drift.
+Consequence, recorded so it is discoverable rather than disclosed anywhere loud: those eleven configs
+change their on-source reading from 2.0 to 4.0 on roughly a third of steps —
+`configs/continual/nmn_double_return_stages/*.yaml` (5),
+`configs/verification/observability_gates_S1–S4.yaml` (4), and
+`configs/verification/olfaction_parity_{neutral,predator}.yaml` (2). The last two are the olfactory
+parity-verification configs; if they are re-run after this change their stored expectations will need
+regenerating. Byte-parity is still guaranteed for every config at the shipped `decay_power: 1.0`,
+which is all of `configs/environment/default.yaml` and everything that extends it.
 
-Options, pending a decision:
-
-| | Approach | Consequence |
-|---|---|---|
-| **A** | Gate behind `sensory.onsource_mode: constant \| half_cell`, default `constant` | No config changes; corrected form opt-in per experiment; one more config key. Consistent with the rest of this plan, where every new behaviour ships off |
-| B | Apply unconditionally and disclose | 11 configs change; needs entries in the critical-settings change log and the affected experiment docs |
-| C | Revert to the hard-coded `2.0` | Nothing changes; the latent trap stays, documented but unfixed |
-
-Nothing else in this plan is blocked on a decision.
-
-| # | Question | Recommendation |
-|---|---|---|
+One change-log line in [[CONFIG_CRITICAL_SETTINGS]] covers this, per that doc's maintenance contract.
+No sweep of experiment docs.
 
 ## Author response to plan-reviewer
 
