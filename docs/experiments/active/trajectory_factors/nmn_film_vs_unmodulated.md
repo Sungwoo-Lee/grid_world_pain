@@ -1,5 +1,6 @@
 # Does a neuromodulator change what the agent attends to?
 
+**Shareable page:** https://claude.ai/code/artifact/1351009f-d7f7-4114-a290-f6582bb9a004 (final section)
 **Reproduce:** `scripts/analysis/hiding_drivers.py --store-root results/trajectories_nmn` on both
 runs, then `scripts/analysis/supplementary/compare_pair.py <unmod.npz> <film.npz>`
 **Sibling study:** [[a01_hiding_drivers]] (a different world — see Scope)
