@@ -149,12 +149,13 @@ hiding and how long it lives change as the factor is dialled up.</p>
   <div class="fignum">Figure 3 &mdash; dose and response, twelve factors</div>
   <div id="curves"></div>
   <div class="key">
-    <span><i class="sw" style="background:var(--cover)"></i>share of time hidden</span>
-    <span><i class="sw" style="background:var(--warm)"></i>steps survived</span>
+    <span><i class="sw" style="background:var(--cover)"></i><strong>green</strong> line, read
+      against the <strong>left</strong> axis: share of time hidden</span>
+    <span><i class="sw" style="background:var(--warm)"></i><strong>amber</strong> line, read
+      against the <strong>right</strong> axis: steps survived</span>
   </div>
-  <figcaption>Each panel dials one world feature from its lowest setting to its highest.
-  <strong>Each panel is scaled to its own range, so compare the shapes rather than the heights
-  between panels.</strong> Note how differently the two lines behave: a keener predator drives hiding up sharply <em>and</em> survival
+  <figcaption>Each panel dials one world feature from its lowest setting to its highest. Note how
+  differently the two lines behave: a keener predator drives hiding up sharply <em>and</em> survival
   down sharply, while more food barely touches hiding but transforms survival. Flat lines are the
   controls.</figcaption>
 </figure>
@@ -511,7 +512,9 @@ const el=(t,a)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAt
 const svg=(w,h)=>{const s=document.createElementNS(NS,"svg");s.setAttribute("viewBox",`0 0 ${w} ${h}`);
   s.setAttribute("role","img");return s};
 function txt(x,y,s,cls,anc,fill){const t=el("text",{x:x,y:y,class:cls||"ax"});
-  if(anc)t.setAttribute("text-anchor",anc); if(fill)t.setAttribute("fill",fill);
+  if(anc)t.setAttribute("text-anchor",anc);
+  if(fill)t.setAttribute("style","fill:"+fill);   // style beats the class; a fill
+                                                 // ATTRIBUTE would not
   t.textContent=s;return t}
 const put=(id,s)=>{const n=document.getElementById(id); if(n)n.appendChild(s)};
 /* axis titles — every chart gets both, stated in words */
@@ -558,8 +561,10 @@ const RANK=[["number of predators",16.03],["predator's eyesight",12.55],
  const cols=3,cw=232,chh=126,W=cols*cw,H=Math.ceil(pick.length/cols)*chh+72;
  const s=svg(W,H);
  xlab(s,W/2,16,"each panel: one world feature dialled from its LOWEST to its HIGHEST setting");
- s.appendChild(txt(46,32,"\u25A0 LEFT axis: share of time hidden","axt",null,V("--cover")));
- s.appendChild(txt(300,32,"\u25A0 RIGHT axis: steps survived","axt",null,V("--warm")));
+ s.appendChild(el("rect",{x:46,y:24,width:3,height:11,fill:V("--cover")}));
+ s.appendChild(txt(54,33,"LEFT axis + green line: share of time hidden","axt",null,V("--cover")));
+ s.appendChild(el("rect",{x:340,y:24,width:3,height:11,fill:V("--warm")}));
+ s.appendChild(txt(348,33,"RIGHT axis + amber line: steps survived","axt",null,V("--warm")));
  s.appendChild(txt(46,44,"each panel is scaled to its own range \u2014 compare SHAPES, not heights, between panels","axu"));
  pick.forEach((k,i)=>{const c=D.curves[k]; if(!c)return;
   const ox=(i%cols)*cw+46, oy=Math.floor(i/cols)*chh+76, pw=cw-72, ph=chh-64;
@@ -568,7 +573,10 @@ const RANK=[["number of predators",16.03],["predator's eyesight",12.55],
   const dmax=Math.max(60,Math.ceil(Math.max(...dw)/10)*10), smax=Math.max(...sv);
   const X=j=>ox+(n===1?pw/2:pw*j/(n-1));
   s.appendChild(el("line",{x1:ox,y1:oy+ph,x2:ox+pw,y2:oy+ph,stroke:V("--grid"),"stroke-width":.6}));
-  s.appendChild(el("line",{x1:ox,y1:oy,x2:ox,y2:oy+ph,stroke:V("--grid"),"stroke-width":.6}));
+  // the two vertical axes are drawn in their own line's colour, so which is which is visible
+  // without reading anything
+  s.appendChild(el("line",{x1:ox,y1:oy,x2:ox,y2:oy+ph,stroke:V("--cover"),"stroke-width":1.6}));
+  s.appendChild(el("line",{x1:ox+pw,y1:oy,x2:ox+pw,y2:oy+ph,stroke:V("--warm"),"stroke-width":1.6}));
   const path=(arr,mx)=>{let p="";arr.forEach((v,j)=>p+=(j?"L":"M")+X(j)+" "+(oy+ph-(v/mx)*ph));return p};
   s.appendChild(el("path",{d:path(sv,smax),fill:"none",stroke:V("--warm"),"stroke-width":1.6,
     "stroke-linejoin":"round",opacity:.85}));
