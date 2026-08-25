@@ -42,9 +42,38 @@ Modulation is confirmed live rather than silently dropped — the two agents' be
 The modulator buys **+2.82 survival steps** (95% CI +2.58 to +3.05), about 1.6%. Hiding is
 unchanged (+0.0003, CI spans zero).
 
-A detail worth pausing on: FiLM's *mean* survival is higher, but it survives longer in only
-**30.7%** of individual worlds. It loses in most worlds and wins large in a minority. The average
-is not the typical case.
+### The mean hides almost everything
+
+That +2.82 is a real average, but it is a thin edge on a coin-flip, not a systematic improvement.
+Across the million paired worlds:
+
+| | share of worlds | mean effect |
+|---|---|---|
+| FiLM survives **longer** | 30.7% | +92.7 steps |
+| **identical** survival | 40.9% | 0 |
+| FiLM survives **shorter** | 28.4% | -90.2 steps |
+
+The two agents produce the *same* survival in four worlds out of ten, and where they differ the
+wins and losses are almost mirror images. The distribution of the paired difference has a median
+of exactly **0** and a standard deviation of **120 steps** — so the +2.82 mean is **0.023 standard
+deviations**. It is measured precisely because a million paired worlds make it so, not because it
+is large.
+
+Where the edge does come from is threat:
+
+| world | unmodulated | FiLM | difference |
+|---|---|---|---|
+| no predator | 404.9 | 404.6 | **-0.29** |
+| one predator | 80.3 | 86.5 | **+6.20** |
+| two predators | 36.9 | 39.4 | +2.54 |
+
+With nothing hunting it the modulator is very slightly harmful; the whole benefit appears once a
+predator is present. That is at least the right shape for a threat-gating mechanism, even if the
+magnitude is small.
+
+The outcome itself changes in only 28.2% of worlds. The modulator's clearest directional effect is
+on *how* the agent dies: it starves less (27.91% to 27.44%, eating 0.2170 per step against 0.2059)
+and is killed slightly more (46.92% to 47.14%).
 
 ## Does it improve threat discrimination? No.
 
