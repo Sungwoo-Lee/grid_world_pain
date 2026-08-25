@@ -79,8 +79,8 @@ code{font-family:var(--mono);font-size:.85em;background:var(--panel);
   <h1>What makes this&nbsp;agent hide?</h1>
   <p class="standfirst">A trained forager was returned to the world it grew up in and lived
   a million separate lives. The record of those lives says it hides from a smell it cannot
-  interpret, and that the mistake is measurably fatal. Giving it a neuromodulator does not fix
-  that &mdash; and what its <em>pain</em> contributes is harder to pin down than it looks.</p>
+  interpret, and that the mistake is measurably fatal. What its <em>pain</em> contributes, and
+  whether a neuromodulator fixes any of it, turn out to be harder questions than they look.</p>
 </header>
 
 <p class="lede">Our agent is a small creature in a ten-by-ten field. It must eat to stay
@@ -374,29 +374,39 @@ is straightforward: a creature that can adjust its own senses by context ought t
 telling a real threat from a false one. Given what we just saw about the rabbit, that would be
 worth a great deal.</p>
 
-<p>There are two trained creatures in the archive that let us test this cleanly. They are
-identical in every respect &mdash; same world, same body, same senses, same training length, same
-random seed, even the same moment in training &mdash; except that one has the modulator and one
-does not. We ran both through the same million worlds.</p>
+<p>The archive contains pairs of trained creatures that let us test this cleanly. Within a pair
+they are identical in every respect &mdash; same world, same body, same senses, same training
+length, same random seed, even the same moment in training &mdash; except that one has the
+modulator and one does not. We ran each pair through the same million worlds, and we did it for
+<strong>two</strong> separate pairs.</p>
 
 <figure class="panel">
-  <h3>It turns the volume down on both signals, not up on the right one</h3>
+  <h3>Two attempts. Opposite answers.</h3>
   <div id="nmn"></div>
-  <figcaption>How strongly each creature responds to a predator's scent (a signal worth heeding)
-  and to a rabbit's scent (a false alarm). The modulator quietens both &mdash; and quietens the
-  <em>useful</em> one slightly more. It is not sharpening the distinction; it is turning the whole
-  channel down.</figcaption>
+  <figcaption>How much each creature leans on the <em>useful</em> smell (a real predator's)
+  compared with the <em>misleading</em> one (a rabbit's). Above the line means it weights the real
+  threat more heavily; below means the false alarm wins. We ran this twice, on two separately
+  raised pairs.</figcaption>
 </figure>
 
-<p>Measured as how much each creature leans on the real cue relative to the misleading one, the
-modulated creature scores <strong>0.74</strong> against the plain one's <strong>0.83</strong>
-&mdash; slightly worse. And both numbers are below 1, meaning <em>both</em> creatures react more to
-the harmless rabbit than to the actual predator. The same mistake, in a different world, with a
-different brain.</p>
+<p>The first pair said the modulator makes things <strong>worse</strong>. The second pair, raised
+the same way, said it makes things <strong>dramatically better</strong> &mdash; lifting the
+creature above the line for the only time anywhere in this study.</p>
+
+<p>Both cannot be true of the modulator. What this actually shows is that <strong>a single pair of
+creatures cannot answer the question at all.</strong> Raise one modulated creature and one plain
+one and the difference between them is as much about how those two individuals happened to grow up
+as about the modulator. We only found this out by doing it twice &mdash; and the honest conclusion
+is that whether the modulator helps perception is <em>still unknown</em>.</p>
+
+<p>One thing both pairs agree on: the <em>plain</em> creature always sits below the line. Left to
+itself, it reacts more to the harmless rabbit than to the real predator, in both worlds we
+looked at.</p>
 
 <h3>It does live a little longer &mdash; but barely, and only when hunted</h3>
-<p>The modulated creature survives 2.8 steps longer on average. That sounds like something until
-you look at where it comes from:</p>
+<p>Here the two pairs do agree. The modulated creature survives a little longer in both &mdash;
+2.8 steps in the first pair, 1.9 in the second. That sounds like something until you look at where
+it comes from:</p>
 
 <div class="panel">
 <div class="big">
@@ -415,10 +425,15 @@ being hunted: with no predator in the world the modulator is very slightly <em>h
 it is doing, it does it when there is a threat to respond to &mdash; which is at least the right
 shape for the idea, even if the size disappoints.</p>
 
-<p><strong>One run each.</strong> These two creatures are a single pair. The differences are
-measured very precisely, but a single modulated creature against a single plain one cannot separate
-"the modulator does this" from "this particular upbringing does this". A second matched pair is
-being run now.</p>
+<p>And both pairs agree on one more thing, which may be the most solid result here: the modulated
+creature <strong>eats more, starves less, and gets caught more</strong>. It trades safety for food.
+In the second pair the trade is sizeable &mdash; three and a half points of starvation converted
+into nearly four points of being caught.</p>
+
+<p><strong>What to take from this.</strong> The modulator reliably changes <em>how</em> the
+creature makes its living, and reliably makes almost no difference on average while changing a
+great deal case by case. Whether it improves perception is still an open question, and answering it
+needs more than two pairs.</p>
 
 <h2>How much to trust this</h2>
 <div class="panel">
@@ -535,23 +550,29 @@ const SM={pred:{d:[29.7,30.8,31.7,32.4,33.3,35.0],s:[88.9,95.8,101.3,106.3,110.2
   s.appendChild(txt(L+xw*d[1]/45+8,y+18,d[1].toFixed(1)+"%","ax"));});
  document.getElementById("origin").appendChild(s);})();
 
-/* ---- modulator scent response ---- */
-(function(){const D=[["predator's scent",3.26,2.42,"the signal worth heeding"],
-                     ["rabbit's scent",3.95,3.25,"the false alarm"]];
- const W=680,rh=62,H=D.length*rh+50,L=176,xw=W-L-80;
- const s=svg(W,H);
- s.appendChild(txt(L,14,"how strongly it responds (pp per step of scent)","ax"));
- D.forEach((d,i)=>{const y=26+i*rh;
-  [[d[1],V("--muted"),.6,0],[d[2],V("--cover"),1,17]].forEach(([v,c,o,dy])=>{
-   s.appendChild(el("rect",{x:L,y:y+dy,width:Math.max(xw*v/4.5,1),height:14,fill:c,opacity:o,rx:1}));
-   s.appendChild(txt(L+xw*v/4.5+7,y+dy+11,"+"+v.toFixed(2),"ax"));});
-  s.appendChild(txt(L-10,y+12,d[0],"lbl","end"));
-  const t2=txt(L-10,y+26,d[3],"ax","end"); s.appendChild(t2);
-  s.appendChild(txt(L+xw*Math.max(d[1],d[2])/4.5+52,y+20,(d[2]-d[1]).toFixed(2),"ax"));});
- [[V("--muted"),.6,"no modulator"],[V("--cover"),1,"with modulator"]].forEach((c,j)=>{
-  const x=L+j*190;
-  s.appendChild(el("rect",{x:x,y:H-20,width:10,height:10,fill:c[0],opacity:c[1],rx:2}));
-  s.appendChild(txt(x+15,H-11,c[2],"ax"));});
+/* ---- modulator: two pairs, ratio ---- */
+(function(){const D=[["first pair",0.83,0.74],["second pair",0.69,1.55]];
+ const W=680,H=210,ml=118,mr=90,mt=30,mb=44;
+ const s=svg(W,H); const pw=W-ml-mr, ph=H-mt-mb;
+ const Y=v=>H-mb-(v/1.8)*ph;
+ for(const g of[0,0.5,1,1.5]){s.appendChild(el("line",{x1:ml,y1:Y(g),x2:ml+pw,y2:Y(g),
+   stroke:g===1?V("--fg"):V("--grid"),"stroke-width":g===1?1.2:.6,
+   "stroke-dasharray":g===1?"4 3":""}));
+  s.appendChild(txt(ml-8,Y(g)+3,g.toFixed(1),"ax","end"));}
+ s.appendChild(txt(ml+pw+6,Y(1)+3,"even","ax"));
+ D.forEach((d,i)=>{const cx=ml+pw*(i+.5)/2;
+  const x1=cx-46,x2=cx+8;
+  [[x1,d[1],V("--muted"),"plain"],[x2,d[2],V("--cover"),"modulated"]].forEach(([x,v,c,l])=>{
+    s.appendChild(el("rect",{x:x,y:Y(v),width:38,height:H-mb-Y(v),fill:c,rx:1,
+      opacity:c===V("--muted")?.6:1}));
+    s.appendChild(txt(x+19,Y(v)-6,v.toFixed(2),"ax","middle"));});
+  s.appendChild(txt(cx-19,H-mb+16,d[0],"lbl","middle"));
+  s.appendChild(txt(cx-19,H-mb+30,d[2]>d[1]?"modulator helps":"modulator hurts","ax","middle"));});
+ s.appendChild(txt(ml,mt-14,"reliance on the real cue vs the false one","ax"));
+ [[V("--muted"),.6,"no modulator"],[V("--cover"),1,"with modulator"]].forEach((c,k)=>{
+   const x=ml+pw-150+k*80;
+   s.appendChild(el("rect",{x:x,y:mt-22,width:9,height:9,fill:c[0],opacity:c[1],rx:2}));
+   s.appendChild(txt(x+13,mt-14,c[2],"ax"));});
  document.getElementById("nmn").appendChild(s);})();
 
 /* ---- variance decomposition ---- */
