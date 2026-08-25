@@ -76,78 +76,78 @@ The outcome itself changes in only 28.2% of worlds. The modulator's clearest dir
 on *how* the agent dies: it starves less (27.91% to 27.44%, eating 0.2170 per step against 0.2059)
 and is killed slightly more (46.92% to 47.14%).
 
-## Does it improve threat discrimination? The two pairs disagree.
+## Four matched pairs: the modulator has no context-independent effect
 
-This was the question the modulator was meant to answer. A first pair said no. A second, matched
-pair says the opposite, and emphatically. **The effect does not replicate**, so no claim about
-discrimination is supportable from this evidence.
+All four matched pairs the repository contains were run. Each is one FiLM-modulated agent against
+one unmodulated agent that is identical in environment, sensory, body, noise and training config,
+trained from the same seed, replayed at a step-matched checkpoint over the same 1,000,000 worlds.
 
-The measure is how much each agent leans on the true cue (the predator's scent) relative to the
-false one (a rabbit's). Above 1 means it weights the real threat more; below 1 means the false
-alarm dominates.
-
-| pair | unmodulated | FiLM | verdict |
-|---|---|---|---|
-| **b04** | 0.83 | **0.74** | modulator makes it *worse* |
-| **b03** | 0.69 | **1.55** | modulator makes it *much better* |
-
-The underlying coefficients (Δpp per SD of scent):
-
-| | b04 unmod | b04 FiLM | b03 unmod | b03 FiLM |
+| pair | true/false cue ratio | | survival | food per step |
 |---|---|---|---|---|
-| predator's scent (true) | +3.26 | +2.42 (z -8.0) | +0.44 | **+1.18** (z +10.3) |
-| rabbit's scent (false) | +3.95 | +3.25 (z -6.9) | +0.64 | +0.76 (z +1.7, n.s.) |
+| | unmod | FiLM | FiLM − unmod | unmod → FiLM |
+| **b04_mc** | 0.83 | **0.74** worse | **+2.82** | 0.2059 → 0.2170 |
+| **b03_mc** | 0.69 | **1.55** better | **+1.89** | 0.2115 → 0.2220 |
+| **b04_gae** | 1.61 | **1.02** worse | **−19.59** | 0.2325 → 0.1793 |
+| **b03_gae** | 1.53 | **3.00** better | **−1.77** | 0.2470 → 0.2122 |
 
-In the b04 pair the modulator turned both channels down, the true one more. In the b03 pair it
-turned the true channel *up* by 170% and left the false one alone — which is exactly the
-behaviour the modulator was designed to produce, and it lifts the ratio above 1 for the only time
-in this entire study.
+Every headline direction splits two-two — and not at random. The splits line up with the setup:
 
-Two further observations. The b03 agents barely use scent at all in absolute terms (+0.44 and
-+0.64, against +3.26 and +3.95 for b04), so the two pairs did not converge on remotely similar
-strategies despite differing only in a baseline-config number. And both *unmodulated* agents sit
-below 1, reproducing the false-alarm signature seen in the companion study.
+- **Discrimination direction tracks the baseline.** Both `b03` pairs improve, both `b04` pairs
+  worsen. The two baselines differ in exactly two settings: whether a predator can **pounce at
+  range** (`b04`: reach 2–3 tiles, 50% success) or must make **contact** (`b03`: reach 0). Both
+  worlds are genuinely dangerous — `b03` predators still land 3,302 strikes per million steps
+  against `b04`'s 4,526 — so this is a difference in *how* threat arrives, not whether it exists.
+- **Survival and eating direction track the return estimator.** Both `mc` pairs gain survival and
+  eat more; both `gae` pairs lose survival and eat less. The `b04_gae` case is severe: **−19.6
+  survival steps** and a 23% drop in eating.
 
-**One run per condition is the whole problem.** Each pair is a single modulated run against a
-single unmodulated one, all from seed 42. Two pairs give opposite answers, which is the clearest
-possible demonstration that a single pair cannot separate "the modulator does this" from "this
-training run did this". Two more matched pairs exist (`b03_gae`, `b04_gae`); four independent
-replications would begin to settle it. Until then the discrimination question is **open**.
+So the modulator does not have an effect that survives a change of setup. Whether it helps or
+hurts perception depends on how predators attack; whether it helps or hurts survival depends on
+how returns are estimated.
 
-## What replicates
+**How much to lean on those alignments.** Each is two pairs against two. For a factor named in
+advance, a perfect four-way split falls out by chance about one time in eight, and I chose these
+two factors after seeing the results from a field of only two candidates. The alignments are
+suggestive of a real interaction and are **not** established. Every run also used seed 42, so a
+"setup determines direction" reading cannot be separated from "these particular runs differed".
 
-Three results hold in both pairs, and those are the ones worth carrying forward.
+## What survives all four
 
-**The modulator barely matters on average, and matters a lot case by case.**
+One result, and it is the same one the ten resting-bonus agents produced:
 
-| | which world | the modulator | modulator x world |
-|---|---|---|---|
-| dwell, b04 / b03 | 74.0% / 74.4% | **0.000% / 0.009%** | 26.0% / 25.6% |
-| survival, b04 / b03 | 91.6% / 91.0% | **0.005% / 0.002%** | 8.4% / 9.0% |
-
-Strikingly consistent, and the same pattern as the ten resting-bonus agents.
-
-**A small positive survival effect**: +2.82 steps (b04) and +1.89 (b03). Same direction, similar
-size, both tiny against a spread of ~120 steps.
-
-**A shift in how the agent dies**: in both pairs the modulated agent eats more, starves less and
-is killed more.
-
-| | b04 unmod → FiLM | b03 unmod → FiLM |
+| pair | modulator share of variance (dwell / survival) | modulator × world (dwell / survival) |
 |---|---|---|
-| food per step | 0.2059 → 0.2170 | 0.2115 → 0.2220 |
-| starved | 27.91% → 27.44% | 34.47% → **30.87%** |
-| killed | 46.92% → 47.14% | 39.82% → **43.54%** |
+| b04_mc | 0.000% / 0.005% | 26.0% / 8.4% |
+| b03_mc | 0.009% / 0.002% | 25.6% / 9.0% |
+| b04_gae | 0.010% / 0.265% | 32.4% / 12.3% |
+| b03_gae | 0.201% / 0.002% | 30.5% / 10.4% |
 
-The modulated agent trades safety for food in both pairs. In b03 the trade is large: three and a
-half points of starvation converted into nearly four points of predation. That is a coherent
-behavioural signature, and it is the most robust thing this comparison produces.
+**The modulator's average effect never exceeds three tenths of one percent of the variance, while
+its interaction with the world is consistently 25–32% (hiding) and 8–12% (survival).** It reliably
+changes *which world produces which behaviour* and reliably does almost nothing to the average.
 
-## Factor sensitivities in the b04 pair
+That is a real finding about what this kind of modulator does, and it is the only claim here
+supported by four independent instances.
 
-Every difference below is precisely measured (paired worlds, 111,211 one-predator one-rabbit
-episodes) and highly significant — but as the section above shows, most do not survive
-replication. They are recorded for completeness, not as findings.
+## The methodological verdict
+
+An earlier version of this document reported the `b04_mc` result — "the modulator does not improve
+threat discrimination" — as a finding. It was withdrawn after `b03_mc` reversed it, and the full
+four-pair set now shows every directional claim flipping with the setup.
+
+This is the same design limitation that has recurred across this project: **one run per
+condition**. It confounded the ten-arm resting-bonus sweep (one seed per level, with compute node
+collinear with the parameter) and it defeats the neuromodulation comparison outright.
+
+The fix is not more conditions. It is **replicate seeds**: three seeds at four settings is
+strictly more informative than one seed at ten, because it measures how much two identical runs
+differ — the quantity every claim here needs and none of them has.
+
+## Appendix: factor sensitivities in the b04_mc pair
+
+Precisely measured (paired worlds, 111,211 one-predator one-rabbit episodes) and highly
+significant — but as above, these do not survive replication. Recorded for completeness, not as
+findings.
 
 | factor | unmodulated | FiLM | difference | z |
 |---|---|---|---|---|
@@ -184,10 +184,8 @@ agents: near-identical on average, materially different case by case.
 
 ## Scope and limits
 
-- **One run per condition, both from seed 42.** The `b03` replication was run and *disagrees
-  with `b04` on the headline question*, which settles the methodological point: a single pair
-  cannot attribute anything to the modulator. Two further matched pairs (`b03_gae`, `b04_gae`)
-  exist.
+- **One run per condition, every run from seed 42.** All four matched pairs were run; every
+  directional claim splits two-two. A matched pair cannot attribute anything to the modulator.
 - **The b03 world pins predator attack range to zero**, so that regressor is constant there and
   its coefficient is undefined. Not an error, but the two pairs are not identical worlds.
 - **A different world from the companion study.** Here bushes conceal but do **not** block
