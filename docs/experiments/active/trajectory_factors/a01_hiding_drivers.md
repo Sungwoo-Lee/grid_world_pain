@@ -13,7 +13,7 @@ injury conditional table, the injury window, and the eat-block check — are arc
 reader challenge — see [Corrections](#review-response). Finding 3 was rewritten after the
 original claim ("the agent cannot perceive its own injury") was found to be **wrong**.
 **Replicated across all 10 trained arms** — see [Cross-arm](#cross-arm).
-Comparing the ten agents: [Model effect](#model-effect). Other runs: [What else](#other-runs).
+Injury and pain in depth: [Injury-dependent hiding](#injury-deep). Comparing the ten agents: [Model effect](#model-effect). Other runs: [What else](#other-runs).
 A step-level deep dive on the pain channel is in [Interoceptive pain](#nociception) —
 which concludes that the interoceptive channel's specific role is **not identified** by this
 data, and names the experiment that would settle it.
@@ -513,6 +513,73 @@ from the run's own config rather than assuming.)
 Overall hiding ranges 16.6% to 19.0% and mean survival 180.3 to 189.9 steps across arms. No
 causal claim is made about the resting-bonus parameter: one training run per arm cannot
 separate the parameter from the run.
+
+<a id="injury-deep"></a>
+## Injury-dependent hiding: pain state versus attack memory
+
+The pain section closed on an unresolved question — is the agent using its pain signal, or just
+remembering that it was attacked? Two tests narrow it.
+
+### Same felt pain, different origin
+
+Cross-tabulating hiding by felt pain against the number of hits taken earlier in the episode
+(no predator within two tiles) separates the two. Prior-hit count is a memory variable that
+cannot be recovered from the current pain value.
+
+| felt pain | 0 prior hits | 1 | 2 | 3-4 | 5+ |
+|---|---|---|---|---|---|
+| felt 0 | 23.9% | 18.2% | 13.8% | 11.3% | 9.5% |
+| 8-18 | 14.6% | 15.3% | 14.3% | 13.4% | 11.0% |
+| 32-50 | 19.1% | 26.6% | 24.3% | 24.0% | 17.4% |
+| **50+** | **22.6%** | **40.9%** | 40.0% | 40.7% | 29.1% |
+
+Read the bottom row. At high felt pain, an agent that has actually been hit once hides
+**40.9%** of the time. An agent with *the same felt pain* but **zero hits** — which can only
+happen when the pain comes from the randomly assigned starting wound — hides **22.6%**. Nearly
+half as much, from an identical interoceptive signal.
+
+So the pain value alone does not determine the response; how the pain was acquired does. This is
+the sharpest evidence available here for the "pain as evidence of a predator" reading, and the
+zero-hit column is randomised, which is what gives it force.
+
+Two caveats. The zero-hit high-pain cells are necessarily early in the episode (a starting wound
+heals within ~20 steps), so time is confounded with origin. And beyond one hit, more hits means
+*less* hiding — an episode with five hits is one where the agent kept failing to reach cover, so
+hit count also marks incompetence or an inescapable situation, not just memory.
+
+### Same felt pain, different age
+
+| felt pain | 1 step after a hit | 2-3 | 4-6 | 7-11 | 12+/never |
+|---|---|---|---|---|---|
+| 18-32 | 8.6% | 15.1% | 15.9% | 14.1% | 15.6% |
+| 50+ | 14.8% | 28.8% | 35.3% | **38.7%** | 27.2% |
+
+Immediately after a hit, hiding is at its lowest — the agent is out in the open, which is how it
+was hit — and it climbs over the following steps, peaking seven to eleven steps later. The same
+felt pain produces very different behaviour depending on how recently it arrived.
+
+### Approaching death
+
+| injury | 0 | 0-25 | 25-50 | 50-75 | 75-90 | 90-100 |
+|---|---|---|---|---|---|---|
+| hiding | 13.6% | 10.3% | 15.0% | 19.3% | **20.7%** | 17.6% |
+
+Hiding rises with injury up to the 75-90 band and then **falls** as injury approaches the lethal
+ceiling of 100. Whatever the agent does near death, it is not more cover-seeking.
+
+### The same relationship in all ten models
+
+| arm | felt 0-8 | 8-18 | 18-32 | 32-50 | 50+ | slope |
+|---|---|---|---|---|---|---|
+| a01 (premium 0) | 14.1% | 15.7% | 19.1% | 28.3% | 41.6% | +27.5 |
+| a07 (premium 1.2) | 13.7% | 16.3% | 18.5% | 21.3% | 33.4% | +19.7 |
+| a10 (premium 2.7) | 13.2% | 16.0% | 19.1% | 22.5% | 37.0% | +23.8 |
+
+Every one of the ten independently trained agents shows the same shape — a shallow dip at low
+pain, then a steep climb — with slopes from +19.7 to +27.5 percentage points. The pain-hiding
+coupling is a property of the task, not of any one training run. The slope is weakly smaller in
+agents with a larger resting bonus (Spearman rho = -0.62, p = 0.054), which is suggestive only
+and carries the same attribution problem as everything else in the cross-arm comparison.
 
 <a id="model-effect"></a>
 ## Comparing the ten models against each other
