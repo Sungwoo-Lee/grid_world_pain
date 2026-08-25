@@ -77,9 +77,9 @@ def smell_channels(cfg: dict) -> tuple[int, int]:
     return a, b
 
 
-def find_store(run: str, checkpoint: str | None) -> str:
+def find_store(run: str, checkpoint: str | None, root: str = "results/trajectories") -> str:
     tag = os.path.basename(run.rstrip("/"))
-    pat = f"results/trajectories/{tag}/{checkpoint or '*'}/*/"
+    pat = f"{root}/{tag}/{checkpoint or '*'}/*/"
     hits = sorted(glob.glob(pat))
     if not hits:
         raise SystemExit(f"no trajectory store matches {pat}")
@@ -287,6 +287,8 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--run", required=True, help="results/<ALGO>/<RUN_DIR>")
     ap.add_argument("--checkpoint", default=None, help="checkpoint step (default: the only one)")
+    ap.add_argument("--store-root", default="results/trajectories",
+                    help="root the trajectory store lives under (e.g. results/trajectories_nmn)")
     ap.add_argument("--out", default=None, help="output dir (default results/analysis/hiding_drivers/<tag>)")
     ap.add_argument("--cache", default=None, help="npz cache path for the aggregation pass")
     ap.add_argument("--stage", choices=["aggregate", "fit", "all"], default="all")
@@ -295,7 +297,7 @@ def main():
     cfg = yaml.safe_load(open(f"{a.run}/models/config.yaml"))
     lay = slot_layout(cfg)
     chans = smell_channels(cfg)
-    store = find_store(a.run, a.checkpoint)
+    store = find_store(a.run, a.checkpoint, a.store_root)
     tag = os.path.basename(a.run.rstrip("/"))
     out = a.out or f"results/analysis/hiding_drivers/{tag}"
     cache = a.cache or f"{out}/aggregate.npz"
