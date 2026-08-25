@@ -9,9 +9,10 @@ injury conditional table, the injury window, and the eat-block check — are arc
 `scripts/analysis/supplementary/` and are *not* produced by the command above.
 **Extends:** [[a01_factor_analysis]] (same run, same store, narrower question)
 **Pipeline:** [[TRAJECTORY_COLLECTION_PIPELINE]]
-**Reviewed by:** `plan-reviewer`, 2026-08-25, two rounds — final verdict *conclusion supported*.
-It found one factual error in a supporting sentence; that is corrected and documented in the
-[Review response](#review-response).
+**Reviewed by:** `plan-reviewer`, 2026-08-25, two rounds; then corrected again after a
+reader challenge — see [Corrections](#review-response). Finding 3 was rewritten after the
+original claim ("the agent cannot perceive its own injury") was found to be **wrong**.
+**Replicated across all 10 trained arms** — see [Cross-arm](#cross-arm).
 
 ## Question
 
@@ -38,8 +39,8 @@ This governs every result below, so it comes first. From the run's own saved set
 |---|---|---|
 | Sight | range **0** | It sees only the tile it stands on. Blind at distance. |
 | Smell | enabled, radius 20 | Its **only** distal sense. Covers the whole 10x10 map. |
-| Own injury | **not observable** | No channel carries its wound level. |
-| Pain | observable | A fading trace of *recent damage events*, not of a standing wound. |
+| Own injury | no *direct* readout | `injury_observable: false` removes the instantaneous value. |
+| Pain (interoceptive nociception) | **observable, lagged** | A 12-step buffer of *injury levels* convolved with a kernel peaking 3 steps back. The agent **does** feel its wound — smoothed and delayed. The buffer is zeroed at reset, so a wound it wakes up with is unfelt on step 1 and fades in over ~10 steps (perceived value 0 → 28 → 58). |
 | Hunger | observable | Via satiation, which tracks nutrition one-for-one. |
 
 The two animal types were built to smell alike: a predator's scent is drawn around (0.7, 0.5)
@@ -89,8 +90,8 @@ double as controls, and all three behave as they should. **Rocks** are scattered
 conceal nothing, and unlike bushes they *hurt* (1-5 damage, high pain intensity). Their count
 moves the behaviour not at all, so the agent is neither reacting to clutter nor treating a
 damaging object as a reason to seek cover. **Where on the map the agent wakes up** should
-not matter in a symmetric arena, and does not. **Starting injury** is a quantity the agent
-provably cannot perceive, and lands at approximately zero.
+not matter in a symmetric arena, and does not. **Predator stamina** is a trait with no route to
+any of the agent's senses, and lands at exactly zero.
 
 One factor separates survival from strategy cleanly: spawning far from food cuts survival hard
 (221 down to 164 steps) while barely touching hiding (15.2% to 17.5%). Food distance decides
@@ -159,33 +160,56 @@ distinguishes an aimed response from a diffuse one — not a causal decompositio
 predator-like the agent spends slightly *less* time near it (13.0% of steps versus 14.3%),
 so the surviving near-moments are the ones it could not avoid.
 
-### 3. Injury does not drive hiding
+### 3. The agent responds to what pain *implies*, not to pain itself
 
-The environment hands the agent a random injury, 0 to 100, at the start of every episode. If a
-wounded animal were intrinsically more cautious, this is where it would show. Hiding instead
-drifts gently *down*, 17.7% to 15.4%, as the starting wound worsens.
+It feels its wound. So the question is not whether injury reaches it, but what it does with it.
+The answer depends entirely on **how the wound was acquired**, and the two cases point opposite
+ways.
 
-Wounds heal at 5 points per step, so a randomised starting injury is gone within about twenty
-steps. Measured **only inside that window**, where the manipulation is genuinely live and the
-gap in experienced injury is fivefold (mean 70.5 versus 13.3), and computed without
-conditioning on survival:
+**A wound it woke up with makes it hide slightly *less*.** The environment assigns a random
+injury, 0 to 100, at the start of every episode. Tracked step by step, the effect on hiding
+appears exactly as the perception fades in — and it is negative:
 
-| Starting injury | Hiding, steps 1-10 | Mean injury over that window |
+| Step | perceived pain from a wound woken up with | hiding, lightly vs badly hurt |
 |---|---|---|
-| 0-20 | 20.2% | 13.3 |
-| 80-100 | 19.2% | 70.5 |
+| 1 | 0 (buffer empty) | +0.1 pp |
+| 3 | 18 | +0.7 pp |
+| 5 | 38 | -0.7 pp |
+| 10 | 58 (saturated) | **-2.0 pp** |
+| 20 | — | **-4.6 pp** |
 
-A **-1.0 pp** effect — roughly 25 times smaller than detection range, and pointing the wrong
-way. Broken down step by step it is *zero* at the steps of maximal live contrast (t=1-4,
-where the injury gap is widest) and only becomes negative later in the window, which is the
-signature of differential survival rather than of injury perception: lightly-hurt episodes that
-got attacked early live on into the late window and hide, while their badly-hurt counterparts
-are already dead. The reason sits in the sense table: **injury is not observable**. The agent has no
-channel for it and feels pain only when actually struck.
+Sign-stable across all ten trained agents (-0.94 to -1.28 pp per SD). It is small, and it
+cannot be cleanly separated from differential survival, which also grows with elapsed time.
 
-Raw counts appear to say the opposite: 26.3% hiding at severe injury against 17.8% at none.
-That comparison is confounded. Conditioning on what was actually happening makes it
-heterogeneous rather than uniform, and reverses it outright where a predator is near:
+**A wound it earned makes it hide far *more*.** Conditioning on no predator within two tiles,
+so that current proximity cannot be doing the work, hiding rises steeply and monotonically with
+the pain signal the agent actually receives:
+
+| Perceived pain | hiding, no predator within 2 tiles | hiding, predator near |
+|---|---|---|
+| none | 12.6% | 78.5% |
+| 0-10 | 11.4% | 50.6% |
+| 10-20 | 12.7% | 48.3% |
+| 20-35 | 15.4% | 54.1% |
+| 35-55 | 21.3% | 64.0% |
+| 55+ | **31.0%** | 71.9% |
+
+From 11.4% to 31.0% — nearly threefold — on the same perceptual channel that, when the wound
+was randomly assigned, produced a small negative.
+
+**The reconciliation.** The agent is not hiding reflexively because it hurts. It is treating
+pain as *evidence that a predator is nearby*, which is a sound inference: in this world the
+only way to get hurt is to be attacked. A wound it wakes up carrying is the one case where that
+inference is false — nothing attacked it — and there the response is absent.
+
+Two caveats. Earned pain is not randomised, so that table is an association: the agent feels
+pain *because* it was attacked, and "no predator within two tiles right now" does not mean no
+predator was near recently. And the randomised effect is entangled with survival. What the two
+together do establish is that the pain channel alone does not drive hiding — its behavioural
+meaning depends on the context that produced it.
+
+For completeness, the raw injury-level counts are confounded in the same way, and conditioning
+on circumstance makes them heterogeneous and reverses them where a predator is near:
 
 | | mild injury (0-25) | severe injury (>=50) | difference |
 |---|---|---|---|
@@ -194,11 +218,8 @@ heterogeneous rather than uniform, and reverses it outright where a predator is 
 | predator near, no recent damage | 56.9% | 35.5% | **-21.5 pp** |
 | predator near, recent damage | 36.9% | 40.2% | +3.3 pp |
 
-So injury is largely standing in for "a predator was around", which is the factor doing the
-work. One cell is worth naming rather than averaging away: with no predator near but damage
-taken recently, badly-hurt states carry +12.3 pp more hiding. That is what the sense table
-predicts — the agent cannot feel the wound, but it can feel the *strike*, and the pain trace
-persists after the predator has gone.
+The +12.3 pp cell — hurt recently, no predator visible now — is the pain-as-evidence response
+in isolation.
 
 ### 4. Hunger looks like a cause and is largely a footprint
 
@@ -289,14 +310,56 @@ weakening it, and finding 4 is now written around the corrected numbers. The off
 (`scripts/analysis/supplementary/timectrl.py`) is archived with its wart documented so the
 same misreading cannot be repeated.
 
+**Round three — a reader caught a substantive error, and this one mattered.** The document
+originally claimed the agent "cannot perceive its own injury", resting on the config flag
+`injury_observable: false`. That flag only removes the *instantaneous* readout. The
+interoceptive nociceptor turns out to convolve a buffer of **injury levels** — not damage
+events — so the agent does perceive its wound, smoothed and lagged. Reading the flag and
+stopping there was the error, and it was mine; the reviewer's round-one pass had corroborated
+it, so two passes carried the same mistake. Finding 3 has been rewritten around the signal the
+agent actually receives, and the conclusion is stronger and more interesting than the one it
+replaces: the same pain channel drives hiding *up* threefold when the wound was earned, and
+slightly *down* when the wound was randomly assigned — because pain in this world is evidence
+of a predator, and a wound you woke up with carries no such evidence. The
+"imperceptible variable returns null" control claim has been withdrawn as invalid.
+
 Round two also produced two upgrades adopted above: the start-injury effect is *zero* at the
 steps of maximal live contrast, with the small late-window negative attributable to
-differential survival; and the injury-versus-nutrition per-step curves form a matched control
-pair — the variable the agent cannot perceive does nothing immediately, the one it can perceive
-acts within about three steps. Its remaining moderate points on table subsets, reproduction
+differential survival; and the injury-versus-nutrition per-step curves were read as a matched
+control pair. That reading is **withdrawn**: round three showed injury is perceivable, so the
+pair does not contrast a perceivable with an imperceptible variable. Its remaining moderate points on table subsets, reproduction
 scope, and the wording of "dissolves" and "rules out" are all incorporated; the hardcoded
 scent channels it flagged in the script are now derived from the run's config, with a hard
 failure if a run's configuration does not separate the two classes.
+
+<a id="cross-arm"></a>
+## Replication across all ten agents
+
+The same analysis was run on all ten arms of the resting-bonus sweep. Because every arm replays
+the **identical** million world draws, this is a perfectly paired comparison of agents: any
+difference is the agent, never the environment.
+
+Twelve of the fourteen randomised factors keep their sign in all ten independently trained
+agents. The only two that flip are `pred_max_stamina` and `n_rocks` — the two factors this
+analysis identifies as null, which is exactly the behaviour a null should show.
+
+| Factor | a01 | range across the other nine |
+|---|---|---|
+| predator detection range | 12.51 | 11.00 to 12.04 |
+| **rabbit's scent** | **3.30** | **4.06 to 5.20** (stronger everywhere else) |
+| spawn distance to bush | -3.62 | -3.72 to -5.03 |
+| starting nutrition | 3.54 | 3.39 to 4.61 |
+| predator's scent | 2.02 | 2.17 to 3.65 |
+| starting injury | -1.02 | -0.94 to -1.28 |
+| predator max stamina | 0.08 | -0.03 to 0.17 (**sign flips**) |
+| number of rocks | 0.02 | -0.15 to 0.18 (**sign flips**) |
+
+The scent false alarm is not a quirk of one training run — it is present in every agent, and
+a01, the arm this document analyses, has the **weakest** version of it.
+
+Overall hiding ranges 16.6% to 19.0% and mean survival 180.3 to 189.9 steps across arms. No
+causal claim is made about the resting-bonus parameter: one training run per arm cannot
+separate the parameter from the run.
 
 ## Data
 
