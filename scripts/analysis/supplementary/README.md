@@ -16,11 +16,20 @@ Each is a single sweep of the step table for one specific question.
 | `mech.py` | Does hiding block eating? Injury gradient time-controlled | Finding 4 |
 | `window.py` | Truncation robustness: every effect recomputed on a fixed early window | Method |
 | `spawn.py` | Spawn distance to food and to map centre | Ranking |
+| `noci.py` | Reconstructs the **perceived** pain signal; per-step start-injury decomposition; hiding by perceived pain x predator proximity | Finding 3 |
+| `noci2.py` | Perceived-vs-actual dissociation, peri-damage-event dynamics, rising-vs-falling pain | Interoceptive pain |
 
 **Not run-agnostic.** Unlike `hiding_drivers.py`, these hardcode the a01 store glob, the slot
 indices and the seed base (1,000,000-1,999,999). They are archived for reproducibility of this
 specific analysis, not as general tools. Generalising one means deriving its slot layout from
 the saved config the way `hiding_drivers.py:slot_layout` does.
+
+**On the pain signal.** `noci.py` and `noci2.py` reconstruct the agent's interoceptive
+nociception from the per-step `injury_level` column, because the store does not record the
+observation vector itself. The reconstruction mirrors `src/environment/core.py:115` (buffer of
+injury levels, rolled each step, zeroed at reset) and `sensor.py:sense_interoceptive_nociception`
+(alpha kernel, tau and length read from the run's config). If either changes, these scripts
+must change with them.
 
 **Known wart, deliberately preserved.** `timectrl.py` bins by the *contemporaneous* nutrition
 at each step, not by the randomised starting value. An earlier draft of the write-up misread
