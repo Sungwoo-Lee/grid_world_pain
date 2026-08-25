@@ -88,8 +88,8 @@ code{font-family:var(--mono);font-size:.85em;background:var(--panel);padding:.1e
   <div class="eyebrow">Internal analysis · 14,000,000 evaluation rollouts · 2.6 billion recorded steps</div>
   <h1>What makes this&nbsp;agent hide?</h1>
   <p class="standfirst">We put trained agents back into the worlds they grew up in and watched
-  them live millions of lives. This is the full record: what drives them into cover, what their
-  pain does and does not explain, and whether a neuromodulator changes any of it.</p>
+  them live millions of lives. This is the full record: what drives them into cover, what their nociceptive signal does and does not
+  explain, and whether a neuromodulator changes any of it.</p>
 </header>
 
 <p class="lede">Our agent is a small forager in a ten-by-ten field. It must eat to stay alive
@@ -112,6 +112,14 @@ rolled it before the agent could influence it &mdash; those we can trust. <stron
 means it happened during the episode and is partly the agent's own doing &mdash; those we can only
 describe. Every claim below is labelled as one or the other.</div>
 
+<div class="note"><strong>A word we deliberately do not use.</strong> This document says
+<em>nociception</em>, never &ldquo;pain&rdquo;. Nociception is the signal &mdash; a measurable
+quantity the environment computes and hands to the agent, named
+<code>interoceptive_nociception</code> in the config. Pain is what this project is ultimately trying
+to explain. Using the second word to describe the first would quietly assume the answer: it would
+treat the agent as <em>having</em> the thing we are trying to account for, on the strength of a
+number in an observation vector. Everything below is about what a signal does to behaviour.</div>
+
 <div class="panel">
 <div class="fignum">Vocabulary &mdash; names taken from the run's own config file</div>
 <dl class="dl">
@@ -133,7 +141,7 @@ describe. Every claim below is labelled as one or the other.</div>
   <dt>start injury<br>start nutrition</dt><dd><code>start_injury_*</code> and
     <code>start_nutrition_*</code> &mdash; the wound and the fullness the world assigns at the
     beginning of an episode, at random, before the agent acts.</dd>
-  <dt>nociception</dt><dd><code>interoceptive_nociception</code> &mdash; the pain signal the agent
+  <dt>nociception</dt><dd><code>interoceptive_nociception</code> &mdash; the nociceptive signal the agent
     actually receives. Not the wound itself: a blurred, delayed echo of how wounded it has been
     over the last dozen steps.</dd>
   <dt>recovery accel rate</dt><dd><code>recovery_accel_rate</code> &mdash; extra healing earned for
@@ -167,7 +175,7 @@ saved, not from what we assumed.</p>
   distance it is blind.</dd>
   <dt>smell</dt><dd><strong>Its only distant sense.</strong> Reaches across the whole field.</dd>
   <dt>own injury</dt><dd>No <em>direct</em> readout of how wounded it is.</dd>
-  <dt>pain</dt><dd><strong>Felt, but blurred and delayed.</strong> A smeared echo of how hurt it has
+  <dt>nociception</dt><dd><strong>Received, but blurred and delayed.</strong> A smeared echo of how hurt it has
   been over the last dozen steps, weighted towards about three steps ago, never including this
   moment.</dd>
   <dt>hunger</dt><dd>Felt directly.</dd>
@@ -311,7 +319,7 @@ mistake should be <em>aimed</em>.</p>
 <div class="method"><b>How this was computed</b><dl><dt>lagging</dt><dd>each step classified by animal positions at <code>t&minus;1</code>, scored by bush occupancy at <code>t</code>, within the same episode. Boundary steps dropped</dd><dt>nearby</dt><dd>Chebyshev distance &le; 2 tiles. &ldquo;Rabbit near&rdquo; means a rabbit within 2 and no predator within 2</dd><dt>population</dt><dd>all 189,906,610 action steps, unconditioned</dd><dt>why lagged</dt><dd>same-step gives 63.1 / 17.6 / 11.9. The lagged version being <em>stronger</em> argues against the reverse reading, though consecutive steps are autocorrelated so it weakens that objection rather than eliminating it</dd></dl></div>
 </figure>
 
-<h2>5 &nbsp;Pain</h2>
+<h2>5 &nbsp;Nociception</h2>
 <p>Sections 2 to 4 established that the agent's behaviour is dominated by things outside it &mdash;
 how many predators there are, how far they can see, how close they get. This section turns inward.
 The project's motivating interest is interoception, so the question here is what the agent's
@@ -335,7 +343,7 @@ confirms our hiding measure means what its name says.</figcaption>
 </figure>
 
 <h3>Getting hurt produces a reaction &mdash; a modest one</h3>
-<div class="motive"><b>Why this analysis</b>Does being hurt change what the agent does, and over what timescale? Aligning every damage event and averaging around it is the standard way to see a response emerge and decay. It also tells us whether the response timing is consistent with the agent's pain signal, which peaks three steps after an injury.</div>
+<div class="motive"><b>Why this analysis</b>Does being hurt change what the agent does, and over what timescale? Aligning every damage event and averaging around it is the standard way to see a response emerge and decay. It also tells us whether the response timing is consistent with the agent's nociceptive signal, which peaks three steps after an injury.</div>
 <figure class="panel">
   <div class="fignum">Figure 8 &mdash; behaviour around a moment of damage</div>
   <div id="peri"></div>
@@ -353,16 +361,15 @@ confirms our hiding measure means what its name says.</figcaption>
 <div class="method"><b>How this was computed</b><dl><dt>events</dt><dd>every step with <code>damage</code> &gt; 0, aligned at lag 0; bush occupancy collected from lag &minus;10 to +25 within the same episode</dd><dt>isolated</dt><dd>the subset with no other damage event in the 10 steps before or 25 after</dd><dt>baseline</dt><dd>the value at lag &minus;10, not lag &minus;1 — lag &minus;1 is mechanically depressed because the agent must be out of cover to be hit</dd><dt>known bias</dt><dd>the isolated filter is a collider: hiding prevents damage, so it preferentially keeps cases where hiding worked. Treat it as an upper bound, all-events as a lower bound</dd><dt>correction</dt><dd>an earlier version quoted +8 pp sustained to +25, measured from lag &minus;1 on the isolated subset. Both choices inflated it</dd></dl></div>
 </figure>
 
-<h3>The same pain, but where did it come from?</h3>
-<p>This is the sharpest thing the data say about pain. Take the moments when the agent feels
-pain and no predator is near, and split them by <em>how it came to be hurt</em>.</p>
+<h3>The same signal, but where did it come from?</h3>
+<p>This is the sharpest thing the data say about nociception. Take the moments carrying a high nociception level with no predator near, and split them by <em>how it came to be hurt</em>.</p>
 
-<div class="motive"><b>Why this analysis</b>This is the central question of the whole study. Pain could drive behaviour in two quite different ways: as something to flinch from, or as evidence that a predator is nearby. Those are indistinguishable in normal circumstances &mdash; but the environment randomly assigns some agents a wound at the start of an episode, with nothing having attacked them. That gives us pain without the evidence, and lets the two accounts come apart.</div>
+<div class="motive"><b>Why this analysis</b>This is the central question of the whole study. Nociception could drive behaviour in two quite different ways: as something to flinch from, or as evidence that a predator is nearby. Those are indistinguishable in normal circumstances &mdash; but the environment randomly assigns some agents a wound at the start of an episode, with nothing having attacked them. That gives a nociceptive signal without the evidence, and lets the two accounts come apart.</div>
 <figure class="panel">
   <div class="fignum">Figure 9 &mdash; feeling held constant, origin varied</div>
   <div id="hits"></div>
-  <figcaption>Rows are how much pain is felt; columns are how many times it has actually been
-  struck this episode. Read along the bottom row: at high nociception, an agent struck once hides
+  <figcaption>Rows are the nociception level; columns are how many times it has actually been
+  struck this episode. Read along the bottom row: at a high nociception level, an agent struck once hides
   <strong>40.9%</strong> of the time; one with identical nociception but <em>zero</em> strikes
   &mdash; which can only happen when the world assigned it a wound at the start &mdash; hides
   <strong>22.6%</strong>. Same feeling, near-double response.</figcaption>
@@ -370,7 +377,7 @@ pain and no predator is near, and split them by <em>how it came to be hurt</em>.
 <div class="method"><b>How this was computed</b><dl><dt>nociception</dt><dd>reconstructed, because the store records <code>injury_level</code> but not the observation vector. Mirrors <code>core.py:115</code> — a 12-slot buffer of injury LEVELS, rolled each step, zeroed at reset — convolved with the alpha kernel from the run's own config (&tau; = 3, length 12, current step weighted zero)</dd><dt>pairing</dt><dd>bush occupancy at <code>t</code> against the observation at <code>t&minus;1</code>, since the action producing row <code>t</code> was chosen on the <code>t&minus;1</code> observation</dd><dt>columns</dt><dd>cumulative count of prior <code>damage</code> &gt; 0 events in the episode, excluding the current step</dd><dt>conditioning</dt><dd>steps with no predator within 2 tiles only, so current proximity cannot drive the pattern</dd><dt>bug fixed</dt><dd>the first version used a boundary guard that leaked the episode's randomised start injury into the first few reconstructed steps. About 5% of steps were inflated by up to 13.8 points, fabricating an all-zero column. Corrected and rerun; recorded in the bug registry</dd></dl></div>
 </figure>
 
-<p>That is what you would expect if the agent treats pain as <em>news that a predator is about</em>
+<p>That is what you would expect if the agent treats nociception as <em>news that a predator is about</em>
 rather than as something to flinch from. In this world that inference is sound: being attacked is
 the only way to get hurt. The one case where it fails is precisely the wound it woke up with.</p>
 
@@ -378,7 +385,7 @@ the only way to get hurt. The one case where it fails is precisely the wound it 
 <em>less</em> hiding. An agent struck five times is one that kept failing to reach cover, so the
 strike count marks a hopeless situation as much as a memory.</p>
 
-<h3>Is pain just standing in for "late in the episode"?</h3>
+<h3>Is nociception just standing in for "late in the episode"?</h3>
 <div class="motive"><b>Why this analysis</b>A worry about every injury result so far: injury accumulates over an episode and so does almost everything else, so the wound-behaviour link might just be a proxy for &ldquo;late in the episode&rdquo;. Splitting by elapsed time as well as by wound level tests that directly.</div>
 <figure class="panel">
   <div class="fignum">Figure 10 &mdash; hiding by wound level and by how far into the episode</div>
@@ -392,7 +399,7 @@ strike count marks a hopeless situation as much as a memory.</p>
 </figure>
 
 <h3>Approaching death</h3>
-<div class="motive"><b>Why this analysis</b>Clinical accounts of pain differ on what happens near the extreme &mdash; whether protective behaviour keeps rising or gives way. The environment has a hard lethal ceiling, so we can simply look.</div>
+<div class="motive"><b>Why this analysis</b>Clinical accounts of protective behaviour differ on what happens near the extreme &mdash; whether protective behaviour keeps rising or gives way. The environment has a hard lethal ceiling, so we can simply look.</div>
 <figure class="panel">
   <div class="fignum">Figure 11 &mdash; hiding as the wound nears fatal</div>
   <div id="lethal"></div>
@@ -403,17 +410,43 @@ strike count marks a hopeless situation as much as a memory.</p>
 <div class="method"><b>How this was computed</b><dl><dt>bins</dt><dd><code>injury_level</code> at 0, 0&ndash;25, 25&ndash;50, 50&ndash;75, 75&ndash;90, 90&ndash;100, where 100 is fatal</dd><dt>conditioning</dt><dd>no predator within 2 tiles</dd><dt>cell size</dt><dd>the top bin holds 140,000 steps, the smallest reported anywhere in this document; all others exceed a million</dd></dl></div>
 </figure>
 
-<h3>What we cannot say about pain</h3>
+<h3>What kind of content does the signal carry?</h3>
+<p>There is a live disagreement in the philosophy of pain about what a signal like this
+<em>says</em>. On a <strong>descriptive</strong> reading it reports a state of the body &mdash;
+&ldquo;there is damage here, of this much&rdquo;. On an <strong>imperativist</strong> reading it
+carries no report at all but a command &mdash; &ldquo;do something about this&rdquo; &mdash; and its
+content is exhausted by what it directs the animal to do.</p>
+
+<p>This environment can put evidence on that question, because the same signal level can be
+produced two ways, and one of them is randomised. If the content were purely imperative, a given
+signal level should command the same thing however it arose. It does not: at matched nociception,
+an agent that was actually struck hides <strong>40.9%</strong> of the time, while one carrying the
+same signal from a wound the world assigned it at the start hides <strong>22.6%</strong>. The signal
+alone does not fix the response &mdash; what else the agent knows changes what it does with it.</p>
+
+<p>That is not a refutation of imperativism, and it should not be dressed up as one. A more
+careful imperativist would say the command's <em>urgency</em> is itself set by context, which is
+consistent with everything here. The narrower and safer statement is this: in this agent, the
+nociceptive signal does not behave like a self-contained instruction. It behaves like one input
+among several, and the same input supports different actions depending on what accompanies it.</p>
+
+<p>A separate strand points the other way, and is worth flagging because it favours a more
+directive reading. In a randomised dose-response &mdash; where the environment draws the
+<em>size</em> of each injury independently at the moment of impact &mdash; a larger wound reliably
+increases <strong>resting</strong> and changes cover-seeking by essentially nothing. The signal
+appears to recruit one specific action rather than a general state of protectiveness. That analysis
+is described in the follow-up plan rather than shown here.</p>
+
+<h3>What we cannot say about nociception</h3>
 <div class="panel">
-<figcaption>All of the above is equally consistent with the agent ignoring its pain sense
+<figcaption>All of the above is equally consistent with the agent ignoring its nociceptive channel
 completely. Its brain has <em>memory</em> &mdash; it can simply remember being attacked &mdash; and
-it has a second, instant pain channel that fires on contact. So "felt the bite, remembered it, ran
-for cover" explains every number here without the blurred pain signal contributing anything.<br><br>
+it has a second, immediate nociceptive channel that fires on contact. So "felt the bite, remembered it, ran
+for cover" explains every number here without the smoothed interoceptive signal contributing anything.<br><br>
 The one clean test available points the deflationary way: an agent that merely <em>wakes up</em>
-wounded has the pain signal with no attack behind it, and it hides slightly <em>less</em>, not more,
+wounded has the nociceptive signal with no attack behind it, and it hides slightly <em>less</em>, not more,
 consistently across all ten agents we tested.<br><br>
-<strong>Settling this needs a new experiment</strong>: replay a trained agent with its pain
-signal held constant or falsified, and see whether behaviour moves.</figcaption>
+<strong>Settling this needs a new experiment</strong>: replay a trained agent with its nociceptive input held constant or falsified, and see whether behaviour moves.</figcaption>
 </div>
 
 <h3>When there are two predators</h3>
@@ -516,11 +549,11 @@ difference between them is the agent, never the world.</p>
 </dl>
 </div>
 
-<div class="motive"><b>Why this analysis</b>Is the coupling between pain and behaviour a property of this task, or an accident of one training run? Ten independently trained agents give a direct answer.</div>
+<div class="motive"><b>Why this analysis</b>Is the coupling between nociception and behaviour a property of this task, or an accident of one training run? Ten independently trained agents give a direct answer.</div>
 <figure class="panel">
-  <div class="fignum">Figure 15 &mdash; all ten react to pain the same way</div>
+  <div class="fignum">Figure 15 &mdash; all ten respond to nociception the same way</div>
   <div id="armpain"></div>
-  <figcaption>Share of time hidden against how much pain is felt, one line per trained agent. The
+  <figcaption>Share of time hidden against nociception level, one line per trained agent. The
   shape is the same in all ten &mdash; a shallow dip, then a steep climb. Whatever this coupling is,
   it is a property of the task rather than of any single training run.</figcaption>
 
@@ -584,10 +617,10 @@ predator should depend more on how hurt it is</strong> than an unmodulated agent
 
 <p>We measure that directly. For each level of nociception, we compute how much more the agent
 hides when a predator is near than when none is &mdash; call that its <strong>predator-proximity effect</strong>
-at that pain level. Then we ask how much that response changes across pain levels.</p>
+at that nociception level. Then we ask how much that response changes across nociception levels.</p>
 
 <div class="note">There are two versions of this and the difference matters. In the
-<strong>observed</strong> version the agent's pain is its own doing, so the pattern describes its
+<strong>observed</strong> version the agent's nociception is its own doing, so the pattern describes its
 situation. In the <strong>randomised</strong> version the world assigns the wound at the start of the
 episode before the agent acts, so the pattern describes the agent's disposition. Only the
 second is a cause.</div>
@@ -757,7 +790,7 @@ spawn geometry and the untested-factor audit — is archived under
 Hiding is measured as the share of the agent's own action steps spent inside a bush; the spawn
 step is excluded, since it did not choose where it woke. Analysis covers fourteen million evaluation rollouts across fourteen trained agents: ten differing in a recovery accel rate, and four matched
 modulator pairs. Findings were reviewed adversarially and two were withdrawn after review or
-replication &mdash; a bug in the pain reconstruction, and an over-read of the modulator's effect on
+replication &mdash; a bug in the nociception reconstruction, and an over-read of the modulator's effect on
 perception. Both corrections are recorded in the accompanying reports.
 </footer>
 </div>
@@ -1025,7 +1058,7 @@ heat("hits",D.hits.hide,["feels nothing","a little","some","a lot","severe","ext
   s.appendChild(txt(x+15,H-11,c[1],"ax"));});
  put("var",s);})();
 
-/* F15 pain response in all ten */
+/* F15 nociception response in all ten */
 (function(){const K=Object.keys(D.armpain).sort(),labs=["none","0–8","8–18","18–32","32–50","50+"];
  const W=700,H=274,ml=62,mr=94,mt=24,mb=64,s=svg(W,H),pw=W-ml-mr,ph=H-mt-mb;
  const Y=v=>H-mb-(v/45)*ph, X=j=>ml+pw*j/5;

@@ -13,8 +13,8 @@ injury conditional table, the injury window, and the eat-block check — are arc
 reader challenge — see [Corrections](#review-response). Finding 3 was rewritten after the
 original claim ("the agent cannot perceive its own injury") was found to be **wrong**.
 **Replicated across all 10 trained arms** — see [Cross-arm](#cross-arm).
-Injury and pain in depth: [Injury-dependent hiding](#injury-deep). Comparing the ten agents: [Model effect](#model-effect). Other runs: [What else](#other-runs).
-A step-level deep dive on the pain channel is in [Interoceptive pain](#nociception) —
+Injury and nociception in depth: [Injury-dependent hiding](#injury-deep). Comparing the ten agents: [Model effect](#model-effect). Other runs: [What else](#other-runs).
+A step-level deep dive on the nociceptive channel is in [Interoceptive pain](#nociception) —
 which concludes that the interoceptive channel's specific role is **not identified** by this
 data, and names the experiment that would settle it.
 
@@ -44,7 +44,7 @@ This governs every result below, so it comes first. From the run's own saved set
 | Sight | range **0** | It sees only the tile it stands on. Blind at distance. |
 | Smell | enabled, radius 20 | Its **only** distal sense. Covers the whole 10x10 map. |
 | Own injury | no *direct* readout | `injury_observable: false` removes the instantaneous value. |
-| Pain (interoceptive nociception) | **observable, lagged** | A 12-step buffer of *injury levels* convolved with a kernel peaking 3 steps back. The agent **does** feel its wound — smoothed and delayed. The buffer is zeroed at reset, so a wound it wakes up with is unfelt on step 1 and fades in over ~10 steps (perceived value 0 → 28 → 58). |
+| Nociception (interoceptive nociception) | **observable, lagged** | A 12-step buffer of *injury levels* convolved with a kernel peaking 3 steps back. The agent **does** feel its wound — smoothed and delayed. The buffer is zeroed at reset, so a wound it wakes up with is unfelt on step 1 and fades in over ~10 steps (perceived value 0 → 28 → 58). |
 | Hunger | observable | Via satiation, which tracks nutrition one-for-one. |
 
 The two animal types were built to smell alike: a predator's scent is drawn around (0.7, 0.5)
@@ -91,7 +91,7 @@ scales can be compared.
 
 This is exhaustive: every quantity the environment randomises appears above. Three of them
 double as controls, and all three behave as they should. **Rocks** are scattered like bushes but
-conceal nothing, and unlike bushes they *hurt* (1-5 damage, high pain intensity). Their count
+conceal nothing, and unlike bushes they *hurt* (1-5 damage, high nociception intensity). Their count
 moves the behaviour not at all, so the agent is neither reacting to clutter nor treating a
 damaging object as a reason to seek cover. **Where on the map the agent wakes up** should
 not matter in a symmetric arena, and does not. **Predator stamina** is a trait with no route to
@@ -187,7 +187,7 @@ cannot be cleanly separated from differential survival, which also grows with el
 
 **A wound it earned makes it hide far *more*.** Conditioning on no predator within two tiles,
 so that current proximity cannot be doing the work, hiding rises steeply and monotonically with
-the pain signal the agent actually receives:
+the nociceptive signal the agent actually receives:
 
 | Perceived pain | hiding, no predator within 2 tiles | hiding, predator near |
 |---|---|---|
@@ -209,7 +209,7 @@ inference is false — nothing attacked it — and there the response is absent.
 Two caveats. Earned pain is not randomised, so that table is an association: the agent feels
 pain *because* it was attacked, and "no predator within two tiles right now" does not mean no
 predator was near recently. And the randomised effect is entangled with survival. What the two
-together do establish is that the pain channel alone does not drive hiding — its behavioural
+together do establish is that the nociceptive channel alone does not drive hiding — its behavioural
 meaning depends on the context that produced it.
 
 For completeness, the raw injury-level counts are confounded in the same way, and conditioning
@@ -324,7 +324,7 @@ events — so the agent does perceive its wound, smoothed and lagged. Reading th
 stopping there was the error, and it was mine; the reviewer's round-one pass had corroborated
 it, so two passes carried the same mistake. Finding 3 has been rewritten around the signal the
 agent actually receives, and the conclusion is stronger and more interesting than the one it
-replaces: the same pain channel drives hiding *up* threefold when the wound was earned, and
+replaces: the same nociceptive channel drives hiding *up* threefold when the wound was earned, and
 slightly *down* when the wound was randomly assigned — because pain in this world is evidence
 of a predator, and a wound you woke up with carries no such evidence. The
 "imperceptible variable returns null" control claim has been withdrawn as invalid.
@@ -339,7 +339,7 @@ scent channels it flagged in the script are now derived from the run's config, w
 failure if a run's configuration does not separate the two classes.
 
 <a id="nociception"></a>
-## Interoceptive pain in depth
+## Interoceptive nociception in depth
 
 Finding 3 establishes that the agent feels its wound through a lagged, smoothed channel. This
 section goes under that at step level. It is more negative than the first draft: an
@@ -378,7 +378,7 @@ Hiding by actual injury (rows) against perceived pain (columns), no predator wit
 | **45-70** | 11.9% | 12.2% | 13.8% | 15.5% | 18.0% | 26.8% |
 | **70+** | 11.9% | 14.6% | 16.6% | 19.7% | 26.3% | 28.2% |
 
-Along a row, hiding rises with felt pain; down a column, actual injury adds little. But this is
+Along a row, hiding rises with nociception; down a column, actual injury adds little. But this is
 **a consistency check, not a discovery**. The observation vector contains the nociceptor and no
 injury readout, so behaviour *cannot* depend on actual injury except through the percept — the
 architecture guarantees the asymmetry. What the table earns is confidence that the
@@ -386,7 +386,7 @@ reconstruction captures the right variable.
 
 Two honest qualifications. The rise is not steep in every row: the middle rows are flat until
 the highest felt-pain column. And the cells are not exchangeable — at fixed actual injury,
-higher felt pain means injury was recently *higher*, i.e. the agent has been healing, and
+higher nociception means injury was recently *higher*, i.e. the agent has been healing, and
 healing requires resting, which co-occurs with being in a bush (20.3% in-bush when resting
 versus 13.2% when not). Some of the along-row rise is that composition.
 
@@ -425,7 +425,7 @@ baseline within about six steps; only the selected subset stays elevated.
 
 ### Context changes what the same pain is worth
 
-| felt pain | no predator within 2 tiles | predator within 2 tiles |
+| nociception | no predator within 2 tiles | predator within 2 tiles |
 |---|---|---|
 | none | 12.6% | 75.8% |
 | 0-10 | 11.5% | 51.4% |
@@ -435,13 +435,13 @@ baseline within about six steps; only the selected subset stays elevated.
 | 55+ | **32.7%** | 74.4% |
 
 This is the most robust result in the section — it barely moved under the bug fix. With no
-predator in sight, high felt pain accompanies nearly three times the hiding of low felt pain.
+predator in sight, high nociception accompanies nearly three times the hiding of low nociception.
 With a predator present the agent is already hiding on half to three-quarters of steps and the
 gradient is proportionally much smaller: the direct cue dominates.
 
 ### Rising versus falling pain: no clear asymmetry
 
-| felt pain | falling | rising |
+| nociception | falling | rising |
 |---|---|---|
 | 8-18 | 12.5% | 13.6% |
 | 18-32 | 15.0% | 15.1% |
@@ -469,11 +469,11 @@ randomised starting injury, which loads the interoceptive channel *without* any 
 hiding slightly **negative**, which fits the deflationary reading at least as well.
 
 **So the honest verdict is that the specific contribution of interoceptive pain is not
-identified here.** What is established: hiding is systematically coupled to the pain state,
+identified here.** What is established: hiding is systematically coupled to the nociceptive state,
 that coupling is much stronger when no predator is directly perceivable, cover is mechanically
 protective, and the coupling holds in all ten trained agents.
 
-Settling it requires an intervention on the pain channel that does not also imply a predator:
+Settling it requires an intervention on the nociceptive channel that does not also imply a predator:
 replay the trained agent with the interoceptive input clamped to a constant, or set to a
 falsified value, and see whether the behaviour changes. The collection pipeline could support
 that; this analysis could not do it. That is the recommended next experiment.
@@ -515,31 +515,31 @@ causal claim is made about the resting-bonus parameter: one training run per arm
 separate the parameter from the run.
 
 <a id="injury-deep"></a>
-## Injury-dependent hiding: pain state versus attack memory
+## Injury-dependent hiding: nociceptive state versus attack memory
 
-The pain section closed on an unresolved question — is the agent using its pain signal, or just
+The pain section closed on an unresolved question — is the agent using its nociceptive signal, or just
 remembering that it was attacked? Two tests narrow it.
 
-### Same felt pain, different origin
+### Same nociception, different origin
 
-Cross-tabulating hiding by felt pain against the number of hits taken earlier in the episode
+Cross-tabulating hiding by nociception against the number of hits taken earlier in the episode
 (no predator within two tiles) separates the two. Prior-hit count is a memory variable that
 cannot be recovered from the current pain value.
 
-| felt pain | 0 prior hits | 1 | 2 | 3-4 | 5+ |
+| nociception | 0 prior hits | 1 | 2 | 3-4 | 5+ |
 |---|---|---|---|---|---|
 | felt 0 | 23.9% | 18.2% | 13.8% | 11.3% | 9.5% |
 | 8-18 | 14.6% | 15.3% | 14.3% | 13.4% | 11.0% |
 | 32-50 | 19.1% | 26.6% | 24.3% | 24.0% | 17.4% |
 | **50+** | **22.6%** | **40.9%** | 40.0% | 40.7% | 29.1% |
 
-Read the bottom row. At high felt pain, an agent that has actually been hit once hides
-**40.9%** of the time. An agent with *the same felt pain* but **zero hits** — which can only
+Read the bottom row. At high nociception, an agent that has actually been hit once hides
+**40.9%** of the time. An agent with *the same nociception* but **zero hits** — which can only
 happen when the pain comes from the randomly assigned starting wound — hides **22.6%**. Nearly
 half as much, from an identical interoceptive signal.
 
 So the pain value alone does not determine the response; how the pain was acquired does. This is
-the sharpest evidence available here for the "pain as evidence of a predator" reading, and the
+the sharpest evidence available here for the "nociception as evidence of a predator" reading, and the
 zero-hit column is randomised, which is what gives it force.
 
 Two caveats. The zero-hit high-pain cells are necessarily early in the episode (a starting wound
@@ -547,16 +547,16 @@ heals within ~20 steps), so time is confounded with origin. And beyond one hit, 
 *less* hiding — an episode with five hits is one where the agent kept failing to reach cover, so
 hit count also marks incompetence or an inescapable situation, not just memory.
 
-### Same felt pain, different age
+### Same nociception, different age
 
-| felt pain | 1 step after a hit | 2-3 | 4-6 | 7-11 | 12+/never |
+| nociception | 1 step after a hit | 2-3 | 4-6 | 7-11 | 12+/never |
 |---|---|---|---|---|---|
 | 18-32 | 8.6% | 15.1% | 15.9% | 14.1% | 15.6% |
 | 50+ | 14.8% | 28.8% | 35.3% | **38.7%** | 27.2% |
 
 Immediately after a hit, hiding is at its lowest — the agent is out in the open, which is how it
 was hit — and it climbs over the following steps, peaking seven to eleven steps later. The same
-felt pain produces very different behaviour depending on how recently it arrived.
+nociception produces very different behaviour depending on how recently it arrived.
 
 ### Approaching death
 
@@ -576,7 +576,7 @@ ceiling of 100. Whatever the agent does near death, it is not more cover-seeking
 | a10 (premium 2.7) | 13.2% | 16.0% | 19.1% | 22.5% | 37.0% | +23.8 |
 
 Every one of the ten independently trained agents shows the same shape — a shallow dip at low
-pain, then a steep climb — with slopes from +19.7 to +27.5 percentage points. The pain-hiding
+pain, then a steep climb — with slopes from +19.7 to +27.5 percentage points. The nociception-dwell
 coupling is a property of the task, not of any one training run. The slope is weakly smaller in
 agents with a larger resting bonus (Spearman rho = -0.62, p = 0.054), which is suggestive only
 and carries the same attribution problem as everything else in the cross-arm comparison.

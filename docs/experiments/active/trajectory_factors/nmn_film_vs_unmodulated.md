@@ -137,9 +137,9 @@ Everything above asks whether the modulated agent *behaves* differently. That is
 for what a modulator does. A FiLM modulator rescales perception **according to internal state**, so
 the sharp prediction is that its **response to an external cue should depend more on that state**.
 
-`scripts/analysis/context_dependence.py` measures this directly. For each level of felt pain it
+`scripts/analysis/context_dependence.py` measures this directly. For each level of nociception it
 computes the **predator-proximity effect** — how much more the agent hides with a predator within two tiles
-than without — and then asks how far that response ranges across pain levels. A modulator doing its
+than without — and then asks how far that response ranges across nociception levels. A modulator doing its
 job should widen that range.
 
 The tool reports two versions. In the **observed** version the agent's pain is its own doing, so the
