@@ -59,6 +59,9 @@ td.num{font-family:var(--mono);font-size:.83rem}
 .big small{font-size:.76rem;color:var(--muted)}
 svg{display:block;width:100%;height:auto;overflow:visible}
 .ax{font-family:var(--mono);font-size:9px;fill:var(--muted)}
+.axt{font-family:var(--body);font-size:10.5px;fill:var(--fg);font-weight:600;
+  letter-spacing:.02em}
+.axu{font-family:var(--body);font-size:9.5px;fill:var(--muted)}
 .lbl{font-size:11px;fill:var(--fg)}
 .cell{font-family:var(--mono);font-size:9.5px}
 .note{font-size:.86rem;color:var(--muted);border-left:2px solid var(--rule);padding-left:.9rem}
@@ -277,8 +280,9 @@ strike count marks a hopeless situation as much as a memory.</p>
 <figure class="panel">
   <div class="fignum">Figure 10 &mdash; hiding by wound level and by how far into the episode</div>
   <div id="hminj"></div>
-  <figcaption>Darker means more hiding. If the wound-hiding link were merely a proxy for elapsed
-  time, the pattern would run flat across each row. It does not: within almost every time band,
+  <figcaption>Darker means more hiding. Rows are how far into the episode; columns are how badly wounded. If
+  the wound-hiding link were merely a proxy for elapsed time, the pattern would run flat across
+  each row. It does not: within almost every time band,
   hiding rises with the wound. But note the leftmost column &mdash; an <em>uninjured</em> creature
   hides a lot too, because hiding is exactly what keeps it uninjured.</figcaption>
 </figure>
@@ -309,7 +313,8 @@ signal held constant or falsified, and see whether behaviour moves.</figcaption>
 <figure class="panel">
   <div class="fignum">Figure 12 &mdash; hiding by hunger and by how far into the episode</div>
   <div id="hmnut"></div>
-  <figcaption>The pattern here is enormous and it does <em>not</em> wash out with elapsed time
+  <figcaption>Rows are how far into the episode; columns are how well fed. The pattern is enormous and it does
+  <em>not</em> wash out with elapsed time
   &mdash; a starving creature hides far more in every band. Read naively that says hunger drives
   hiding. It runs the other way.</figcaption>
 </figure>
@@ -510,6 +515,11 @@ function txt(x,y,s,cls,anc,fill){const t=el("text",{x:x,y:y,class:cls||"ax"});
   if(anc)t.setAttribute("text-anchor",anc); if(fill)t.setAttribute("fill",fill);
   t.textContent=s;return t}
 const put=(id,s)=>{const n=document.getElementById(id); if(n)n.appendChild(s)};
+/* axis titles — every chart gets both, stated in words */
+function xlab(s,cx,y,t,cls){s.appendChild(txt(cx,y,t,cls||"axt","middle"))}
+function ylab(s,x,cy,t,cls,fill){const e=el("text",{x:x,y:cy,class:cls||"axt",
+  "text-anchor":"middle",transform:`rotate(-90 ${x} ${cy})`});
+  if(fill)e.setAttribute("fill",fill); e.textContent=t; s.appendChild(e)}
 
 /* F2 ranked */
 const RANK=[["number of predators",16.03],["predator's eyesight",12.55],
@@ -519,19 +529,20 @@ const RANK=[["number of predators",16.03],["predator's eyesight",12.55],
 ["predator's strike reach",-0.75],["distance to food at start",0.56],
 ["hidden ambush predators",0.24],["number of rocks",0.10],["where it wakes up",0.04],
 ["predator's stamina",-0.01]];
-(function(){const W=700,rh=20,L=182,H=RANK.length*rh+32,xw=W-L-16,zx=L+xw*.16,max=17;
+(function(){const W=700,rh=20,L=182,H=RANK.length*rh+62,xw=W-L-16,zx=L+xw*.16,max=17;
  const s=svg(W,H),sc=v=>zx+v*(xw*.82/max);
  for(const g of[-4,0,4,8,12,16]){const gx=sc(g);
-  s.appendChild(el("line",{x1:gx,y1:12,x2:gx,y2:H-18,stroke:V("--grid"),"stroke-width":g===0?1.4:.6}));
-  s.appendChild(txt(gx,H-6,g,"ax","middle"));}
+  s.appendChild(el("line",{x1:gx,y1:12,x2:gx,y2:H-44,stroke:V("--grid"),"stroke-width":g===0?1.4:.6}));
+  s.appendChild(txt(gx,H-32,g,"ax","middle"));}
  RANK.forEach((d,i)=>{const y=24+i*rh,v=d[1];
   const ctrl=/rocks|wakes up|stamina/.test(d[0]), hl=/smell|starting injury/.test(d[0]);
   const c=ctrl?V("--muted"):(v<0?V("--false"):(hl?V("--warm"):V("--true")));
   const a=sc(Math.min(v,0)),b=sc(Math.max(v,0));
-  s.appendChild(el("rect",{x:a,y:y-7,width:Math.max(b-a,1.2),height:12,fill:c,rx:1,
-    opacity:ctrl?.5:.9}));
+  s.appendChild(el("rect",{x:a,y:y-7,width:Math.max(b-a,1.2),height:12,fill:c,rx:1,opacity:ctrl?.5:.9}));
   const t=txt(L-8,y+2,d[0],"lbl","end"); if(hl)t.setAttribute("font-weight","650");
   s.appendChild(t); s.appendChild(txt(b+5,y+2,(v>0?"+":"")+v.toFixed(1),"ax"));});
+ xlab(s,L+xw/2,H-14,"← hides LESS      change in share of episode hidden, percentage points      hides MORE →");
+ ylab(s,14,(H-44)/2,"world feature (rolled at random)");
  put("rank",s);})();
 
 /* F3 dose-response small multiples */
@@ -545,86 +556,87 @@ const RANK=[["number of predators",16.03],["predator's eyesight",12.55],
  "spawn distance to nearest bush":"distance to cover","randomised START injury":"starting injury",
  "randomised START nutrition":"starting hunger","rocks":"rocks (control)",
  "predator max stamina":"stamina (control)"};
- const cols=3,cw=228,chh=104,W=cols*cw,H=Math.ceil(pick.length/cols)*chh+10;
+ const cols=3,cw=232,chh=126,W=cols*cw,H=Math.ceil(pick.length/cols)*chh+52;
  const s=svg(W,H);
+ xlab(s,W/2,20,"each panel: one world feature dialled from its LOWEST to its HIGHEST setting");
  pick.forEach((k,i)=>{const c=D.curves[k]; if(!c)return;
-  const ox=(i%cols)*cw+40, oy=Math.floor(i/cols)*chh+30, pw=cw-58, ph=chh-46;
-  s.appendChild(txt(ox-32,oy-12,nice[k]||k,"lbl"));
+  const ox=(i%cols)*cw+46, oy=Math.floor(i/cols)*chh+56, pw=cw-72, ph=chh-64;
+  s.appendChild(txt(ox-38,oy-14,nice[k]||k,"lbl"));
   const dw=c.dwell, sv=c.survival, n=dw.length;
-  const dmax=Math.max(60,Math.ceil(Math.max(...dw)/10)*10);
-  const smax=Math.max(...sv);
+  const dmax=Math.max(60,Math.ceil(Math.max(...dw)/10)*10), smax=Math.max(...sv);
   const X=j=>ox+(n===1?pw/2:pw*j/(n-1));
   s.appendChild(el("line",{x1:ox,y1:oy+ph,x2:ox+pw,y2:oy+ph,stroke:V("--grid"),"stroke-width":.6}));
+  s.appendChild(el("line",{x1:ox,y1:oy,x2:ox,y2:oy+ph,stroke:V("--grid"),"stroke-width":.6}));
   const path=(arr,mx)=>{let p="";arr.forEach((v,j)=>p+=(j?"L":"M")+X(j)+" "+(oy+ph-(v/mx)*ph));return p};
   s.appendChild(el("path",{d:path(sv,smax),fill:"none",stroke:V("--warm"),"stroke-width":1.6,
     "stroke-linejoin":"round",opacity:.85}));
   s.appendChild(el("path",{d:path(dw,dmax),fill:"none",stroke:V("--cover"),"stroke-width":2,
     "stroke-linejoin":"round"}));
-  s.appendChild(txt(ox-4,oy+2,dmax+"%","ax","end",V("--cover")));
-  s.appendChild(txt(ox-4,oy+ph+3,"0","ax","end"));
-  s.appendChild(txt(ox+pw+3,oy+2,Math.round(smax),"ax","start",V("--warm")));
-  s.appendChild(txt(ox,oy+ph+13,c.labels[0],"ax"));
-  s.appendChild(txt(ox+pw,oy+ph+13,c.labels[n-1],"ax","end"));});
+  s.appendChild(txt(ox-4,oy+3,dmax+"%","ax","end",V("--cover")));
+  s.appendChild(txt(ox-4,oy+ph+3,"0","ax","end",V("--cover")));
+  s.appendChild(txt(ox+pw+3,oy+3,Math.round(smax),"ax","start",V("--warm")));
+  s.appendChild(txt(ox+pw+3,oy+ph+3,"0","ax","start",V("--warm")));
+  s.appendChild(txt(ox,oy+ph+14,c.labels[0],"ax"));
+  s.appendChild(txt(ox+pw,oy+ph+14,c.labels[n-1],"ax","end"));
+  s.appendChild(txt(ox+pw/2,oy+ph+25,"low → high","axu","middle"));});
+ ylab(s,14,H/2,"LEFT axis: share of time hidden","axt",V("--cover"));
+ ylab(s,W-10,H/2,"RIGHT axis: steps survived","axt",V("--warm"));
  put("curves",s);})();
 
 /* F4 double dissociation */
 (function(){const P=D.smell["PREDATOR smell"],R=D.smell["RABBIT smell"];
- const W=700,H=240,pad=44,gap=58,pw=(W-pad*2-gap)/2,s=svg(W,H);
- function panel(ox,key,title,dom,fmt){const yb=H-38,yt=32,ph=yb-yt;
-  s.appendChild(txt(ox,yt-13,title,"lbl"));
+ const W=700,H=278,pad=58,gap=66,pw=(W-pad*2-gap)/2,s=svg(W,H);
+ function panel(ox,key,title,dom,fmt,col){const yb=H-64,yt=42,ph=yb-yt;
+  s.appendChild(txt(ox,yt-16,title,"axt"));
   const[lo,hi]=dom,Y=v=>yb-(v-lo)/(hi-lo)*ph;
   for(let g=0;g<=4;g++){const v=lo+(hi-lo)*g/4;
    s.appendChild(el("line",{x1:ox,y1:Y(v),x2:ox+pw,y2:Y(v),stroke:V("--grid"),"stroke-width":.6}));
    s.appendChild(txt(ox-6,Y(v)+3,fmt(v),"ax","end"));}
-  [[P,V("--true")],[R,V("--false")]].forEach(([A,col])=>{
+  [[P,V("--true")],[R,V("--false")]].forEach(([A,c])=>{
    const a=A.map(r=>r[key]),n=a.length,X=j=>ox+pw*j/(n-1);
    let d="";a.forEach((v,j)=>d+=(j?"L":"M")+X(j)+" "+Y(v));
-   s.appendChild(el("path",{d:d,fill:"none",stroke:col,"stroke-width":2.2,"stroke-linejoin":"round"}));
-   a.forEach((v,j)=>s.appendChild(el("circle",{cx:X(j),cy:Y(v),r:3,fill:col})));});
-  s.appendChild(txt(ox,H-13,"less predator-like","ax"));
-  s.appendChild(txt(ox+pw,H-13,"more →","ax","end"));}
- panel(pad,"dwell","share of steps hidden",[10,40],v=>v.toFixed(0)+"%");
- panel(pad+pw+gap,"surv","steps survived",[80,200],v=>v.toFixed(0));
+   s.appendChild(el("path",{d:d,fill:"none",stroke:c,"stroke-width":2.2,"stroke-linejoin":"round"}));
+   a.forEach((v,j)=>s.appendChild(el("circle",{cx:X(j),cy:Y(v),r:3,fill:c})));});
+  s.appendChild(el("line",{x1:ox,y1:yb,x2:ox+pw,y2:yb,stroke:V("--grid"),"stroke-width":.6}));
+  s.appendChild(txt(ox,yb+13,"barely","ax")); s.appendChild(txt(ox+pw,yb+13,"strongly","ax","end"));
+  xlab(s,ox+pw/2,yb+30,"how predator-like the smell is");}
+ panel(pad,"dwell","Y: share of steps hidden",[10,40],v=>v.toFixed(0)+"%");
+ panel(pad+pw+gap,"surv","Y: steps survived",[80,200],v=>v.toFixed(0));
  put("dd",s);})();
-
-/* F5 chain table */
-(function(){const R=D.smell["RABBIT smell"],tb=document.getElementById("chain"); if(!tb)return;
- const lab=["least like a predator","","","","","most like a predator"];
- R.forEach((r,i)=>{ if(i!==0&&i!==R.length-1)return;
-  const tr=document.createElement("tr");
-  tr.innerHTML=`<td>${lab[i]||r.bin}</td><td class="num">${r.dwell.toFixed(1)}%</td>`+
-   `<td class="num">${r.eat.toFixed(3)}</td><td class="num">${r.starved.toFixed(1)}%</td>`+
-   `<td class="num">${r.killed.toFixed(1)}%</td>`+
-   `<td class="num ${i===0?'lo':'hi'}">${r.surv.toFixed(1)}</td>`;
-  tb.appendChild(tr);});})();
 
 /* F6 aimed */
 (function(){const A=[["nothing near",20.2,28.3],["the predator near",56.4,62.7],
   ["that rabbit near",26.7,49.8]];
- const W=700,rh=50,H=A.length*rh+38,L=170,xw=W-L-72,s=svg(W,H);
- s.appendChild(txt(L,14,"share of steps hidden","ax"));
- A.forEach((d,i)=>{const y=28+i*rh,aim=i===2;
+ const W=700,rh=50,H=A.length*rh+66,L=170,xw=W-L-72,s=svg(W,H);
+ A.forEach((d,i)=>{const y=22+i*rh,aim=i===2;
   const bar=(v,yy,c,o)=>{s.appendChild(el("rect",{x:L,y:yy,width:Math.max(xw*v/70,1),height:13,
     fill:c,opacity:o,rx:1}));s.appendChild(txt(L+xw*v/70+6,yy+11,v.toFixed(1)+"%","ax"));};
   bar(d[1],y,V("--muted"),.55); bar(d[2],y+16,aim?V("--false"):V("--true"),aim?1:.75);
   const t=txt(L-10,y+17,d[0],"lbl","end"); if(aim)t.setAttribute("font-weight","650");
   s.appendChild(t);
   s.appendChild(txt(L+xw*Math.max(d[1],d[2])/70+50,y+17,"+"+(d[2]-d[1]).toFixed(1),"ax"));});
+ for(const g of[0,20,40,60]){const gx=L+xw*g/70;
+  s.appendChild(txt(gx,H-32,g+"%","ax","middle"));}
+ xlab(s,L+xw/2,H-14,"share of steps hidden");
+ ylab(s,14,(H-40)/2,"what was nearby");
  put("aim",s);})();
 
 /* F7 proximity */
 (function(){const A=[["a predator within 2 tiles",67.9,V("--false")],
   ["a rabbit within 2 tiles",17.9,V("--cover")],["neither",11.6,V("--true")]];
- const W=700,rh=42,H=A.length*rh+22,L=200,xw=W-L-56,s=svg(W,H);
- A.forEach((d,i)=>{const y=16+i*rh;
+ const W=700,rh=42,H=A.length*rh+56,L=200,xw=W-L-56,s=svg(W,H);
+ A.forEach((d,i)=>{const y=12+i*rh;
   s.appendChild(el("rect",{x:L,y:y,width:Math.max(xw*d[1]/100,1),height:21,fill:d[2],rx:1}));
   s.appendChild(txt(L-8,y+15,d[0],"lbl","end"));
   s.appendChild(txt(L+xw*d[1]/100+7,y+15,d[1].toFixed(1)+"%","ax"));});
+ for(const g of[0,25,50,75,100]){s.appendChild(txt(L+xw*g/100,H-32,g+"%","ax","middle"));}
+ xlab(s,L+xw/2,H-14,"share of steps hidden");
+ ylab(s,14,(H-40)/2,"what was nearby one step earlier");
  put("prox",s);})();
 
 /* F8 peri-event */
 (function(){const L1=D.peri.lags,A=D.peri.all,I=D.peri.iso;
- const W=700,H=250,ml=44,mr=16,mt=26,mb=42,s=svg(W,H),pw=W-ml-mr,ph=H-mt-mb;
+ const W=700,H=286,ml=62,mr=16,mt=26,mb=68,s=svg(W,H),pw=W-ml-mr,ph=H-mt-mb;
  const X=v=>ml+(v+10)/34*pw, Y=v=>H-mb-v/22*ph;
  for(let g=0;g<=20;g+=5){s.appendChild(el("line",{x1:ml,y1:Y(g),x2:ml+pw,y2:Y(g),
    stroke:V("--grid"),"stroke-width":.6})); s.appendChild(txt(ml-6,Y(g)+3,g+"%","ax","end"));}
@@ -642,46 +654,49 @@ const RANK=[["number of predators",16.03],["predator's eyesight",12.55],
   s.appendChild(el("line",{x1:ml,y1:Y(b),x2:ml+pw,y2:Y(b),stroke:c,"stroke-width":.8,
     "stroke-dasharray":"2 4",opacity:.7}));});
  s.appendChild(el("circle",{cx:X(0),cy:Y(0),r:3.4,fill:V("--false")}));
- [[-10,"10 steps before"],[10,"10 after"],[24,"25 after"]].forEach(d=>
-   s.appendChild(txt(X(d[0]),H-13,d[1],"ax","middle")));
- s.appendChild(txt(ml,mt-12,"share of steps hidden (dashed = level before the hit)","ax"));
+ [[-10,"−10"],[-5,"−5"],[0,"0"],[5,"+5"],[10,"+10"],[15,"+15"],[20,"+20"],[24,"+25"]].forEach(d=>
+   s.appendChild(txt(X(d[0]),H-mb+15,d[1],"ax","middle")));
+ xlab(s,ml+pw/2,H-30,"steps before (−) and after (+) the moment of damage");
+ ylab(s,16,mt+ph/2,"share of steps hidden");
+ s.appendChild(txt(ml,mt-12,"dashed horizontal lines = the level ten steps before the hit","axu"));
  put("peri",s);})();
 </script>
 
 <script>
-/* shared heatmap */
-function heat(id,M,rowLabs,colLabs,title,vmax,note){
-  const W=700,ch=26,lw=118,cw=(W-lw-14)/colLabs.length,H=M.length*ch+58;
+/* shared heatmap — rows and columns each get a named axis */
+function heat(id,M,rowLabs,colLabs,rowTitle,colTitle,vmax,note){
+  const W=700,ch=27,lw=136,cw=(W-lw-18)/colLabs.length,H=M.length*ch+92;
   const s=svg(W,H);
-  s.appendChild(txt(lw,12,title,"ax"));
-  colLabs.forEach((c,j)=>s.appendChild(txt(lw+cw*(j+.5),26,c,"ax","middle")));
-  M.forEach((row,i)=>{const y=32+i*ch;
-    s.appendChild(txt(lw-8,y+17,rowLabs[i],"lbl","end"));
-    row.forEach((v,j)=>{const x=lw+cw*j;
-      const t=Math.max(0,Math.min(1,v/vmax));
+  xlab(s,lw+(W-lw-18)/2,18,colTitle);
+  colLabs.forEach((c,j)=>s.appendChild(txt(lw+cw*(j+.5),34,c,"ax","middle")));
+  M.forEach((row,i)=>{const y=42+i*ch;
+    s.appendChild(txt(lw-8,y+18,rowLabs[i],"lbl","end"));
+    row.forEach((v,j)=>{const x=lw+cw*j, t=Math.max(0,Math.min(1,v/vmax));
       s.appendChild(el("rect",{x:x+1,y:y+1,width:cw-2,height:ch-3,fill:V("--cover"),
         opacity:.10+.85*t,rx:1}));
-      s.appendChild(txt(x+cw/2,y+17,(v>=0?v.toFixed(0):"—")+"%","cell","middle",
+      s.appendChild(txt(x+cw/2,y+18,(v>=0?v.toFixed(0):"—")+"%","cell","middle",
         t>.55?"#fff":V("--fg")));});});
-  if(note)s.appendChild(txt(lw,H-6,note,"ax"));
+  ylab(s,16,42+(M.length*ch)/2,rowTitle);
+  xlab(s,lw+(W-lw-18)/2,H-30,colTitle);
+  if(note)s.appendChild(txt(lw,H-12,note,"axu"));
   put(id,s);
 }
 const TB=D.timectrl.tb, band=[];
-for(let i=0;i<TB.length-1;i++)band.push(TB[i]+"–"+TB[i+1]);
+for(let i=0;i<TB.length-1;i++)band.push("steps "+TB[i]+"–"+TB[i+1]);
 heat("hminj",D.timectrl.inj,band,["no wound","slight","moderate","severe"],
-  "how far into the episode  ↓        wound level  →",55,
-  "each cell: share of steps hidden");
+  "how far into the episode","how badly wounded the creature is",55,
+  "each cell shows the share of those steps spent hidden");
 heat("hmnut",D.timectrl.nut,band,["starving","low","medium","well fed"],
-  "how far into the episode  ↓        hunger  →",75,
-  "each cell: share of steps hidden");
+  "how far into the episode","how well fed the creature is",75,
+  "each cell shows the share of those steps spent hidden");
 heat("hits",D.hits.hide,["feels nothing","a little","some","a lot","severe","extreme"],
   ["0 strikes","1","2","3–4","5+"],
-  "felt pain  ↓        times actually struck this episode  →",45,
-  "each cell: share of steps hidden, no predator nearby");
+  "how much pain it feels","how many times it has actually been struck this episode",45,
+  "each cell shows the share of those steps spent hidden, counting only moments with no predator nearby");
 
 /* F11 near-lethal */
 (function(){const v=D.lethal.hide,labs=["none","light","moderate","bad","severe","near fatal"];
- const W=700,H=170,ml=54,mr=20,mt=24,mb=40,s=svg(W,H),pw=W-ml-mr,ph=H-mt-mb;
+ const W=700,H=210,ml=64,mr=24,mt=22,mb=62,s=svg(W,H),pw=W-ml-mr,ph=H-mt-mb;
  const Y=q=>H-mb-(q/24)*ph, X=j=>ml+pw*j/(v.length-1);
  for(const g of[0,5,10,15,20]){s.appendChild(el("line",{x1:ml,y1:Y(g),x2:ml+pw,y2:Y(g),
    stroke:V("--grid"),"stroke-width":.6})); s.appendChild(txt(ml-6,Y(g)+3,g+"%","ax","end"));}
@@ -691,41 +706,46 @@ heat("hits",D.hits.hide,["feels nothing","a little","some","a lot","severe","ext
  v.forEach((q,j)=>{s.appendChild(el("circle",{cx:X(j),cy:Y(q),r:3.2,fill:V("--false")}));
    s.appendChild(txt(X(j),Y(q)-9,q.toFixed(1),"ax","middle"));
    s.appendChild(txt(X(j),H-mb+15,labs[j],"ax","middle"));});
- s.appendChild(txt(ml,mt-10,"share of steps hidden, by how badly wounded","ax"));
+ xlab(s,ml+pw/2,H-30,"how badly wounded  →  (rightmost = close to death)");
+ ylab(s,16,mt+ph/2,"share of steps hidden");
  put("lethal",s);})();
 
 /* F13 ten agents scatter */
 (function(){const A=D.arms,K=Object.keys(A).sort();
- const W=700,H=250,ml=52,mr=24,mt=26,mb=44,s=svg(W,H),pw=W-ml-mr,ph=H-mt-mb;
+ const W=700,H=300,ml=66,mr=26,mt=26,mb=66,s=svg(W,H),pw=W-ml-mr,ph=H-mt-mb;
  const xs=K.map(k=>A[k].survival), ys=K.map(k=>A[k].overall);
  const x0=Math.floor(Math.min(...xs)-2),x1=Math.ceil(Math.max(...xs)+2);
  const y0=Math.floor(Math.min(...ys)-.4),y1=Math.ceil(Math.max(...ys)+.4);
  const X=v=>ml+(v-x0)/(x1-x0)*pw, Y=v=>H-mb-(v-y0)/(y1-y0)*ph;
  for(let g=y0;g<=y1;g+=1){s.appendChild(el("line",{x1:ml,y1:Y(g),x2:ml+pw,y2:Y(g),
    stroke:V("--grid"),"stroke-width":.6})); s.appendChild(txt(ml-6,Y(g)+3,g+"%","ax","end"));}
- for(let g=x0;g<=x1;g+=2){s.appendChild(txt(X(g),H-mb+14,g,"ax","middle"));}
- const hs=K.map(k=>D.heal[k]), hmin=Math.min(...hs),hmax=Math.max(...hs);
- K.forEach((k,i)=>{const t=(D.heal[k]-hmin)/(hmax-hmin||1);
-  s.appendChild(el("circle",{cx:X(A[k].survival),cy:Y(A[k].overall),r:6,
-    fill:V("--cover"),opacity:.25+.75*t}));
+ for(let g=x0;g<=x1;g+=2){s.appendChild(el("line",{x1:X(g),y1:mt,x2:X(g),y2:H-mb,
+   stroke:V("--grid"),"stroke-width":.4}));
+  s.appendChild(txt(X(g),H-mb+15,g,"ax","middle"));}
+ const hs=K.map(k=>D.heal[k]),hmin=Math.min(...hs),hmax=Math.max(...hs);
+ K.forEach(k=>{const t=(D.heal[k]-hmin)/(hmax-hmin||1);
+  s.appendChild(el("circle",{cx:X(A[k].survival),cy:Y(A[k].overall),r:6,fill:V("--cover"),
+    opacity:.25+.75*t}));
   s.appendChild(txt(X(A[k].survival),Y(A[k].overall)-11,k,"ax","middle"));});
- s.appendChild(txt(ml,mt-10,"share of time hidden  ↑","ax"));
- s.appendChild(txt(ml+pw,H-8,"steps survived →","ax","end"));
- s.appendChild(txt(ml,H-8,"paler = smaller resting bonus, darker = larger","ax"));
+ xlab(s,ml+pw/2,H-32,"steps survived  →");
+ ylab(s,16,mt+ph/2,"share of time hidden");
+ s.appendChild(txt(ml,H-12,"paler dot = smaller resting bonus · darker dot = larger","axu"));
  put("arms",s);})();
 
-/* F14 variance decomposition (ten agents) */
+/* F14 variance decomposition */
 (function(){const R=[["how much it hides",57.8,0.14,42.1],["how long it lives",83.0,0.02,17.0]];
- const W=700,H=160,L=150,xw=W-L-30,s=svg(W,H);
+ const W=700,H=186,L=150,xw=W-L-30,s=svg(W,H);
  const cols=[[V("--muted"),"the world it got"],[V("--false"),"which creature"],
              [V("--cover"),"creature × world"]];
- R.forEach((d,i)=>{const y=30+i*50; let x=L;
+ R.forEach((d,i)=>{const y=34+i*50; let x=L;
   [d[1],d[2],d[3]].forEach((v,j)=>{const w=Math.max(xw*v/100,v>0?1.5:0);
    s.appendChild(el("rect",{x:x,y:y,width:w,height:24,fill:cols[j][0],rx:1}));
-   if(v>6){const t=txt(x+w/2,y+16,v.toFixed(1)+"%","ax","middle","#fff");s.appendChild(t);}
+   if(v>6)s.appendChild(txt(x+w/2,y+16,v.toFixed(1)+"%","ax","middle","#fff"));
    x+=w;});
   s.appendChild(txt(L-10,y+16,d[0],"lbl","end"));
   s.appendChild(txt(L+xw*(d[1]+d[2])/100+4,y-3,d[2].toFixed(2)+"%","ax"));});
+ xlab(s,L+xw/2,H-40,"share of all the variation, 0% to 100%");
+ ylab(s,16,70,"outcome measured");
  cols.forEach((c,j)=>{const x=L+j*175;
   s.appendChild(el("rect",{x:x,y:H-20,width:10,height:10,fill:c[0],rx:2}));
   s.appendChild(txt(x+15,H-11,c[1],"ax"));});
@@ -733,7 +753,7 @@ heat("hits",D.hits.hide,["feels nothing","a little","some","a lot","severe","ext
 
 /* F15 pain response in all ten */
 (function(){const K=Object.keys(D.armpain).sort(),labs=["none","0–8","8–18","18–32","32–50","50+"];
- const W=700,H=230,ml=48,mr=90,mt=26,mb=40,s=svg(W,H),pw=W-ml-mr,ph=H-mt-mb;
+ const W=700,H=274,ml=62,mr=94,mt=24,mb=64,s=svg(W,H),pw=W-ml-mr,ph=H-mt-mb;
  const Y=v=>H-mb-(v/45)*ph, X=j=>ml+pw*j/5;
  for(const g of[0,10,20,30,40]){s.appendChild(el("line",{x1:ml,y1:Y(g),x2:ml+pw,y2:Y(g),
    stroke:V("--grid"),"stroke-width":.6})); s.appendChild(txt(ml-6,Y(g)+3,g+"%","ax","end"));}
@@ -743,12 +763,14 @@ heat("hits",D.hits.hide,["feels nothing","a little","some","a lot","severe","ext
   s.appendChild(el("path",{d:d,fill:"none",stroke:V("--cover"),"stroke-width":1.6,
     opacity:.3+.7*t,"stroke-linejoin":"round"}));
   s.appendChild(txt(ml+pw+5,Y(v[5]),k,"ax","start"));});
- labs.forEach((l,j)=>s.appendChild(txt(X(j),H-mb+14,l,"ax","middle")));
- s.appendChild(txt(ml,mt-10,"share of time hidden  ↑        felt pain  →","ax"));
+ labs.forEach((l,j)=>s.appendChild(txt(X(j),H-mb+15,l,"ax","middle")));
+ xlab(s,ml+pw/2,H-32,"how much pain it feels  →");
+ ylab(s,16,mt+ph/2,"share of time hidden");
+ s.appendChild(txt(ml,H-12,"one line per trained creature (ten in total)","axu"));
  put("armpain",s);})();
 
 /* F16 four pairs ratio */
-(function(){const N=D.nmn,W=700,H=230,ml=54,mr=24,mt=30,mb=52,s=svg(W,H);
+(function(){const N=D.nmn,W=700,H=268,ml=64,mr=24,mt=34,mb=76,s=svg(W,H);
  const pw=W-ml-mr,ph=H-mt-mb,Y=v=>H-mb-(v/3.3)*ph;
  for(const g of[0,1,2,3]){s.appendChild(el("line",{x1:ml,y1:Y(g),x2:ml+pw,y2:Y(g),
    stroke:g===1?V("--fg"):V("--grid"),"stroke-width":g===1?1.2:.6,
@@ -759,50 +781,58 @@ heat("hits",D.hits.hide,["feels nothing","a little","some","a lot","severe","ext
   [[cx-30,N.ratio_unmod[i],V("--muted"),.6],[cx+2,N.ratio_film[i],V("--cover"),1]].forEach(
    ([x,v,c,o])=>{s.appendChild(el("rect",{x:x,y:Y(v),width:28,height:H-mb-Y(v),fill:c,
       opacity:o,rx:1})); s.appendChild(txt(x+14,Y(v)-5,v.toFixed(2),"ax","middle"));});
-  s.appendChild(txt(cx-14,H-mb+15,p,"lbl","middle"));
-  s.appendChild(txt(cx-14,H-mb+29,help?"helps":"hurts","ax","middle",
+  s.appendChild(txt(cx-14,H-mb+16,p,"lbl","middle"));
+  s.appendChild(txt(cx-14,H-mb+30,help?"helps":"hurts","ax","middle",
     help?V("--cover"):V("--false")));});
- s.appendChild(txt(ml,mt-12,"leans on the real cue vs the false one","ax"));
+ xlab(s,ml+pw/2,H-30,"which matched pair of creatures");
+ ylab(s,16,mt+ph/2,"leans on the REAL cue vs the FALSE one");
+ s.appendChild(txt(ml,mt-18,"above the dashed line = weights the real predator more","axu"));
  [[V("--muted"),.6,"no modulator"],[V("--cover"),1,"with modulator"]].forEach((c,k)=>{
-  const x=ml+pw-170+k*88; s.appendChild(el("rect",{x:x,y:mt-22,width:9,height:9,fill:c[0],
-    opacity:c[1],rx:2})); s.appendChild(txt(x+13,mt-14,c[2],"ax"));});
+  const x=ml+pw-170+k*88; s.appendChild(el("rect",{x:x,y:mt-28,width:9,height:9,fill:c[0],
+    opacity:c[1],rx:2})); s.appendChild(txt(x+13,mt-20,c[2],"ax"));});
  put("nmn",s);})();
 
 /* F17 modulator variance across four pairs */
-(function(){const N=D.nmn,W=700,H=170,L=110,xw=W-L-120,s=svg(W,H);
- s.appendChild(txt(L,14,"share of the variation explained","ax"));
- N.pairs.forEach((p,i)=>{const y=28+i*32;
+(function(){const N=D.nmn,W=700,H=206,L=120,xw=W-L-130,s=svg(W,H);
+ N.pairs.forEach((p,i)=>{const y=30+i*32;
   s.appendChild(txt(L-8,y+13,p,"lbl","end"));
   const a=Math.max(xw*N.var_mod[i]/35,1.5), b=xw*N.var_int[i]/35;
   s.appendChild(el("rect",{x:L,y:y,width:a,height:18,fill:V("--false"),rx:1}));
   s.appendChild(el("rect",{x:L+a+2,y:y,width:b,height:18,fill:V("--cover"),opacity:.8,rx:1}));
   s.appendChild(txt(L+a+b+8,y+13,N.var_mod[i].toFixed(3)+"%  vs  "+N.var_int[i].toFixed(1)+"%","ax"));});
+ for(const g of[0,10,20,30]){s.appendChild(txt(L+xw*g/35,H-44,g+"%","ax","middle"));}
+ xlab(s,L+xw/2,H-28,"share of all the variation explained");
+ ylab(s,16,80,"matched pair");
  [[V("--false"),"modulator on its own"],[V("--cover"),"modulator × world"]].forEach((c,k)=>{
-  const x=L+k*180; s.appendChild(el("rect",{x:x,y:H-18,width:9,height:9,fill:c[0],rx:2}));
-  s.appendChild(txt(x+13,H-10,c[1],"ax"));});
+  const x=L+k*180; s.appendChild(el("rect",{x:x,y:H-16,width:9,height:9,fill:c[0],rx:2}));
+  s.appendChild(txt(x+13,H-8,c[1],"ax"));});
  put("nmnvar",s);})();
 
 /* F18 context dependence */
 (function(){const pairs=["b04mc","b03mc","b04gae","b03gae"];
- const W=700,H=210,cw=W/4,s=svg(W,H);
- pairs.forEach((p,i)=>{const ox=i*cw+40,pw=cw-58,oy=34,ph=H-92;
+ const W=700,H=268,cw=W/4,s=svg(W,H);
+ xlab(s,W/2,16,"four matched pairs — each panel is one pair");
+ pairs.forEach((p,i)=>{const ox=i*cw+46,pw=cw-64,oy=52,ph=H-146;
   const U=D.ctx[p+"_unmod_felt_pain"],F=D.ctx[p+"_film_felt_pain"];
   if(!U||!F)return;
   const ru=U.rows_rand.filter(r=>isFinite(r.gain)),rf=F.rows_rand.filter(r=>isFinite(r.gain));
   const all=ru.concat(rf).map(r=>r.gain);
   const lo=Math.floor(Math.min(...all)-1),hi=Math.ceil(Math.max(...all)+1);
   const Y=v=>oy+ph-(v-lo)/(hi-lo)*ph, X=j=>ox+pw*j/(ru.length-1);
-  s.appendChild(txt(ox-32,oy-14,p,"lbl"));
-  [ [ru,V("--muted"),.6,1.8],[rf,V("--cover"),1,2.2] ].forEach(([R,c,o,w])=>{
+  s.appendChild(txt(ox-38,oy-14,p,"lbl"));
+  s.appendChild(el("line",{x1:ox,y1:oy,x2:ox,y2:oy+ph,stroke:V("--grid"),"stroke-width":.6}));
+  s.appendChild(el("line",{x1:ox,y1:oy+ph,x2:ox+pw,y2:oy+ph,stroke:V("--grid"),"stroke-width":.6}));
+  [[ru,V("--muted"),.6,1.8],[rf,V("--cover"),1,2.2]].forEach(([R,c,o,w])=>{
     let d="";R.forEach((r,j)=>d+=(j?"L":"M")+X(j)+" "+Y(r.gain));
     s.appendChild(el("path",{d:d,fill:"none",stroke:c,"stroke-width":w,opacity:o,
       "stroke-linejoin":"round"}));
     R.forEach((r,j)=>s.appendChild(el("circle",{cx:X(j),cy:Y(r.gain),r:2.4,fill:c,opacity:o})));});
   s.appendChild(txt(ox-4,Y(hi)+4,hi,"ax","end")); s.appendChild(txt(ox-4,Y(lo),lo,"ax","end"));
-  s.appendChild(txt(ox,H-40,"less hurt","ax"));
-  s.appendChild(txt(ox+pw,H-40,"more →","ax","end"));});
- s.appendChild(txt(20,H-16,"vertical axis: how much MORE it hides when a predator is near "+
-   "(percentage points). Rising line = a wounded creature is more alert.","ax"));
+  s.appendChild(txt(ox,oy+ph+13,"less hurt","ax"));
+  s.appendChild(txt(ox+pw,oy+ph+13,"more →","ax","end"));});
+ xlab(s,W/2,H-46,"how badly the world wounded it at the start of the episode  →");
+ ylab(s,16,52+(H-146)/2,"how much MORE it hides when a predator is near");
+ s.appendChild(txt(20,H-16,"(percentage points). A rising line means a wounded creature is more alert.","axu"));
  put("ctx",s);})();
 
 /* F19 context table */
