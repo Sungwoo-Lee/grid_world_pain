@@ -13,7 +13,7 @@ injury conditional table, the injury window, and the eat-block check — are arc
 reader challenge — see [Corrections](#review-response). Finding 3 was rewritten after the
 original claim ("the agent cannot perceive its own injury") was found to be **wrong**.
 **Replicated across all 10 trained arms** — see [Cross-arm](#cross-arm).
-Other runs that could be analysed: [What else](#other-runs).
+Comparing the ten agents: [Model effect](#model-effect). Other runs: [What else](#other-runs).
 A step-level deep dive on the pain channel is in [Interoceptive pain](#nociception) —
 which concludes that the interoceptive channel's specific role is **not identified** by this
 data, and names the experiment that would settle it.
@@ -513,6 +513,79 @@ from the run's own config rather than assuming.)
 Overall hiding ranges 16.6% to 19.0% and mean survival 180.3 to 189.9 steps across arms. No
 causal claim is made about the resting-bonus parameter: one training run per arm cannot
 separate the parameter from the run.
+
+<a id="model-effect"></a>
+## Comparing the ten models against each other
+
+All ten arms replay the **identical** million world draws, and both the policy and the
+environment are deterministic given (world, agent). So the outcome is a complete
+1,000,000 x 10 table with **no noise term at all**, and its variance decomposes exactly into
+three parts: which world was drawn, which model was used, and their interaction.
+
+| | which world | **which model** | model x world |
+|---|---|---|---|
+| bush-dwell fraction | 57.8% | **0.14%** | 42.1% |
+| survival steps | 83.0% | **0.02%** | 17.0% |
+
+**The model you pick barely matters on average, and matters a great deal case by case.** The
+ten agents' overall hiding rates span 3.2 percentage points where the world moves it by 25; the
+across-agent spread in survival is 9.6 steps where the world moves it by 187. Yet the
+interaction term is 300x the model main effect for hiding. Averaged over a million worlds the
+ten models look nearly the same; dropped into any *particular* world they diverge sharply.
+
+Because the worlds are paired, the small average differences are measured extremely precisely —
+confidence intervals of about +/-0.06 pp. Against a01, the zero-premium anchor:
+
+| arm | premium | dwell vs a01 | survival vs a01 |
+|---|---|---|---|
+| a02 | 0.3 | +2.81 pp | -1.97 steps |
+| a05 | 0.9 | +1.43 pp | -5.86 steps |
+| a07 | 1.2 | +3.16 pp | -7.56 steps |
+| a08 | 1.5 | -0.02 pp | **-9.65 steps** |
+| a10 | 2.7 | +3.10 pp | -6.73 steps |
+
+The ordering of agents is stable across environment conditions (rank correlations +0.83 to
++0.99 between the overall ordering and the ordering within 0-, 1- and 2-predator episodes), so
+these differences are systematic rather than arbitrary.
+
+### Is the resting bonus responsible? Not attributable.
+
+Survival falls monotonically as the resting bonus rises: Spearman rho = **-0.818**, p = 0.004
+across the ten levels. That looks like a dose-response. Four checks say it cannot be claimed.
+
+1. **Training length is matched** — all ten reached 100,000,000 steps to within 79, with 1000
+   checkpoints each. This confound is genuinely excluded.
+2. **The mechanism fails.** The natural story is that a bigger resting bonus makes the agent
+   rest more, so it forages less and starves. Eating does fall (rho = -0.65, p = 0.04) and
+   starvation does rise, but the **first link is absent**: resting shows no trend with the bonus
+   at all (rho = +0.25, p = 0.49). The chain's opening move does not happen.
+3. **One run per level, and a single seed.** Every arm trained from seed 42. A shared seed fixes
+   the initialisation but not the outcome: once the parameter changes the dynamics the learning
+   trajectories diverge immediately. Each level is therefore still one draw from the
+   distribution of training outcomes at that parameter, and one draw cannot separate the
+   parameter's effect from where that particular run happened to land.
+4. **Node is collinear with the parameter.** The arms were assigned to compute nodes in pairs
+   following the healing order, so node index correlates with the bonus at rho = +0.886 — and
+   node predicts survival *slightly better* (rho = -0.935) than the bonus does (-0.818). All
+   five nodes carry the same GPU model, so there is no obvious mechanism, and five nodes across
+   ten runs is far too few to test one. But the design cannot tell the two apart.
+
+**Verdict: the ten models differ measurably and systematically, and survival tracks the resting
+bonus, but this design cannot attribute that trend to the bonus.**
+
+### What would settle it
+
+Replicate seeds, not more parameter levels. Three seeds at four levels (12 runs) is strictly
+more informative than one seed at ten levels (10 runs), because it measures the run-to-run
+variance directly and gives the trend an error bar. A sweep of the current shape can only ever
+produce a suggestive line.
+
+Two cheap additions to the launch procedure: **randomise the node assignment** across parameter
+values rather than allocating in order, and **vary the training seed** across replicates. The
+repository currently holds no same-config multi-seed replicates for this family, so there is no
+way to calibrate run-to-run noise after the fact.
+
+Produced by `scripts/analysis/supplementary/modeleffect.py`.
 
 <a id="other-runs"></a>
 ## What else could be analysed
