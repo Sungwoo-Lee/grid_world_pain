@@ -79,8 +79,8 @@ code{font-family:var(--mono);font-size:.85em;background:var(--panel);
   <h1>What makes this&nbsp;agent hide?</h1>
   <p class="standfirst">A trained forager was returned to the world it grew up in and lived
   a million separate lives. The record of those lives says it hides from a smell it cannot
-  interpret — that its pain is a blurred echo it reads as news about the world — and that the
-  first of those mistakes is measurably fatal.</p>
+  interpret, and that the mistake is measurably fatal. What its <em>pain</em> contributes turns
+  out to be a harder question than it looks.</p>
 </header>
 
 <p class="lede">Our agent is a small creature in a ten-by-ten field. It must eat to stay
@@ -211,79 +211,63 @@ objection rather than killing it outright.</p>
   nearby lifts hiding a little; a predator nearby transforms it.</figcaption>
 </figure>
 
-<h3>It reacts to what pain means, not to pain itself</h3>
+<h3>Pain: a blurred echo, and what we can honestly say about it</h3>
 <p>The agent does feel its wounds &mdash; but through a strange window. Each step it receives a
 blurred average of how hurt it has been over the last dozen steps, weighted towards about three
-steps ago, and never including the present moment. So a fresh wound is not yet felt, and a
-healed one is still felt.</p>
+steps ago, never including the present moment. A fresh wound is not yet felt; a healed one still
+is.</p>
 
-<p>That blur is useful to us, because it means <em>felt pain</em> and <em>actual injury</em>
-routinely disagree &mdash; and we can ask which one the behaviour follows.</p>
+<p>This part of the analysis was rebuilt after review found a bug in it, and the corrected story
+is more modest than the first version. It is worth reading for what it rules out as much as for
+what it shows.</p>
 
-<figure class="panel">
-  <h3>It follows the feeling, not the wound</h3>
-  <div class="scroll">
-  <table>
-  <thead><tr><th>actual injury</th><th>felt&nbsp;0</th><th>0&ndash;8</th><th>8&ndash;18</th>
-  <th>18&ndash;32</th><th>32&ndash;50</th><th>50+</th></tr></thead>
-  <tbody>
-  <tr><td>none</td><td class="num">12.9%</td><td class="num">14.2%</td><td class="num">30.3%</td>
-  <td class="num hi">50.8%</td><td class="num">&mdash;</td><td class="num">&mdash;</td></tr>
-  <tr><td>slight</td><td class="num">0.0%</td><td class="num">8.7%</td><td class="num">9.9%</td>
-  <td class="num">19.8%</td><td class="num hi">43.4%</td><td class="num">&mdash;</td></tr>
-  <tr><td>moderate</td><td class="num">0.0%</td><td class="num">9.7%</td><td class="num">9.1%</td>
-  <td class="num">10.6%</td><td class="num">28.4%</td><td class="num">&mdash;</td></tr>
-  <tr><td>bad</td><td class="num">&mdash;</td><td class="num">11.1%</td><td class="num">12.7%</td>
-  <td class="num">11.6%</td><td class="num">12.9%</td><td class="num hi">34.0%</td></tr>
-  <tr><td>severe</td><td class="num">&mdash;</td><td class="num">9.6%</td><td class="num">11.5%</td>
-  <td class="num">13.9%</td><td class="num">16.5%</td><td class="num hi">25.4%</td></tr>
-  <tr><td>near-fatal</td><td class="num">&mdash;</td><td class="num">9.7%</td><td class="num">11.5%</td>
-  <td class="num">14.7%</td><td class="num">19.8%</td><td class="num hi">27.5%</td></tr>
-  </tbody></table>
-  </div>
-  <figcaption>Share of steps hidden, with no predator within two tiles. Read <strong>along a
-  row</strong> &mdash; the wound is held fixed and only the feeling changes &mdash; and hiding
-  climbs sharply every time. Read <strong>down a column</strong> &mdash; the feeling held fixed,
-  the wound changing &mdash; and it barely moves. The feeling is what counts, which is exactly
-  as it must be, since the feeling is all the agent gets.</figcaption>
-</figure>
+<h3>Cover genuinely works</h3>
+<p>Across <strong>10,779,288</strong> moments when the agent took damage, it was inside a bush on
+exactly <strong>zero</strong> of them. Not "almost never" &mdash; zero. Predators cannot enter
+bushes, and the two other things that can hurt the agent must be stood on. This is a fact about
+how the world is built, and it also confirms our hiding measure means what its name says.</p>
 
-<h3>You cannot be caught while hidden</h3>
-<p>Look at the zeros in that table: every one is a moment when damage has just landed. Across
-millions of such moments the agent is in a bush exactly <strong>0.0%</strong> of the time. That
-is not a statistical finding, it is a fact about the world &mdash; cover works. It also tells
-us the hiding measure means what its name says.</p>
+<p>It explains something in the next chart too: the agent's exposure <em>rises</em> in the moments
+before it gets hit, because being out in the open is precisely how it got hit.</p>
 
-<h3>Getting hurt produces a real, timed reaction</h3>
-<p>Lining up every isolated injury and averaging what the agent does around it:</p>
+<h3>Getting hurt produces a reaction &mdash; a modest one</h3>
 
 <figure class="panel">
   <div id="peri"></div>
-  <figcaption>Share of steps hidden, in the twenty-five steps before and after a hit. Exposure
-  climbs into the hit &mdash; that is <em>how</em> it got hit &mdash; drops to zero at the moment
-  of impact, then jumps and settles near 20%, peaking four to six steps later and still elevated
-  twenty-five steps on. The agent's pain sense peaks three steps after an injury; the behaviour
-  peaks at four to six. The extra step or two is the time it takes to reach a bush.</figcaption>
+  <div class="key">
+    <span><i class="sw" style="background:var(--muted)"></i>every injury</span>
+    <span><i class="sw" style="background:var(--cover)"></i>isolated injuries only</span>
+  </div>
+  <figcaption>Share of steps hidden, around a moment of damage. Measured against the baseline ten
+  steps <em>before</em> the hit, the increase afterwards is about <strong>+1 point</strong> counting
+  every injury, or <strong>+4.6</strong> if you look only at injuries with no follow-up damage.
+  That second figure flatters itself: filtering for "no further damage" preferentially keeps the
+  cases where the agent hid successfully. So the truth is somewhere between one and four and a half
+  points &mdash; real, but small.</figcaption>
 </figure>
 
-<h3>The same pain means different things</h3>
-<p>With no predator anywhere near, pain nearly <strong>triples</strong> hiding &mdash; 11.4% up
-to 31.0%. With a predator right there, the agent is already hiding most of the time and pain
-adds proportionally little. Pain matters most when there is nothing else to go on. It is being
-used as <em>evidence</em>, not as a reflex.</p>
+<p>An earlier version of this page claimed eight points, sustained for twenty-five steps. That was
+measured from the wrong baseline and on the flattering subset. It has been corrected.</p>
 
-<p>Which is a sensible thing to do, because in this world the only way to get hurt is to be
-attacked. Pain is a reliable signal that something dangerous is about. The one case where that
-inference fails is the one the experiment can test cleanly: an agent that simply <em>wakes up</em>
-wounded, with nothing having attacked it. There, the response is absent &mdash; slightly
-negative, in fact, and consistently so across all ten trained agents.</p>
+<h3>The same pain means different things</h3>
+<p>This is the sturdiest result here. With no predator anywhere near, high pain accompanies nearly
+<strong>three times</strong> the hiding of low pain &mdash; 11.5% up to 32.7%. With a predator right
+there, the agent is already hiding most of the time and pain adds proportionally little. Pain seems
+to matter most when there is nothing else to go on.</p>
 
 <div class="panel">
-<figcaption><strong>What this does not show.</strong> Pain here is earned by being attacked, so
-every painful moment also carries news that a predator was recently about. We cannot fully
-separate "responding to pain" from "responding to the predator that caused it". Settling that
-would need a run in which the pain signal is altered directly without a predator being involved
-&mdash; feeding the trained agent a false pain reading and seeing whether it still hides.</figcaption>
+<h3>What we cannot say</h3>
+<figcaption>All of the above is equally consistent with the agent ignoring its pain sense
+completely. Its brain has <em>memory</em> &mdash; it can simply remember being attacked &mdash; and
+it has a second, instant pain channel that fires on contact. So "felt the bite, remembered it, ran
+for cover" explains every number on this page without the blurred pain signal contributing
+anything.<br><br>
+The one clean test available points the deflationary way: an agent that simply <em>wakes up</em>
+wounded has the pain signal without any attack behind it, and it hides slightly <em>less</em>, not
+more &mdash; consistently across all ten trained agents.<br><br>
+<strong>Settling this needs a new experiment</strong>, not more of this data: replay the trained
+agent with its pain signal held constant, or falsified, and see whether the behaviour moves. That
+is the recommended next step.</figcaption>
 </div>
 
 <h3>Hunger looks like a cause and is actually a footprint</h3>
@@ -420,29 +404,35 @@ const SM={pred:{d:[29.7,30.8,31.7,32.4,33.3,35.0],s:[88.9,95.8,101.3,106.3,110.2
  document.getElementById("aim").appendChild(s);})();
 
 /* ---- peri-event ---- */
-const PERI=[[-10,15.3],[-8,15.2],[-6,14.7],[-4,13.9],[-2,12.3],[-1,11.8],[0,0.0],[1,15.7],
+const PERI_ALL=[[-10,12.9],[-8,11.9],[-6,10.9],[-4,11.7],[-2,9.1],[-1,7.3],[0,0.0],[1,8.7],
+ [2,11.5],[4,13.8],[6,12.4],[8,12.9],[10,13.7],[12,12.9],[14,12.5],[16,13.2],[18,13.1],
+ [20,12.7],[22,13.0],[24,13.1]];
+const PERI_ISO=[[-10,15.3],[-8,15.2],[-6,14.7],[-4,13.9],[-2,12.3],[-1,11.8],[0,0.0],[1,15.7],
  [2,18.9],[4,19.8],[6,19.9],[8,19.3],[10,18.8],[12,18.3],[14,17.9],[16,17.7],[18,17.6],
  [20,17.3],[22,17.2],[24,17.0]];
-(function(){const W=680,H=250,ml=44,mr=16,mt=26,mb=40;
+(function(){const W=680,H=260,ml=44,mr=16,mt=28,mb=42;
  const s=svg(W,H);const pw=W-ml-mr,ph=H-mt-mb;
  const X=v=>ml+(v+10)/34*pw, Y=v=>H-mb-v/22*ph;
  for(let g=0;g<=20;g+=5){s.appendChild(el("line",{x1:ml,y1:Y(g),x2:ml+pw,y2:Y(g),
    stroke:V("--grid"),"stroke-width":.6}));
   s.appendChild(txt(ml-6,Y(g)+3,g+"%","ax","end"));}
- s.appendChild(el("line",{x1:X(0),y1:mt-6,x2:X(0),y2:H-mb,stroke:V("--false"),
+ s.appendChild(el("line",{x1:X(0),y1:mt-8,x2:X(0),y2:H-mb,stroke:V("--false"),
    "stroke-width":1.2,"stroke-dasharray":"3 3"}));
- s.appendChild(txt(X(0)+5,mt+2,"the hit","ax"));
- const pre=PERI.filter(d=>d[0]<0), post=PERI.filter(d=>d[0]>0);
+ s.appendChild(txt(X(0)+5,mt,"the hit","ax"));
  const path=a=>{let d="";a.forEach((p,i)=>d+=(i?"L":"M")+X(p[0])+" "+Y(p[1]));return d};
- s.appendChild(el("path",{d:path(pre),fill:"none",stroke:V("--muted"),"stroke-width":2,
-   "stroke-linejoin":"round"}));
- s.appendChild(el("path",{d:path(post),fill:"none",stroke:V("--cover"),"stroke-width":2.4,
-   "stroke-linejoin":"round"}));
- PERI.forEach(p=>s.appendChild(el("circle",{cx:X(p[0]),cy:Y(p[1]),r:p[0]===0?3.4:2.4,
-   fill:p[0]===0?V("--false"):(p[0]<0?V("--muted"):V("--cover"))})));
- [[-10,"10 before"],[0,""],[10,"10 after"],[24,"25 after"]].forEach(d=>{
-   if(d[1])s.appendChild(txt(X(d[0]),H-14,d[1],"ax","middle"));});
- s.appendChild(txt(ml,mt-10,"share of steps hidden","ax"));
+ [[PERI_ALL,V("--muted"),2],[PERI_ISO,V("--cover"),2.4]].forEach(([A,c,w])=>{
+   s.appendChild(el("path",{d:path(A.filter(p=>p[0]<0)),fill:"none",stroke:c,"stroke-width":w,
+     "stroke-linejoin":"round",opacity:.55}));
+   s.appendChild(el("path",{d:path(A.filter(p=>p[0]>0)),fill:"none",stroke:c,"stroke-width":w,
+     "stroke-linejoin":"round"}));
+   A.forEach(p=>{if(p[0]!==0)s.appendChild(el("circle",{cx:X(p[0]),cy:Y(p[1]),r:2.2,fill:c}));});
+   const b=A[0][1];
+   s.appendChild(el("line",{x1:ml,y1:Y(b),x2:ml+pw,y2:Y(b),stroke:c,"stroke-width":.8,
+     "stroke-dasharray":"2 4",opacity:.7}));});
+ s.appendChild(el("circle",{cx:X(0),cy:Y(0),r:3.6,fill:V("--false")}));
+ [[-10,"10 steps before"],[10,"10 after"],[24,"25 after"]].forEach(d=>
+   s.appendChild(txt(X(d[0]),H-14,d[1],"ax","middle")));
+ s.appendChild(txt(ml,mt-12,"share of steps hidden (dashed = pre-hit baseline)","ax"));
  document.getElementById("peri").appendChild(s);})();
 
 /* ---- randomised hunger ---- */

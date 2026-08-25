@@ -13,7 +13,9 @@ injury conditional table, the injury window, and the eat-block check — are arc
 reader challenge — see [Corrections](#review-response). Finding 3 was rewritten after the
 original claim ("the agent cannot perceive its own injury") was found to be **wrong**.
 **Replicated across all 10 trained arms** — see [Cross-arm](#cross-arm).
-A step-level deep dive on the pain channel is in [Interoceptive pain](#nociception).
+A step-level deep dive on the pain channel is in [Interoceptive pain](#nociception) —
+which concludes that the interoceptive channel's specific role is **not identified** by this
+data, and names the experiment that would settle it.
 
 ## Question
 
@@ -228,7 +230,9 @@ Raw counts are emphatic: 50.2% hiding at nutrition below 25, against 9.1% above 
 straight, hunger drives hiding. Three pieces of evidence say the arrow mostly runs backwards.
 
 - **Hiding blocks foraging.** In a bush the agent eats on **7.3%** of steps; outside, **25.7%**.
-  A bush holds no food, so cover is bought with meals.
+  Food is placed away from bushes at reset, though respawning food samples without an occupancy
+  check and can land on one — which is the likely source of the residual 7.3%. Either way cover
+  is bought with meals.
 - **Randomised hunger acts immediately, in the *opposite* direction.** Binned by the
   randomised starting value and measured unconditionally over the first ten steps, agents that
   start starving hide **less**, not more: 16.4% at starting nutrition below 25, rising to 21.4%
@@ -336,124 +340,142 @@ failure if a run's configuration does not separate the two classes.
 <a id="nociception"></a>
 ## Interoceptive pain in depth
 
-Finding 3 establishes that the agent feels its wound through a lagged, smoothed channel, and
-that what it does about it depends on how the wound arose. This section goes under that, at
-step level rather than episode level.
+Finding 3 establishes that the agent feels its wound through a lagged, smoothed channel. This
+section goes under that at step level. It is more negative than the first draft: an
+adversarial review found a bug in the reconstruction and two overstated magnitudes, and the
+corrected picture is that **this analysis cannot isolate the interoceptive channel's
+contribution at all**. What it can do is bound it and say precisely what would settle it.
 
-### The signal it gets is not the wound it has
+### The signal, and how it was reconstructed
 
-Every step, the current injury level is pushed into a twelve-slot buffer, and the agent
-receives that buffer weighted by a kernel that ignores the current step entirely and peaks
-three steps back. So **perceived pain and actual injury routinely disagree**: a wound just
-inflicted is not yet felt, and a wound already healed is still felt. That disagreement is what
-makes the next test possible.
+The trajectory store records `injury_level` per step but not the observation vector, so the
+perceived signal is reconstructed: a twelve-slot buffer of injury levels, zeroed at reset,
+written once per step, convolved with a kernel that ignores the current step and peaks three
+steps back. Perceived pain and actual injury therefore routinely disagree — a fresh wound is
+not yet felt, a healed one still is.
 
-### Which one does the behaviour follow?
+Because the action producing row `t` was chosen on the row `t-1` observation, every table below
+pairs hiding at `t` with the percept at `t-1`.
 
-Hiding, cross-tabulated by actual injury against perceived pain, restricted to steps with no
-predator within two tiles.
+> **Reconstruction bug, found in review.** The first version of this section used a boundary
+> guard that leaked the episode's random *starting* injury into the first few reconstructed
+> steps — the environment never writes it into the buffer. About 5% of steps were inflated, by
+> up to 13.8 points, concentrated exactly in the early-episode window. It fabricated an
+> all-zero column that an earlier draft of this section interpreted as a finding. Fixed;
+> everything below is post-fix. Recorded in the Known Bugs registry.
+
+### Which signal does the behaviour follow?
+
+Hiding by actual injury (rows) against perceived pain (columns), no predator within two tiles:
 
 | actual injury | felt 0 | felt 0-8 | felt 8-18 | felt 18-32 | felt 32-50 | felt 50+ |
 |---|---|---|---|---|---|---|
-| **0** | 12.9% | 14.2% | 30.3% | 50.8% | — | — |
-| **0-10** | 0.0% | 8.7% | 9.9% | 19.8% | 43.4% | — |
-| **10-25** | 0.0% | 9.7% | 9.1% | 10.6% | 28.4% | — |
-| **25-45** | — | 11.1% | 12.7% | 11.6% | 12.9% | 34.0% |
-| **45-70** | — | 9.6% | 11.5% | 13.9% | 16.5% | 25.4% |
-| **70+** | — | 9.7% | 11.5% | 14.7% | 19.8% | 27.5% |
+| **0** | 12.8% | 13.9% | 26.5% | 48.0% | — | — |
+| **0-10** | 4.1% | 8.7% | 9.5% | 15.6% | 42.7% | — |
+| **10-25** | 6.6% | 10.5% | 9.2% | 10.1% | 24.6% | 44.3% |
+| **25-45** | 10.2% | 12.2% | 13.2% | 11.6% | 12.3% | 34.0% |
+| **45-70** | 11.9% | 12.2% | 13.8% | 15.5% | 18.0% | 26.8% |
+| **70+** | 11.9% | 14.6% | 16.6% | 19.7% | 26.3% | 28.2% |
 
-**Read across a row** — actual injury held fixed, perceived pain varying — and hiding climbs
-steeply in every row. **Read down a column** — perceived pain held fixed, actual injury varying
-— and it does not climb at all; if anything it falls.
+Along a row, hiding rises with felt pain; down a column, actual injury adds little. But this is
+**a consistency check, not a discovery**. The observation vector contains the nociceptor and no
+injury readout, so behaviour *cannot* depend on actual injury except through the percept — the
+architecture guarantees the asymmetry. What the table earns is confidence that the
+reconstruction captures the right variable.
 
-The behaviour follows the felt signal, not the physical state. That is what it must do, since
-the felt signal is the only injury information the agent has, and it confirms the analysis is
-tracking the variable the agent actually acts on.
+Two honest qualifications. The rise is not steep in every row: the middle rows are flat until
+the highest felt-pain column. And the cells are not exchangeable — at fixed actual injury,
+higher felt pain means injury was recently *higher*, i.e. the agent has been healing, and
+healing requires resting, which co-occurs with being in a bush (20.3% in-bush when resting
+versus 13.2% when not). Some of the along-row rise is that composition.
 
 ### Being struck cannot happen in cover
 
-Every cell in the "felt 0" column with non-zero actual injury reads **0.0%**, across millions
-of steps. Those are the steps on which damage lands: injury has just jumped, but the kernel
-ignores the current step so nothing is felt yet. Hiding on them is exactly zero — you cannot be
-hit while concealed. This is a hard mechanical fact of the world, and it validates the
-occupancy measure: the indicator is doing what its name says.
+Across **10,779,288** damage steps in the run, the agent was in a bush on exactly **zero** of
+them. This is not statistical; it is three mechanical guarantees in this world's configuration:
+bushes block animals from entering, so a predator cannot reach a concealed agent; ambush
+resources never respawn and are placed disjoint from bushes at reset; and rocks damage only on
+overlap, which requires standing on a rock tile. A differently-configured world could break any
+of the three, so this is a fact about this run rather than about the environment in general.
 
-It also explains why hiding *dips* in the run-up to a hit.
+It also explains why exposure *rises* into a hit — being out of cover is how the hit happened.
 
-### The response to being hurt, timed
+### The response to being hurt is real but modest
 
-Hiding aligned on a damage event, restricted to isolated hits (no other damage within ten steps
-before or twenty-five after):
+Hiding aligned on damage events, measured against the pre-window baseline ten steps before:
 
-| steps from the hit | -10 | -4 | -1 | 0 | +1 | +2 | +4 | +6 | +10 | +16 | +24 |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| hiding | 15.3% | 13.9% | 11.8% | **0.0%** | 15.7% | 18.9% | 19.8% | **19.9%** | 18.8% | 17.7% | 17.0% |
+| steps from hit | -10 | -1 | 0 | +2 | +4 | +6 | +12 | +24 |
+|---|---|---|---|---|---|---|---|---|
+| all events | 12.9% | 7.3% | **0.0%** | 11.5% | 13.8% | 12.4% | 12.9% | 13.1% |
+| isolated events | 15.3% | 11.8% | **0.0%** | 18.9% | 19.8% | 19.9% | 18.3% | 17.0% |
+| *all vs baseline* | 0.0 | -5.6 | -12.9 | -1.4 | **+0.9** | -0.5 | 0.0 | +0.2 |
+| *isolated vs baseline* | 0.0 | -3.5 | -15.3 | +3.6 | +4.5 | **+4.6** | +3.0 | +1.7 |
 
-The shape is a defensive reaction: exposure rising into the hit (that is *how* the hit
-happened), a floor at the moment of impact, then a jump to a plateau near 20% peaking four to
-six steps later, decaying slowly and still elevated twenty-five steps on.
+An earlier draft quoted "+8 pp at peak, still elevated twenty-five steps on", measured against
+the lag -1 baseline. That was wrong twice over. The lag -1 baseline is mechanically depressed
+(you must be exposed to be hit). And the isolated-event filter — no further damage for
+twenty-five steps — is a **collider**: hiding prevents damage, so the filter preferentially
+keeps the stretches in which the agent did hide.
 
-The perceptual kernel peaks at three steps. The behavioural peak sits at four to six — the
-kernel's lag plus the time to reach cover. The response is neither instant nor reflexive; it
-follows the felt signal with a short additional delay for acting on it.
+The defensible statement is a range. The post-hit increase is **+0.9 percentage points** on all
+events and **+4.6** on the collider-selected subset, so somewhere between about one and four and
+a half points, with the upper end inflated by selection. The all-events curve returns to
+baseline within about six steps; only the selected subset stays elevated.
 
-Relative to the pre-hit baseline of 11.8%, the response is about **+8 percentage points** at
-peak, and it has not returned to baseline within the window measured.
-
-### Context multiplies the response
-
-The same felt pain means different things depending on what else is true:
+### Context changes what the same pain is worth
 
 | felt pain | no predator within 2 tiles | predator within 2 tiles |
 |---|---|---|
-| none | 12.6% | 78.5% |
-| 0-10 | 11.4% | 50.6% |
-| 10-20 | 12.7% | 48.3% |
-| 20-35 | 15.4% | 54.1% |
-| 35-55 | 21.3% | 64.0% |
-| 55+ | **31.0%** | 71.9% |
+| none | 12.6% | 75.8% |
+| 0-10 | 11.5% | 51.4% |
+| 10-20 | 12.8% | 49.5% |
+| 20-35 | 15.5% | 55.9% |
+| 35-55 | 21.6% | 66.1% |
+| 55+ | **32.7%** | 74.4% |
 
-With no predator in sight, pain nearly triples hiding, 11.4% to 31.0% — this is pain acting as
-evidence, in the absence of any direct cue. With a predator right there the agent is already
-hiding on half to four-fifths of steps, and pain adds proportionally less: the direct cue
-dominates and pain is largely redundant.
+This is the most robust result in the section — it barely moved under the bug fix. With no
+predator in sight, high felt pain accompanies nearly three times the hiding of low felt pain.
+With a predator present the agent is already hiding on half to three-quarters of steps and the
+gradient is proportionally much smaller: the direct cue dominates.
 
-### Rising versus falling pain
-
-Holding the felt level fixed and splitting by whether it is rising or falling:
+### Rising versus falling pain: no clear asymmetry
 
 | felt pain | falling | rising |
 |---|---|---|
-| 8-18 | 12.8% | 12.9% |
-| 18-32 | 15.8% | 14.2% |
-| 32-50 | 22.5% | 18.0% |
-| 50+ | 30.9% | 27.5% |
+| 8-18 | 12.5% | 13.6% |
+| 18-32 | 15.0% | 15.1% |
+| 32-50 | 22.4% | 19.6% |
+| 50+ | 32.2% | 30.5% |
 
-Falling pain carries *more* hiding than rising pain at the same level — the opposite of a
-system that reacts to threat escalation. It is what reverse causation predicts: hiding is what
-*makes* pain fall, because concealment prevents further damage and lets the wound heal. The
-agent is not hiding because pain is dropping; pain is dropping because it is hiding.
+An earlier draft read a consistent falling-above-rising gap as evidence of reverse causation.
+After the one-step pairing correction the gap is inconsistent — rising is higher at 8-18, equal
+at 18-32, lower above. This test does not adjudicate anything and is reported only to close it
+out. Even the original gap had at least two explanations besides reverse causation, including
+simple response latency: after a hit, pain is still rising while the agent is en route to
+cover and falling once it has arrived.
 
-### Stability
+### The alternative this analysis cannot rule out
 
-The injury-hiding gradient is present in all ten independently trained agents, ranging from
-+13.1 to +19.0 percentage points between mildly and severely injured states. It is not a
-property of one training run.
+Everything above is consistent with the agent making no use of the interoceptive channel at
+all. The policy is **recurrent** — a memory network can carry "I was attacked" forward
+indefinitely with no pain input whatsoever. And the agent has a separate **exteroceptive**
+nociception channel that fires instantly on contact. So the post-hit rise, its timing, and the
+context dependence are all equally consistent with: felt the contact, remembered it, went to
+cover — with the smoothed interoceptive trace playing no part.
 
-### What this does and does not license
+Both readings predict every table in this section. The one causal handle available — the
+randomised starting injury, which loads the interoceptive channel *without* any attack — moves
+hiding slightly **negative**, which fits the deflationary reading at least as well.
 
-The peri-event and cross-tab results are **associations**. Pain is earned by being attacked, so
-every high-pain state carries information about the recent presence of a predator, and
-conditioning on current proximity does not remove that. The one randomised handle on pain — the
-starting injury the world assigns — produces a small *negative* effect, and that remains the
-only causal statement available here.
+**So the honest verdict is that the specific contribution of interoceptive pain is not
+identified here.** What is established: hiding is systematically coupled to the pain state,
+that coupling is much stronger when no predator is directly perceivable, cover is mechanically
+protective, and the coupling holds in all ten trained agents.
 
-The honest summary: this agent's hiding is strongly and systematically coupled to its
-interoceptive pain signal, with a plausible timing signature, and the coupling is not a
-reflexive response to pain itself but to what pain implies about the world. Establishing that
-causally would need an intervention on the pain channel that does not also imply a predator —
-for example replaying the trained agent with the nociception input artificially clamped or
-perturbed, which the collection pipeline could support but this analysis did not do.
+Settling it requires an intervention on the pain channel that does not also imply a predator:
+replay the trained agent with the interoceptive input clamped to a constant, or set to a
+falsified value, and see whether the behaviour changes. The collection pipeline could support
+that; this analysis could not do it. That is the recommended next experiment.
 
 <a id="cross-arm"></a>
 ## Replication across all ten agents

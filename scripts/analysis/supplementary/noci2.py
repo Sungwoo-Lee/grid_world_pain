@@ -39,19 +39,24 @@ for fi,f in enumerate(sorted(glob.glob(S+"steps_*.parquet"))):
     idx=np.arange(N)
     noci=np.zeros(N)
     for j in range(1,KL):
-        src=idx-j; ok=src>=estart
+        src=idx-j; ok=src>estart   # reset row is NEVER written into the buffer (core.py:1112,115)
         noci[ok]+=KER[j]*inj[src[ok]]
     ar=tb.column("agent_row").to_numpy(); ac=tb.column("agent_col").to_numpy()
     AR=L2(tb.column("animal_row"),4); AC=L2(tb.column("animal_col"),4)
     pn=((np.maximum(np.abs(AR-ar[:,None]),np.abs(AC-ac[:,None]))<=D)&AACT[sd-SEED0])[:,PRED].any(1)
-    m=(t>=1)&(~pn)                                   # no predator within 2 tiles
+    # ARRIVAL convention: the action that produced row t was chosen on the row t-1
+    # observation, so the percept to condition on is the previous row's.
+    nprev=np.zeros(N); nprev[1:]=noci[:-1]; nprev[idx==estart]=0.0
+    iprev=np.zeros(N); iprev[1:]=inj[:-1];  iprev[idx==estart]=inj[estart[0]] if False else 0.0
+    first=(idx==estart+1)
+    m=(t>=2)&(~pn)                     # t>=2 so the previous row is a real step
     # T1 dissociation
-    ib=np.digitize(inj[m],IE); pb=np.digitize(noci[m],PE)
+    ib=np.digitize(inj[m],IE); pb=np.digitize(nprev[m],PE)
     kk=ib*NBP+pb
     n2+=np.bincount(kk,minlength=NBI*NBP).reshape(NBI,NBP)
     b2+=np.bincount(kk,weights=bu[m],minlength=NBI*NBP).reshape(NBI,NBP)
     # T4 direction of change, at matched perceived level
-    dn=np.zeros(N); dn[1:]=noci[1:]-noci[:-1]; dn[idx==estart]=0
+    dn=np.zeros(N); dn[1:]=nprev[1:]-nprev[:-1]; dn[idx==estart]=0
     dirc=np.where(dn>1e-9,2,np.where(dn<-1e-9,0,1))
     kk4=pb*3+dirc[m]
     nD+=np.bincount(kk4,minlength=NBP*3).reshape(NBP,3)
@@ -91,12 +96,14 @@ for i in range(NBI):
     print(row)
 print("\n  read ACROSS a row: true injury fixed, perceived pain varies")
 print("  read DOWN a column: perceived pain fixed, true injury varies")
+b0a=100*bE[0,0]/max(nE[0,0],1); b0c=100*bE[0,1]/max(nE[0,1],1)
 print("\n=== T2. hiding around a damage event (t=0 is the hit) ===")
-print(f"{'lag':>5}{'all events':>14}{'isolated events':>18}")
+print(f"pre-window baseline at lag -10:  all {b0a:.1f}%   isolated {b0c:.1f}%")
+print(f"{'lag':>5}{'all events':>14}{'isolated':>18}{'all vs base':>12}{'iso vs base':>12}")
 for li,lag in enumerate(LAGS):
     if lag%2 and abs(lag)>2: continue
     a=100*bE[li,0]/max(nE[li,0],1); b=100*bE[li,1]/max(nE[li,1],1)
-    print(f"{lag:>5}{a:>13.1f}%{b:>17.1f}%")
+    print(f"{lag:>5}{a:>13.1f}%{b:>17.1f}%{a-b0a:>+11.1f}{b-b0c:>+11.1f}")
 print("\n=== T3. effective response kernel: excess hiding k steps after a hit ===")
 print(f"{'k':>3}{'hit at t-k':>12}{'no hit':>10}{'excess':>10}{'true kernel':>13}")
 for kk3 in range(16):

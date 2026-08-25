@@ -35,7 +35,7 @@ for fi,f in enumerate(sorted(glob.glob(S+"steps_*.parquet"))):
     idx=np.arange(len(t)); estart=np.repeat(st,ends-st)
     for j in range(1,KL):
         src=idx-j
-        ok=src>=estart
+        ok=src>estart   # reset row is NEVER written into the buffer (core.py:1112,115)
         noci[ok]+=KER[j]*inj[src[ok]]
     # (a) per-t by start-injury bin
     inj0=inj[st]; g0=np.clip(np.digitize(inj0,[20,40,60,80]),0,4)
