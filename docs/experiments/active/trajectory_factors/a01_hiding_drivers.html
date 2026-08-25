@@ -158,15 +158,29 @@ world rolls them before the agent acts, these are causes.</p>
 <figure class="panel">
   <div class="fignum">Figure 2 &mdash; ranked causes</div>
   <div id="rank"></div>
-  <figcaption>Bar length is the change in bush dwell, per one standard
-  step of that feature &mdash; a common scale so that "predator count" and "how far a predator
-  can see" can be honestly compared. Three of these are deliberate controls and all three land at
-  zero: <strong>rocks</strong> (scattered like bushes, but they conceal nothing and they hurt),
-  <strong>where on the map it wakes up</strong>, and a predator's <strong>stamina</strong>.</figcaption>
+  <figcaption>Bar length is the change in bush dwell per one standard step of that feature
+  &mdash; a common scale, so that <code>predator_count</code> and <code>detection_range</code>
+  can be honestly compared. This is <strong>every setting the environment varies</strong>: the
+  store was audited column by column, and anything with more than one distinct value across a
+  million episodes appears here. Settings that turned out to be pinned to a single value
+  (<code>move_interval</code>, <code>stamina_recovery_rate</code>, <code>hunt_stamina_threshold</code>,
+  <code>lose_interest_multiplier</code>, and every visual and resource property) are absent
+  because they cannot have an effect. Three genuine controls land at zero:
+  <code>rock_count</code>, where on the map the agent wakes up, and <code>max_stamina</code>.</figcaption>
 </figure>
 
-<p>Two features dominate everything else: whether predators exist at all, and how far they can see.
-Everything about the agent's own body comes far below.</p>
+<p>Two features dominate everything else: whether predators exist at all, and how far they can
+see. Everything about the agent's own body comes far below.</p>
+
+<div class="note"><strong>On the olfactory terms.</strong> Each animal's smell is a vector, and two
+of its channels vary independently every episode. Those two channels can be read two ways, and both
+matter, so both are listed. <strong>Identity</strong> is the difference between them &mdash; which
+<em>kind</em> of animal it smells like. <strong>Intensity</strong> is their sum &mdash; how
+<em>strongly</em> it smells at all, regardless of kind. A faint predator and a pungent one share
+the same identity but not the same intensity. Splitting the channels apart also shows the agent
+leans almost entirely on <strong>channel 1</strong> (+2.52 for a predator, +3.89 for a rabbit) while
+channel 2 contributes slightly negatively &mdash; so it is not computing a contrast between
+channels, it is mostly just reading one of them.</div>
 
 <h3>The same factors, shown as dose and response</h3>
 <p>Ranking compresses each factor to one number. Here is the actual shape of each &mdash; how
@@ -333,6 +347,25 @@ wounded has the pain signal with no attack behind it, and it hides slightly <em>
 consistently across all ten agents we tested.<br><br>
 <strong>Settling this needs a new experiment</strong>: replay a trained agent with its pain
 signal held constant or falsified, and see whether behaviour moves.</figcaption>
+</div>
+
+<h3>When there are two predators</h3>
+<p>A third of all episodes contain two predators, and every trait comparison above quietly
+discarded them &mdash; a single average detection range is not what danger means when there are two
+different animals hunting. Looking at those episodes on their own terms:</p>
+
+<div class="panel">
+<div class="big">
+  <div><b>+4.52</b><small>the KEENEST predator's detection range</small></div>
+  <div><b>+3.25</b><small>the LEAST keen one's</small></div>
+  <div><b>+1.29</b><small>the gap between them</small></div>
+</div>
+<figcaption>Change in bush dwell per standard step, in the 332,310 two-predator episodes. Both
+predators matter, not just the more dangerous one, and the gap between them matters on its own
+&mdash; so the agent is responding to the total threat rather than tracking the worst individual.
+Note also that every effect roughly doubles in this higher-threat regime: <code>start_nutrition</code>
+moves bush dwell by +7.95 here against +3.59 in one-predator episodes, and
+<code>spawn_dist_to_bush</code> by &minus;7.48 against &minus;3.96.</figcaption>
 </div>
 
 <h2>6 &nbsp;Hunger</h2>
@@ -552,18 +585,22 @@ function ylab(s,x,cy,t,cls,fill){const e=el("text",{x:x,y:cy,class:cls||"axt",
 /* F2 ranked */
 const RANK=[["predator count",16.03],["detection range",12.55],
 ["spawn distance to bush",-3.05],["start nutrition",2.87],["bush count",2.80],
-["rabbit count",2.39],["predator's smell",1.72],["rabbit's smell",1.61],
+["rabbit count",2.39],["rabbit olfactory ch1",3.89],["predator olfactory ch1",2.52],
+["rabbit olfactory intensity",2.12],["predator olfactory identity",2.22],
+["rabbit olfactory identity",3.20],["predator olfactory intensity",1.47],
 ["attack delay",1.22],["food count",-1.22],["start injury",-0.84],
-["attack range",-0.75],["spawn distance to food",0.56],
-["hiding predators",0.24],["rock count",0.10],["where it wakes up",0.04],
-["max stamina",-0.01]];
-(function(){const W=700,rh=20,L=182,H=RANK.length*rh+62,xw=W-L-16,zx=L+xw*.16,max=17;
+["attack range",-0.75],["spawns inside a bush",0.96],["rabbit olfactory ch2",-0.74],
+["predator olfactory ch2",-0.55],["spawn distance to food",0.56],
+["food-to-bush distance",-0.54],["hiding predator count",0.24],["rock count",0.10],
+["spawn distance from centre",0.04],["max stamina",-0.01]];
+(function(){const W=700,rh=18,L=196,H=RANK.length*rh+62,xw=W-L-16,zx=L+xw*.16,max=17;
  const s=svg(W,H),sc=v=>zx+v*(xw*.82/max);
  for(const g of[-4,0,4,8,12,16]){const gx=sc(g);
   s.appendChild(el("line",{x1:gx,y1:12,x2:gx,y2:H-44,stroke:V("--grid"),"stroke-width":g===0?1.4:.6}));
   s.appendChild(txt(gx,H-32,g,"ax","middle"));}
  RANK.forEach((d,i)=>{const y=24+i*rh,v=d[1];
-  const ctrl=/rocks|wakes up|stamina/.test(d[0]), hl=/smell|start injury/.test(d[0]);
+  const ctrl=/rock count|from centre|max stamina/.test(d[0]),
+        hl=/olfactory|start injury/.test(d[0]);
   const c=ctrl?V("--muted"):(v<0?V("--false"):(hl?V("--warm"):V("--true")));
   const a=sc(Math.min(v,0)),b=sc(Math.max(v,0));
   s.appendChild(el("rect",{x:a,y:y-7,width:Math.max(b-a,1.2),height:12,fill:c,rx:1,opacity:ctrl?.5:.9}));

@@ -129,8 +129,21 @@ def aggregate(store: str, lay: dict, chans: tuple[int, int], verbose=True) -> di
              pred_delay=mean_over(L("animal_attack_delay_sampled")[:, P], pa),
              pred_range=mean_over(L("animal_attack_range_sampled")[:, P], pa),
              pred_stamina=mean_over(L("animal_max_stamina_sampled")[:, P], pa),
+             # BOTH olfactory channels vary independently for every animal, so the
+             # difference alone discards a second quantity: total odour strength. Keep both.
              pred_predatorness=mean_over(prop[:, P, chans[0]] - prop[:, P, chans[1]], pa),
-             rab_predatorness=mean_over(prop[:, R, chans[0]] - prop[:, R, chans[1]], rb))
+             rab_predatorness=mean_over(prop[:, R, chans[0]] - prop[:, R, chans[1]], rb),
+             pred_olf_ch1=mean_over(prop[:, P, chans[0]], pa),
+             pred_olf_ch2=mean_over(prop[:, P, chans[1]], pa),
+             rab_olf_ch1=mean_over(prop[:, R, chans[0]], rb),
+             rab_olf_ch2=mean_over(prop[:, R, chans[1]], rb),
+             pred_olf_intensity=mean_over(prop[:, P, chans[0]] + prop[:, P, chans[1]], pa),
+             rab_olf_intensity=mean_over(prop[:, R, chans[0]] + prop[:, R, chans[1]], rb),
+             # per-slot detection range, so multi-predator episodes are analysable at all
+             pred_detect_max=np.where(pa.sum(1) > 0,
+                 np.nanmax(np.where(pa, L("animal_detect_sampled")[:, P], np.nan), axis=1), np.nan),
+             pred_detect_min=np.where(pa.sum(1) > 0,
+                 np.nanmin(np.where(pa, L("animal_detect_sampled")[:, P], np.nan), axis=1), np.nan))
 
     z = lambda: np.zeros(nep)
     G = {k: z() for k in ["n_rows", "n_steps", "bush_steps", "inj0", "nut0", "arow0", "acol0",
@@ -211,7 +224,9 @@ def fit_glms(D: dict, out_dir: str):
              "pred_attack_range": D["pred_range"], "pred_max_stamina": D["pred_stamina"],
              "pred_smell_predatorness": D["pred_predatorness"],
              "spawn_dist_to_predator": np.where(np.isfinite(D["d_pred0"]), D["d_pred0"], np.nan)}
-    EXO_R = {"rab_smell_predatorness": D["rab_predatorness"]}
+    EXO_R = {"rab_smell_predatorness": D["rab_predatorness"],
+             "rab_olf_intensity": D["rab_olf_intensity"]}
+    EXO_P["pred_olf_intensity"] = D["pred_olf_intensity"]
     END = {"frac_time_injured": D["IB"][:, 1:].sum(1) / ns,
            "frac_time_inj_severe": D["IB"][:, 3] / ns,
            "mean_injury": (D["inj_sum"] - D["inj0"]) / ns, "peak_injury": D["inj_max"],
@@ -254,6 +269,14 @@ def fit_glms(D: dict, out_dir: str):
             "M2 exogenous + predator traits, 1-predator episodes"),
         fit(pd.DataFrame({**EXO, **EXO_P, **EXO_R}).drop(columns=["n_predators", "n_rabbits"]),
             P1 & R1, "M3 + rabbit smell, 1 predator + 1 rabbit"),
+        # 2-predator episodes are a third of the data and every trait model above discards
+        # them, because a single "mean detection range" is not what danger means there.
+        fit(pd.DataFrame({**EXO, "detect_keenest": D["pred_detect_max"],
+                          "detect_least_keen": D["pred_detect_min"],
+                          "detect_spread": D["pred_detect_max"] - D["pred_detect_min"],
+                          "pred_attack_delay": D["pred_delay"],
+                          "pred_max_stamina": D["pred_stamina"]}).drop(columns=["n_predators"]),
+            D["n_pred"] == 2, "M5 two-predator episodes, keenest vs least-keen"),
         fit(pd.DataFrame({**EXO, **END}), ALL, "M4 exogenous + consequences")])
     os.makedirs(out_dir, exist_ok=True)
     uni.to_csv(f"{out_dir}/univariate.csv", index=False)
