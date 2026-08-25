@@ -72,14 +72,22 @@ scales can be compared.
 | number of food items (1-4) | -1.2 pp | more food, less hiding |
 | **starting injury (0-100)** | **-0.8 pp** | more hurt, very slightly *less* hiding |
 | predator's attack reach | -0.8 pp | |
+| spawn distance to nearest food | +0.6 pp | further from food, slightly more hiding |
 | number of ambush predators (2-12) | +0.2 pp | negligible |
+| distance from map centre at spawn | +0.0 pp | negligible — **null control** |
 | number of rocks (6-12) | +0.1 pp | negligible — **null control** |
 | predator's max stamina (30-150) | -0.0 pp | no effect at all |
 
-Two built-in controls behave as they should. **Rocks** are scattered like bushes and are
-visually identical to them but conceal nothing — they move the behaviour not at all, so the
-agent is not merely reacting to clutter. **Starting injury** is a quantity the agent provably
-cannot perceive, and it lands at approximately zero — a positive control for the pipeline.
+This is exhaustive: every quantity the environment randomises appears above. Three of them
+double as controls, and all three behave as they should. **Rocks** are scattered like bushes
+and are visually identical to them but conceal nothing — they move the behaviour not at all,
+so the agent is not merely reacting to clutter. **Where on the map the agent wakes up** should
+not matter in a symmetric arena, and does not. **Starting injury** is a quantity the agent
+provably cannot perceive, and lands at approximately zero.
+
+One factor separates survival from strategy cleanly: spawning far from food cuts survival hard
+(221 down to 164 steps) while barely touching hiding (15.2% to 17.5%). Food distance decides
+whether the agent lives, not how it behaves.
 
 ## Four findings
 
@@ -129,6 +137,13 @@ rabbit's randomised scent:
 The response is aimed at the rabbit, roughly three times more strongly than anywhere else.
 Hiding while that rabbit is nearby rises from 26.7% to 49.8% — approaching how the agent
 treats an actual predator (56.4%). This is a sensory misidentification, not a diffuse mood.
+
+*Caveat.* "Rabbit is nearby" is itself partly the agent's doing, so splitting on it conditions
+on a post-treatment variable and the +23.1 pp is not a clean causal estimate — it describes
+*where* the extra hiding lands, which is what distinguishes an aimed response from a diffuse
+one. The selection is small and works against the finding: when the rabbit smells
+predator-like the agent spends slightly *less* time near it (13.0% of steps versus 14.3%),
+so the surviving near-moments are the ones it could not avoid.
 
 ### 3. Injury does not drive hiding
 
