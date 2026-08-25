@@ -6,18 +6,18 @@ Why this exists
 ---------------
 A FiLM neuromodulator reads the agent's internal state (injury, nutrition, ...) and rescales its
 perceptual features. The sharp prediction is therefore NOT "the modulated agent behaves
-differently" — it is that the modulated agent's **gain on external cues should vary more with its
+differently" — it is that the modulated agent's **response to external cues should vary more with its
 internal state**. That is an interaction, and it is what this tool measures.
 
 The three measures, weakest evidence to strongest
 -------------------------------------------------
 1. `state_span`   — how much hiding changes across internal-state cells, with no predator nearby.
                     Pure internal-state dependence of baseline behaviour.
-2. `gain_span`    — the THREAT GAIN in each internal-state cell, defined as
+2. `proximity_effect_range`    — the PROX EFFECT in each internal-state cell, defined as
                     P(hide | predator near) - P(hide | no predator near) within that cell, and how
-                    far that gain ranges across cells. This is the direct analogue of what a
-                    modulator is supposed to do: change the gain on a percept according to state.
-3. `causal_span`  — the same gain, but computed early in the episode and binned by the RANDOMISED
+                    far that effect ranges across cells. This is the direct analogue of what a
+                    modulator is supposed to do: change the response to a percept according to state.
+3. `proximity_effect_range` (randomised block)  — the same effect, but computed early in the episode and binned by the RANDOMISED
                     starting injury / nutrition the environment assigns before the agent acts.
                     Only this one is causally identified; 1 and 2 condition on state the agent
                     itself produced.
@@ -121,44 +121,44 @@ def metrics(C, labels, min_n=2e4):
         p1 = C[i, 1, 1] / n1 if n1 >= min_n else np.nan
         rows.append(dict(state=lab, n_calm=float(n0), n_threat=float(n1),
                          hide_calm=100 * p0, hide_threat=100 * p1,
-                         gain=100 * (p1 - p0)))
-    ok = [r for r in rows if np.isfinite(r["gain"])]
+                         proximity_effect=100 * (p1 - p0)))
+    ok = [r for r in rows if np.isfinite(r["proximity_effect"])]
     span = lambda key, rs: (max(r[key] for r in rs) - min(r[key] for r in rs)) if len(rs) > 1 else np.nan
     # The zero bin ("no signal at all") is qualitatively unlike the graded bins and dominates the
     # step count, so it distorts a max-minus-min span. Report the span over the SIGNAL-carrying
-    # bins separately, and a trend, which is the cleanest single number: does the threat gain rise
+    # bins separately, and a trend, which is the cleanest single number: does the predator-proximity effect rise
     # or fall as internal state increases, and how steeply per bin. Weighted by cell size.
     sig = [r for r in ok if not r["state"].endswith(" 0")]
     if len(sig) > 1:
         x = np.arange(len(sig), dtype=float)
-        y = np.array([r["gain"] for r in sig])
+        y = np.array([r["proximity_effect"] for r in sig])
         w = np.array([r["n_calm"] + r["n_threat"] for r in sig])
         xm = np.average(x, weights=w); ym = np.average(y, weights=w)
         trend = float(np.sum(w * (x - xm) * (y - ym)) / max(np.sum(w * (x - xm) ** 2), 1e-9))
     else:
         trend = np.nan
-    return rows, {"state_span": span("hide_calm", ok), "gain_span": span("gain", ok),
-                  "gain_span_signal": span("gain", sig),
-                  "gain_trend_per_bin": trend,
-                  "gain_min": min((r["gain"] for r in ok), default=np.nan),
-                  "gain_max": max((r["gain"] for r in ok), default=np.nan),
+    return rows, {"state_span": span("hide_calm", ok), "proximity_effect_range": span("proximity_effect", ok),
+                  "proximity_effect_range_signal": span("proximity_effect", sig),
+                  "proximity_effect_trend_per_bin": trend,
+                  "pe_min": min((r["proximity_effect"] for r in ok), default=np.nan),
+                  "pe_max": max((r["proximity_effect"] for r in ok), default=np.nan),
                   "cells_used": len(ok)}
 
 
 def show(rows, m, title):
     print(f"\n=== {title} ===")
-    print(f"{'internal state':16}{'no predator':>13}{'predator near':>15}{'THREAT GAIN':>14}"
+    print(f"{'internal state':16}{'no predator':>13}{'predator near':>15}{'PROX EFFECT':>14}"
           f"{'n (M)':>12}")
     for r in rows:
-        if not np.isfinite(r["gain"]):
+        if not np.isfinite(r["proximity_effect"]):
             print(f"{r['state']:16}{'— too few steps —':>54}"); continue
         print(f"{r['state']:16}{r['hide_calm']:>12.1f}%{r['hide_threat']:>14.1f}%"
-              f"{r['gain']:>+13.1f}{(r['n_calm']+r['n_threat'])/1e6:>12.1f}")
+              f"{r['proximity_effect']:>+13.1f}{(r['n_calm']+r['n_threat'])/1e6:>12.1f}")
     print(f"  state span (baseline hiding across states) : {m['state_span']:.1f} pp")
-    print(f"  GAIN span  (all states)                    : {m['gain_span']:.1f} pp"
-          f"   [{m['gain_min']:.1f} .. {m['gain_max']:.1f}]")
-    print(f"  GAIN span  (signal-carrying states only)   : {m['gain_span_signal']:.1f} pp")
-    print(f"  GAIN TREND (pp per state bin, weighted)    : {m['gain_trend_per_bin']:+.2f}"
+    print(f"  RANGE  (all states)                    : {m['proximity_effect_range']:.1f} pp"
+          f"   [{m['pe_min']:.1f} .. {m['pe_max']:.1f}]")
+    print(f"  RANGE  (signal-carrying states only)   : {m['proximity_effect_range_signal']:.1f} pp")
+    print(f"  TREND (pp per state bin, weighted)    : {m['proximity_effect_trend_per_bin']:+.2f}"
           f"   <- positive = more internal signal, stronger threat response")
 
 
@@ -183,21 +183,22 @@ def main():
             ma, mb = A[tag]["metrics"], B[tag]["metrics"]
             print(f"--- {tag} ---")
             print(f"{'internal state':16}{A['label'][:11]:>13}{B['label'][:11]:>13}"
-                  f"{'gain A':>10}{'gain B':>10}{'Δgain':>9}")
+                  f"{'effect A':>10}{'effect B':>10}{'Δ':>9}")
             for x, y in zip(ra, rb):
-                if not (np.isfinite(x["gain"]) and np.isfinite(y["gain"])): continue
+                if not (np.isfinite(x["proximity_effect"]) and np.isfinite(y["proximity_effect"])): continue
                 print(f"{x['state']:16}{x['hide_calm']:>12.1f}%{y['hide_calm']:>12.1f}%"
-                      f"{x['gain']:>+10.1f}{y['gain']:>+10.1f}{y['gain']-x['gain']:>+9.1f}")
-            for key, nm in (("gain_span", "GAIN SPAN  (all)"),
-                            ("gain_span_signal", "GAIN SPAN  (signal)"),
-                            ("gain_trend_per_bin", "GAIN TREND /bin")):
+                      f"{x['proximity_effect']:>+10.1f}{y['proximity_effect']:>+10.1f}"
+                      f"{y['proximity_effect']-x['proximity_effect']:>+9.1f}")
+            for key, nm in (("proximity_effect_range", "RANGE (all)"),
+                            ("proximity_effect_range_signal", "RANGE (signal)"),
+                            ("proximity_effect_trend_per_bin", "TREND /bin")):
                 print(f"  {nm:22} {A['label']}: {ma[key]:+.2f}    "
                       f"{B['label']}: {mb[key]:+.2f}    diff {mb[key]-ma[key]:+.2f}")
             print(f"  state span  {A['label']}: {ma['state_span']:.1f} pp    "
                   f"{B['label']}: {mb['state_span']:.1f} pp    "
                   f"difference {mb['state_span']-ma['state_span']:+.1f} pp\n")
         print("Reading it: a modulator that gates perception by internal state should show a")
-        print("LARGER gain span — its response to a nearby predator should depend more on how")
+        print("LARGER range — its response to a nearby predator should depend more on how")
         print("hurt or hungry it is. The randomised_early block is the only causally identified")
         print("half; the observed block conditions on state the agent produced itself.")
         return

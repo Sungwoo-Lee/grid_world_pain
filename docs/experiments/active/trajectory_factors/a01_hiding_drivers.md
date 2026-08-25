@@ -267,7 +267,7 @@ predator presence drives hiding and hunger jointly).
 
 ## Method
 
-Outcome: fraction of the agent's chosen steps spent in a bush. The spawn row is excluded from
+Outcome: fraction of the agent's steps spent in a bush. The spawn row is excluded from
 the outcome (the agent did not choose where it woke) and used only as a starting condition.
 Model: quasi-binomial GLM on the rate, standard errors scaled by the Pearson overdispersion
 (13-25 depending on model). Effects converted to percentage points at the observed mean via a
@@ -461,7 +461,7 @@ Everything above is consistent with the agent making no use of the interoceptive
 all. The policy is **recurrent** — a memory network can carry "I was attacked" forward
 indefinitely with no pain input whatsoever. And the agent has a separate **exteroceptive**
 nociception channel that fires instantly on contact. So the post-hit rise, its timing, and the
-context dependence are all equally consistent with: felt the contact, remembered it, went to
+internal-state dependence are all equally consistent with: felt the contact, remembered it, went to
 cover — with the smoothed interoceptive trace playing no part.
 
 Both readings predict every table in this section. The one causal handle available — the
@@ -683,5 +683,5 @@ carry `predators:` / `neutral_animals:` instead; the tool would need a legacy br
 
 ## Data
 
-- 1,000,000 episodes, 189,906,610 chosen steps, mean survival 189.9 steps, overall hiding 16.62%.
+- 1,000,000 episodes, 189,906,610 steps, mean survival 189.9 steps, overall hiding 16.62%.
 - Deaths: 42.5% killed, 30.9% starved, 26.7% survived the 500-step cap.

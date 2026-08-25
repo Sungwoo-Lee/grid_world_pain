@@ -131,14 +131,14 @@ changes *which world produces which behaviour* and reliably does almost nothing 
 That is a real finding about what this kind of modulator does, and it is the only claim here
 supported by four independent instances.
 
-## Context dependence: the measure built for the modulator
+## Internal-state dependence: the measure built for the modulator
 
 Everything above asks whether the modulated agent *behaves* differently. That is the wrong question
 for what a modulator does. A FiLM modulator rescales perception **according to internal state**, so
 the sharp prediction is that its **response to an external cue should depend more on that state**.
 
 `scripts/analysis/context_dependence.py` measures this directly. For each level of felt pain it
-computes the **alarm response** — how much more the agent hides with a predator within two tiles
+computes the **predator-proximity effect** — how much more the agent hides with a predator within two tiles
 than without — and then asks how far that response ranges across pain levels. A modulator doing its
 job should widen that range.
 
@@ -147,7 +147,7 @@ pattern describes its situation. In the **randomised** version the environment a
 episode start before the agent acts, so the pattern describes its disposition. Only the second is
 causally identified, and it is the one quoted here.
 
-| pair | alarm-response range, no modulator | with modulator | difference |
+| pair | proximity-effect range, no modulator | with modulator | difference |
 |---|---|---|---|
 | b04_mc | 3.2 pp | 4.0 pp | **+0.7** |
 | b03_mc | 2.1 pp | 2.3 pp | **+0.2** |
@@ -157,7 +157,7 @@ causally identified, and it is the one quoted here.
 **The modulated agent is wider in all four pairs.** This is the only directionally consistent result
 across all four in the whole comparison — everything else in this document splits two-two.
 
-Two supporting observations. All eight agents show a **rising** alarm response with randomised
+Two supporting observations. All eight agents show a **rising** predator-proximity effect with randomised
 injury (trend +0.83 to +1.92 pp per bin): an agent the world wounded reacts more strongly to a
 nearby predator. That is causally identified hypervigilance, present everywhere. And the same
 measure applied to **nutrition shows no consistent modulator effect** — two pairs wider, two
