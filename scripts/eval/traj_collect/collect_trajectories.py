@@ -286,11 +286,58 @@ def _np_list(x):
     return np.asarray(x).tolist()
 
 
+# --- pre-v3.1 sensor compatibility -------------------------------------------------
+# Commit 0e8a4ef (v3.1, 2026-08-21) added directional olfaction and anisotropic visual
+# point-spread, and made five `sensory.*` keys MANDATORY.  Every run trained before that
+# date lacks them, so `load_env_params` refuses their saved config and they cannot be
+# replayed at all.
+#
+# Both features have an explicit trace-time OFF branch (`sensor.py:52` and `sensor.py:325`),
+# so the values below reproduce the pre-v3.1 sensors exactly.  Verified end-to-end rather
+# than assumed: replaying recorded actions for 25 real episodes (5,298 steps) through
+# today's code and comparing against the observation vectors the OLD code wrote into the
+# a01 store gives a maximum difference of 2.4e-07 across all 27 channels — float32
+# rounding, not behaviour.  See `scripts/analysis/supplementary/parity.py`.
+#
+# This is deliberately an explicit opt-in flag and NOT a default.  The project's
+# no-fallback-defaults rule exists to stop exactly this kind of silent substitution, and
+# a run that genuinely used v3.1 sensors must never be quietly reinterpreted as pre-v3.1.
+# Patching happens before `env_fingerprint`, so the store's `env_fp` — a guarded manifest
+# field — reflects the config actually used.
+PRE_V31_SENSOR_DEFAULTS = {
+    "olfactory_sensor_range": 0,        # 0 = the original single-point sample
+    "visual_blur_enabled": False,
+    "visual_blur_radial_scale": 0.0,
+    "visual_blur_anisotropy": 0.0,
+    "visual_blur_sigma_floor": 0.0,
+}
+
+
+def apply_pre_v31_sensor_defaults(cfg: dict, run_dir: Path) -> list[str]:
+    """Inject the five v3.1 sensory keys at their pre-v3.1 values. Returns what was added.
+
+    Refuses if the config already carries any of them: a run that set them explicitly is a
+    v3.1-or-later run, and silently overriding a real setting is the failure this flag is
+    meant to avoid.
+    """
+    sens = cfg.setdefault("sensory", {})
+    present = [k for k in PRE_V31_SENSOR_DEFAULTS if k in sens]
+    if present:
+        raise ValueError(
+            f"--assume-pre-v31-sensors was passed, but {run_dir.name} already sets "
+            f"{present} in sensory. That makes it a v3.1-or-later run; the flag would "
+            "silently overwrite real settings. Drop the flag.")
+    for k, v in PRE_V31_SENSOR_DEFAULTS.items():
+        sens[k] = v
+    return sorted(PRE_V31_SENSOR_DEFAULTS)
+
+
 def build_manifest(*, cfg, params, run_dir: Path, ckpt_dir: Path, ckpt_step: int,
                    dims: dict, seed_base: int, n_episodes: int, shard_episodes: int,
                    batch_size: int, device: str, obs_precision: str,
                    scene_format: str, scene_ambiguous: bool,
-                   restore_check: str = "strict") -> dict:
+                   restore_check: str = "strict",
+                   pre_v31_sensor_keys: list | None = None) -> dict:
     """Everything a future reader needs and cannot recover from the shards."""
     # int16 columns (`t`, `rest_streak`, `res_cons_count`, and the animal/resource timers)
     # are written with `astype`, which WRAPS silently rather than raising.  max_steps is
@@ -344,6 +391,7 @@ def build_manifest(*, cfg, params, run_dir: Path, ckpt_dir: Path, ckpt_step: int
         # null  = the run predates the stamp (no file)  |  "unknown" = stamped, git
         # unreadable at train time. See read_training_provenance().
         **read_training_provenance(run_dir),
+        "pre_v31_sensor_keys": pre_v31_sensor_keys,
         "scene_format": scene_format,
         "scene_ambiguous": bool(scene_ambiguous),
         "restore_check": restore_check,
@@ -607,6 +655,11 @@ def parse_args(argv=None):
                    help="downgrade the scene-ambiguity guard to a warning and stamp "
                         "scene_ambiguous:true into the manifest. Use only when you have "
                         "INDEPENDENTLY established which scene the run trained on.")
+    p.add_argument("--assume-pre-v31-sensors", action="store_true",
+                   help="Supply the five sensory keys that commit 0e8a4ef made mandatory "
+                        "(olfactory_sensor_range, visual_blur_*) at the values that "
+                        "reproduce the pre-v3.1 sensors exactly. Required to replay any run "
+                        "trained before 2026-08-21. Refuses if the run already sets them.")
     p.add_argument("--allow-weak-restore-check", action="store_true",
                    help="permit collection when the checkpoint's own structure cannot be "
                         "read, degrading the restore guard to a self-comparison that is "
@@ -634,6 +687,13 @@ def main(argv=None) -> int:
     scene_format, scene_ambiguous = assert_scene_unambiguous(
         cfg, run_dir, allow_override=args.allow_ambiguous_scene)
 
+    pre_v31_keys = None
+    if args.assume_pre_v31_sensors:
+        pre_v31_keys = apply_pre_v31_sensor_defaults(cfg, run_dir)
+        if not args.quiet:
+            print(f"[collect] --assume-pre-v31-sensors: supplied {pre_v31_keys} "
+                  f"at pre-v3.1 values (env fingerprint reflects this)")
+
     from src.environment.config_loader import load_env_params
     params = load_env_params(Config(cfg))
     dims = env_dims(params)
@@ -657,7 +717,7 @@ def main(argv=None) -> int:
     manifest = build_manifest(
         cfg=cfg, params=params, run_dir=run_dir, ckpt_dir=ckpt_dir, ckpt_step=ckpt_step,
         dims=dims, seed_base=args.seed_base, n_episodes=args.episodes,
-        shard_episodes=shard_episodes, batch_size=batch_size, device=args.device,
+        shard_episodes=shard_episodes, batch_size=batch_size, device=args.device, pre_v31_sensor_keys=pre_v31_keys,
         obs_precision=args.obs_precision, scene_format=scene_format,
         scene_ambiguous=scene_ambiguous,
         restore_check="weak_allowed" if args.allow_weak_restore_check else "strict",
