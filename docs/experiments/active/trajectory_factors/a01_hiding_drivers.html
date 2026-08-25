@@ -1,0 +1,416 @@
+<title>What makes this agent hide?</title>
+<style>
+:root{
+  --bg:#f4f5f2; --panel:#eceee8; --fg:#181c17; --muted:#666d64; --rule:#d6dad1;
+  --true:#2f6b6a; --false:#a8442a; --cover:#4a6741; --grid:#c9cec5;
+  --display:Georgia,"Iowan Old Style","Palatino Linotype",Palatino,serif;
+  --body:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#131614; --panel:#1b1f1c; --fg:#e7e9e3; --muted:#939a91; --rule:#2a2f2b;
+  --true:#63b3b0; --false:#e08663; --cover:#89ab78; --grid:#333a34;}}
+:root[data-theme="dark"]{
+  --bg:#131614; --panel:#1b1f1c; --fg:#e7e9e3; --muted:#939a91; --rule:#2a2f2b;
+  --true:#63b3b0; --false:#e08663; --cover:#89ab78; --grid:#333a34;}
+:root[data-theme="light"]{
+  --bg:#f4f5f2; --panel:#eceee8; --fg:#181c17; --muted:#666d64; --rule:#d6dad1;
+  --true:#2f6b6a; --false:#a8442a; --cover:#4a6741; --grid:#c9cec5;}
+
+body{background:var(--bg);color:var(--fg);font-family:var(--body);
+  font-size:17px;line-height:1.65;margin:0;-webkit-font-smoothing:antialiased}
+.wrap{max-width:47rem;margin:0 auto;padding:0 1.5rem 7rem;
+  display:flex;flex-direction:column;gap:1.35rem}
+header{padding:5.5rem 0 2.5rem;display:flex;flex-direction:column;gap:1.1rem}
+.eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted)}
+h1{font-family:var(--display);font-weight:400;font-size:clamp(2.3rem,6vw,3.4rem);
+  line-height:1.08;margin:0;text-wrap:balance;letter-spacing:-.015em}
+.standfirst{font-size:1.16rem;color:var(--muted);max-width:34rem;text-wrap:pretty}
+h2{font-family:var(--display);font-weight:400;font-size:1.72rem;line-height:1.2;
+  margin:2.6rem 0 0;text-wrap:balance;letter-spacing:-.01em}
+h3{font-size:1.02rem;font-weight:650;margin:1.9rem 0 -.5rem;letter-spacing:-.005em}
+p{margin:0;text-wrap:pretty}
+a{color:inherit;text-decoration-color:var(--muted);text-underline-offset:3px}
+strong{font-weight:650}
+.lede::first-letter{font-family:var(--display);float:left;font-size:3.5rem;
+  line-height:.82;padding:.13em .1em 0 0;color:var(--cover)}
+hr{border:0;border-top:1px solid var(--rule);margin:2.4rem 0 0}
+
+.panel{background:var(--panel);border:1px solid var(--rule);border-radius:3px;
+  padding:1.35rem 1.5rem;display:flex;flex-direction:column;gap:.9rem}
+.panel h3{margin-top:0}
+figcaption{font-size:.86rem;color:var(--muted);line-height:1.5}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.9rem;
+  font-variant-numeric:tabular-nums}
+th,td{text-align:right;padding:.42rem .55rem;border-bottom:1px solid var(--rule);
+  white-space:nowrap}
+th:first-child,td:first-child{text-align:left;white-space:normal;min-width:11rem}
+thead th{font-size:.73rem;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--muted);font-weight:600;border-bottom:1px solid var(--fg)}
+tbody tr:last-child td{border-bottom:0}
+td.num{font-family:var(--mono);font-size:.84rem}
+.hi{color:var(--false);font-weight:650}
+.lo{color:var(--true);font-weight:650}
+.key{display:flex;gap:1.2rem;flex-wrap:wrap;font-size:.82rem;color:var(--muted)}
+.key span{display:flex;align-items:center;gap:.4rem}
+.sw{width:.75rem;height:.75rem;border-radius:2px;display:inline-block}
+.dl{display:grid;grid-template-columns:auto 1fr;gap:.35rem 1.1rem;font-size:.92rem}
+.dl dt{font-family:var(--mono);font-size:.8rem;color:var(--muted);white-space:nowrap}
+.dl dd{margin:0}
+.big{display:flex;gap:2.4rem;flex-wrap:wrap;padding:.4rem 0}
+.big div{display:flex;flex-direction:column;gap:.1rem}
+.big b{font-family:var(--display);font-size:2.2rem;font-weight:400;line-height:1}
+.big small{font-size:.78rem;color:var(--muted);letter-spacing:.02em}
+svg{display:block;width:100%;height:auto;overflow:visible}
+.ax{font-family:var(--mono);font-size:9.5px;fill:var(--muted)}
+.lbl{font-size:11.5px;fill:var(--fg)}
+footer{font-size:.84rem;color:var(--muted);line-height:1.6;
+  border-top:1px solid var(--rule);padding-top:1.4rem;margin-top:2.4rem}
+code{font-family:var(--mono);font-size:.85em;background:var(--panel);
+  padding:.1em .35em;border-radius:2px}
+@media (max-width:640px){body{font-size:16px}header{padding-top:3.5rem}}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">Grid-world agent · 1,000,000 episodes · 189,906,610 steps</div>
+  <h1>What makes this&nbsp;agent hide?</h1>
+  <p class="standfirst">A trained forager was returned to the world it grew up in and lived
+  a million separate lives. The record of those lives says it hides from a smell it cannot
+  interpret — and that the mistake is measurably fatal.</p>
+</header>
+
+<p class="lede">Our agent is a small creature in a ten-by-ten field. It must eat to stay
+alive, and it must avoid predators that hunt it. Bushes scattered around the field will hide
+it — but a bush has no food in it, so every moment spent hidden is a moment not spent eating.
+That is the whole of its problem.</p>
+
+<p>We trained it, froze it, and then put it back into exactly the world it had learned in,
+for a million episodes. At the start of each episode the world <em>rerolls itself</em>: how
+many predators appear, how far each can see, how many bushes exist, how much food, and even
+how injured and how hungry the agent begins. Those dice are thrown before the agent does
+anything, which is what makes this useful — it is a randomised experiment the world runs on
+itself, a million times, so we can read off causes rather than mere correlations.</p>
+
+<h2>First, what the creature can actually sense</h2>
+<p>Every result below turns on this, so it comes first. Reading the settings the run itself
+saved:</p>
+
+<div class="panel">
+<dl class="dl">
+  <dt>sight</dt><dd><strong>Range zero.</strong> It sees only the tile it is standing on.
+  At any distance it is blind.</dd>
+  <dt>smell</dt><dd><strong>Its only distant sense</strong>, reaching across the whole field.</dd>
+  <dt>own injury</dt><dd><strong>Not perceivable.</strong> It has no channel telling it how
+  wounded it is.</dd>
+  <dt>pain</dt><dd>Perceivable — but only as a fading trace of <em>being struck</em>, not as a
+  standing wound.</dd>
+  <dt>hunger</dt><dd>Perceivable.</dd>
+</dl>
+</div>
+
+<p>And here is the trap that was built into this world deliberately. There are two kinds of
+animal: predators, which kill, and rabbits, which are entirely harmless. They <em>look</em>
+different. But their <strong>scents overlap heavily</strong> — a predator's odour is drawn
+around one point, a rabbit's around another, and the spread of each is wide enough that they
+routinely trade places. Since the agent is blind at distance, scent is all it has to go on.</p>
+
+<h2>The headline</h2>
+<p>Because scent is redrawn at random for every animal in every episode, we can watch what
+happens when a predator happens to smell strongly of predator — and, separately, when a
+harmless rabbit happens to smell exactly the same way.</p>
+
+<figure class="panel">
+  <h3>Same response. Opposite consequence.</h3>
+  <div id="dd"></div>
+  <div class="key">
+    <span><i class="sw" style="background:var(--true)"></i>predator's own scent — a true signal</span>
+    <span><i class="sw" style="background:var(--false)"></i>rabbit's scent — a false alarm</span>
+  </div>
+  <figcaption>Left: as the scent becomes more predator-like, the agent hides more — and it
+  does so for the harmless rabbit just as readily as for the real predator. Right: what that
+  costs. Responding to a real predator's scent buys 30% more life. Responding identically to a
+  rabbit's scent costs 9% of it.</figcaption>
+</figure>
+
+<p>The agent is not being stupid. It is doing the only thing available to a blind animal with
+an ambiguous nose: treat a predator-ish smell as a predator. The world simply does not let it
+find out which is which until too late.</p>
+
+<h3>The full chain, from nose to grave</h3>
+<p>Because the scent is randomised, each column below is a genuine causal ladder — misread the
+smell, hide more, eat less, starve sooner.</p>
+
+<div class="panel scroll">
+<table>
+<thead><tr><th>A rabbit that smells…</th><th>hides</th><th>food per step</th>
+<th>starved</th><th>killed</th><th>survived</th></tr></thead>
+<tbody>
+<tr><td>least like a predator</td><td class="num">14.9%</td><td class="num">0.227</td>
+<td class="num">27.6%</td><td class="num">45.0%</td><td class="num lo">193.3</td></tr>
+<tr><td>most like a predator</td><td class="num">22.6%</td><td class="num">0.212</td>
+<td class="num">38.5%</td><td class="num">38.2%</td><td class="num hi">175.6</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>Hiding does buy real protection — death by predator falls in both cases. But when the
+threat was never there, the protection is worth nothing and the missed meals are real. The
+agent starves instead.</p>
+
+<h3>Is it really mistaking the rabbit &mdash; or just jumpy in general?</h3>
+<p>A fair objection: perhaps a predator-ish smell anywhere in the field simply makes the agent
+nervous, and it hides more everywhere. That would be a mood, not a mistake. The two can be told
+apart, because a mistake should be <em>aimed</em> &mdash; the extra hiding ought to appear
+specifically in the moments when the misleading rabbit is close by.</p>
+
+<figure class="panel">
+  <div id="aim"></div>
+  <div class="key">
+    <span><i class="sw" style="background:var(--muted);opacity:.55"></i>rabbit smells rabbit-like</span>
+    <span><i class="sw" style="background:var(--false)"></i>rabbit smells predator-like</span>
+  </div>
+  <figcaption>Extra hiding caused by a rabbit smelling predator-like, split by what was
+  actually nearby at the time. Episodes are held to exactly one predator and one rabbit. The
+  response is aimed at the rabbit roughly three times more strongly than anywhere else.</figcaption>
+</figure>
+
+<p>When that rabbit comes near, hiding jumps from 26.7% to 49.8% &mdash; close to how this agent
+treats a genuine predator, 56.4%. It is not in a general mood. It has mistaken a specific
+harmless animal for a specific dangerous one.</p>
+
+<h2>Everything that moves the behaviour, ranked</h2>
+<p>Every randomly-set feature of the world, ordered by how strongly it shifts hiding. The bar
+length is percentage points of the episode spent hidden, per one standard deviation of that
+feature — a common scale, so that "number of predators" and "how far a predator can see" can
+honestly be compared.</p>
+
+<figure class="panel">
+  <div id="rank"></div>
+  <figcaption>Rocks are a deliberate control: scattered like bushes, but they conceal nothing,
+  and unlike bushes they <em>hurt</em>. They move the behaviour not at all — so the agent is
+  neither reacting to clutter nor treating a painful object as a reason to seek cover. A
+  predator's stamina, and where on the map it wakes up, likewise do nothing.</figcaption>
+</figure>
+
+<h2>Three more things the million episodes settle</h2>
+
+<h3>Nearness is the whole story, moment to moment</h3>
+<p>To rule out the obvious objection — that a predator lingers <em>because</em> the agent is
+sitting in a bush — we used each animal's position on the <em>previous</em> step to predict
+hiding on the current one. The effect gets stronger, not weaker, which is the wrong direction
+for that objection — though consecutive steps resemble one another, so this weakens the
+objection rather than killing it outright.</p>
+
+<figure class="panel">
+  <div id="prox"></div>
+  <figcaption>Share of steps spent hidden, given what was nearby one step earlier. A rabbit
+  nearby lifts hiding a little; a predator nearby transforms it.</figcaption>
+</figure>
+
+<h3>Being injured does <em>not</em> make it hide</h3>
+<p>This one is worth care, because the raw numbers appear to say the opposite. Steps taken at
+severe injury show 26.3% hiding against 17.8% at no injury — which reads like a wounded animal
+turning cautious.</p>
+
+<p>It isn't. The world hands the agent a <strong>random</strong> injury level, from none to
+nearly fatal, at the start of every episode. If injury caused caution, that is exactly where
+it would appear. Instead hiding drifts gently <em>down</em>, from 17.7% to 15.4%, as the
+starting wound gets worse.</p>
+
+<p>Wounds heal quickly here &mdash; a randomly assigned one is gone within about twenty steps
+&mdash; so the fair place to look is inside that window, while the injury is still real. Over
+the first ten steps the badly-wounded group carries five times the injury of the lightly-wounded
+group, and hides <strong>one percentage point less</strong>:</p>
+
+<div class="panel">
+<div class="big">
+  <div><b>13.3 &rarr; 70.5</b><small>injury actually carried, lightly vs badly wounded</small></div>
+  <div><b>20.2% &rarr; 19.2%</b><small>hiding over those same steps</small></div>
+</div>
+<figcaption>Roughly twenty-five times smaller than the effect of a predator's eyesight, and
+pointing the wrong way. The reason sits in the sense table: <strong>the agent cannot perceive
+its own injury.</strong> There is no channel for it &mdash; it feels pain only when actually
+struck.</figcaption>
+</div>
+
+<p>The raw gradient was a confound. Split it by what was actually happening at the time and it
+falls apart — the sign does not even hold:</p>
+
+<div class="panel scroll">
+<table>
+<thead><tr><th>Situation</th><th>lightly hurt</th><th>badly hurt</th><th>difference</th></tr></thead>
+<tbody>
+<tr><td>no predator near, not recently struck</td><td class="num">12.9%</td>
+<td class="num">15.2%</td><td class="num">+2.4</td></tr>
+<tr><td>no predator near, recently struck</td><td class="num">9.4%</td>
+<td class="num">21.7%</td><td class="num">+12.3</td></tr>
+<tr><td>predator near, not recently struck</td><td class="num">56.9%</td>
+<td class="num">35.5%</td><td class="num hi">&minus;21.5</td></tr>
+<tr><td>predator near, recently struck</td><td class="num">36.9%</td>
+<td class="num">40.2%</td><td class="num">+3.3</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>Injury was standing in for "a predator was around" — and that is the thing doing the work.</p>
+
+<h3>Hunger looks like a cause and is actually a footprint</h3>
+<p>The raw numbers again look emphatic: a starving agent hides on 50.2% of its steps, a
+well-fed one on 9.1%. Read straight, hunger drives hiding. It runs the other way.</p>
+
+<div class="panel">
+<div class="big">
+  <div><b>7.3%</b><small>of steps inside a bush involve eating</small></div>
+  <div><b>25.7%</b><small>of steps outside a bush do</small></div>
+</div>
+<figcaption>Hiding physically blocks foraging — a bush holds no food.</figcaption>
+</div>
+
+<p>And when we set the agent's hunger <em>at random</em> and watch the first ten steps, it
+moves the opposite way from the raw numbers — agents that start starving hide
+<strong>less</strong>, not more. They leave cover to go and find food, which is exactly what a
+sensible animal should do.</p>
+
+<figure class="panel">
+  <div id="nut"></div>
+  <figcaption>Hiding over the first ten steps, by the hunger the world randomly assigned at the
+  start. Because this is a coin the world flips before the agent moves, it reads as cause &mdash;
+  and it runs against the raw association, which is how we know that association was not
+  causal.</figcaption>
+</figure>
+
+<p>So low nutrition is mostly the mark hiding leaves behind, not its cause. Two things produce
+that mark: hiding blocks eating, and a nearby predator both pins the agent in a bush and keeps
+it off the food. This design cannot say how the blame divides between them — but it can say
+the arrow does not run from hunger to hiding.</p>
+
+<h2>How much to trust this</h2>
+<div class="panel">
+<dl class="dl">
+<dt>causal</dt><dd>Anything the world rolled before the agent moved — predator count, detection
+range, scents, bush and food counts, starting injury and hunger.</dd>
+<dt>correlational</dt><dd>Anything produced during the episode — nearness, injury sustained,
+nutrition spent, damage taken. These are partly the agent's own doing.</dd>
+<dt>p-values</dt><dd>Useless here. With a million episodes everything is "significant".
+Everything above is ranked by size of effect, never by significance.</dd>
+<dt>truncation</dt><dd>A factor that shortens episodes could inflate its own apparent effect,
+since late steps carry less hiding. Recomputed on a fixed early window, every effect gets
+<em>larger</em> — so truncation is not generating them.</dd>
+<dt>scope</dt><dd>One trained agent, one run. Nothing here compares training conditions.</dd>
+</dl>
+</div>
+
+<footer>
+Outcome is the share of the agent's own chosen steps spent inside a bush; the spawn step is
+excluded, since the agent did not choose where it woke. Model: quasi-binomial regression on
+the rate with overdispersion-scaled errors. Mean survival 189.9 steps; 42.5% of episodes ended
+in being killed, 30.9% in starvation, 26.7% reached the 500-step ceiling.
+</footer>
+</div>
+
+<script>
+const CS=getComputedStyle(document.documentElement);
+const V=n=>CS.getPropertyValue(n).trim();
+const NS="http://www.w3.org/2000/svg";
+function el(t,a){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);return e}
+function svg(w,h){const s=document.createElementNS(NS,"svg");
+  s.setAttribute("viewBox",`0 0 ${w} ${h}`);s.setAttribute("role","img");return s}
+function txt(x,y,s,cls,anc){const t=el("text",{x:x,y:y,class:cls||"ax"});
+  if(anc)t.setAttribute("text-anchor",anc);t.textContent=s;return t}
+
+/* ---- ranked bars ---- */
+const RANK=[["number of predators",16.03],["predator's detection range",12.55],
+["distance to cover at spawn",-3.05],["starting nutrition",2.87],["number of bushes",2.80],
+["number of rabbits",2.39],["predator's scent",1.72],["rabbit's scent",1.61],
+["predator's attack delay",1.22],["number of food items",-1.22],["starting injury",-0.84],
+["predator's attack reach",-0.75],["number of ambush predators",0.24],
+["number of rocks",0.10],["predator's stamina",-0.01]];
+(function(){const W=680,rh=22,L=178,H=RANK.length*rh+34;
+ const s=svg(W,H);const max=17,mid=L+ (W-L-14)*0/1;
+ const x0=L, xw=W-L-16, zx=x0+xw*(3/20);
+ const sc=v=>zx+v*(xw*0.85/max);
+ for(const g of[-4,0,4,8,12,16]){const gx=sc(g);
+  s.appendChild(el("line",{x1:gx,y1:16,x2:gx,y2:H-18,stroke:V("--grid"),"stroke-width":g===0?1.4:.6}));
+  s.appendChild(txt(gx,H-6,g,"ax","middle"));}
+ RANK.forEach((d,i)=>{const y=26+i*rh, v=d[1];
+  const hl=/scent|starting injury/.test(d[0]);
+  const c=v<0?V("--false"):(hl?V("--cover"):V("--true"));
+  const a=sc(Math.min(v,0)),b=sc(Math.max(v,0));
+  s.appendChild(el("rect",{x:a,y:y-8,width:Math.max(b-a,1.2),height:13,fill:c,
+    opacity:hl?1:.82,rx:1}));
+  const t=txt(L-8,y+2,d[0],"lbl","end");if(hl)t.setAttribute("font-weight","650");
+  s.appendChild(t);
+  s.appendChild(txt(b+5,y+2,(v>0?"+":"")+v.toFixed(1),"ax"));});
+ s.appendChild(txt(L-8,H-6,"percentage points","ax","end"));
+ document.getElementById("rank").appendChild(s);})();
+
+/* ---- double dissociation ---- */
+const SM={pred:{d:[29.7,30.8,31.7,32.4,33.3,35.0],s:[88.9,95.8,101.3,106.3,110.2,115.4]},
+          rab:{d:[14.9,16.1,16.9,18.4,19.9,22.6],s:[193.3,189.1,189.5,185.9,183.0,175.6]}};
+(function(){const W=680,H=250,pad=42,gap=54,pw=(W-pad*2-gap)/2;
+ const s=svg(W,H);
+ function panel(ox,key,title,dom,fmt){
+  const yb=H-40,yt=34,ph=yb-yt;
+  s.appendChild(txt(ox,yt-14,title,"lbl"));
+  const [lo,hi]=dom;const Y=v=>yb-(v-lo)/(hi-lo)*ph;
+  for(let g=0;g<=4;g++){const v=lo+(hi-lo)*g/4;
+   s.appendChild(el("line",{x1:ox,y1:Y(v),x2:ox+pw,y2:Y(v),stroke:V("--grid"),"stroke-width":.6}));
+   s.appendChild(txt(ox-6,Y(v)+3,fmt(v),"ax","end"));}
+  for(const[k,col]of[["pred",V("--true")],["rab",V("--false")]]){
+   const a=SM[k][key],n=a.length;
+   const X=i=>ox+pw*i/(n-1);
+   let d="";a.forEach((v,i)=>d+=(i?"L":"M")+X(i)+" "+Y(v));
+   s.appendChild(el("path",{d:d,fill:"none",stroke:col,"stroke-width":2.2,
+     "stroke-linejoin":"round","stroke-linecap":"round"}));
+   a.forEach((v,i)=>s.appendChild(el("circle",{cx:X(i),cy:Y(v),r:3,fill:col})));}
+  s.appendChild(txt(ox,H-14,"less predator-like","ax"));
+  s.appendChild(txt(ox+pw,H-14,"more →","ax","end"));}
+ panel(pad,"d","share of steps hidden",[10,40],v=>v.toFixed(0)+"%");
+ panel(pad+pw+gap,"s","steps survived",[80,200],v=>v.toFixed(0));
+ document.getElementById("dd").appendChild(s);})();
+
+/* ---- aimed response ---- */
+(function(){const D=[["nothing near",20.2,28.3],["the predator near",56.4,62.7],
+  ["that rabbit near",26.7,49.8]];
+ const W=680,rh=52,H=D.length*rh+42,L=168,xw=W-L-60;
+ const s=svg(W,H);
+ s.appendChild(txt(L,16,"share of steps hidden","ax"));
+ D.forEach((d,i)=>{const y=30+i*rh, aim=i===2;
+  const bar=(v,yy,col,op)=>{s.appendChild(el("rect",{x:L,y:yy,width:Math.max(xw*v/70,1),
+    height:14,fill:col,opacity:op,rx:1}));
+   s.appendChild(txt(L+xw*v/70+7,yy+11,v.toFixed(1)+"%","ax"));};
+  bar(d[1],y,V("--muted"),.55);
+  bar(d[2],y+17,aim?V("--false"):V("--true"),aim?1:.75);
+  const t=txt(L-10,y+18,d[0],"lbl","end");if(aim)t.setAttribute("font-weight","650");
+  s.appendChild(t);
+  s.appendChild(txt(L+xw*Math.max(d[1],d[2])/70+52,y+18,
+    "+"+(d[2]-d[1]).toFixed(1)+" pp","ax"));});
+ document.getElementById("aim").appendChild(s);})();
+
+/* ---- randomised hunger ---- */
+(function(){const D=[["below 25",16.4],["25 to 50",20.6],["50 to 75",21.3],["above 75",21.4]];
+ const W=680,rh=34,H=D.length*rh+42,L=178,xw=W-L-70;
+ const s=svg(W,H);
+ s.appendChild(txt(L,14,"share of first ten steps spent hidden","ax"));
+ D.forEach((d,i)=>{const y=26+i*rh;
+  s.appendChild(el("rect",{x:L,y:y,width:Math.max(xw*d[1]/25,1),height:17,
+    fill:i===0?V("--false"):V("--cover"),opacity:i===0?1:.8,rx:1}));
+  s.appendChild(txt(L-10,y+13,d[0],"lbl","end"));
+  s.appendChild(txt(L+xw*d[1]/25+7,y+13,d[1].toFixed(1)+"%","ax"));});
+ s.appendChild(txt(L-10,H-8,"starting hunger, set at random","ax","end"));
+ document.getElementById("nut").appendChild(s);})();
+
+/* ---- proximity ---- */
+(function(){const D=[["a predator within 2 tiles",67.9,V("--false")],
+  ["a rabbit within 2 tiles",17.9,V("--cover")],["neither",11.6,V("--true")]];
+ const W=680,rh=44,H=D.length*rh+26,L=200,xw=W-L-56;
+ const s=svg(W,H);
+ D.forEach((d,i)=>{const y=20+i*rh;
+  s.appendChild(el("rect",{x:L,y:y,width:Math.max(xw*d[1]/100,1),height:22,fill:d[2],rx:1}));
+  s.appendChild(txt(L-8,y+16,d[0],"lbl","end"));
+  s.appendChild(txt(L+xw*d[1]/100+7,y+16,d[1].toFixed(1)+"%","ax"));});
+ document.getElementById("prox").appendChild(s);})();
+</script>

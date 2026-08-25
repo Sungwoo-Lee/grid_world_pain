@@ -1,11 +1,17 @@
 # What makes this agent hide? A million-episode factor analysis
 
 **Shareable page:** https://claude.ai/code/artifact/1351009f-d7f7-4114-a290-f6582bb9a004
-**Reproduce:** `python scripts/analysis/hiding_drivers.py --run results/JAX_RecurrentPPO/20260810-185749_rppo_restprem_a01_n106`
+**Reproduce (ranking, multivariate models, same-step cross-tabs):**
+`$CONDA/bin/python scripts/analysis/hiding_drivers.py --run results/JAX_RecurrentPPO/20260810-185749_rppo_restprem_a01_n106`
+where `$CONDA` is `/home/vncuser/miniconda3/envs/grid_world_pain`. The supplementary passes
+behind findings 2-4 — lagged proximity, the scent ladders, the targeted false-alarm split, the
+injury conditional table, the injury window, and the eat-block check — are archived in
+`scripts/analysis/supplementary/` and are *not* produced by the command above.
 **Extends:** [[a01_factor_analysis]] (same run, same store, narrower question)
 **Pipeline:** [[TRAJECTORY_COLLECTION_PIPELINE]]
-**Reviewed by:** `plan-reviewer`, 2026-08-25 — verdict *supported with caveats*; the two critical
-findings it raised are incorporated below (see [Review response](#review-response)).
+**Reviewed by:** `plan-reviewer`, 2026-08-25, two rounds — final verdict *conclusion supported*.
+It found one factual error in a supporting sentence; that is corrected and documented in the
+[Review response](#review-response).
 
 ## Question
 
@@ -79,9 +85,10 @@ scales can be compared.
 | predator's max stamina (30-150) | -0.0 pp | no effect at all |
 
 This is exhaustive: every quantity the environment randomises appears above. Three of them
-double as controls, and all three behave as they should. **Rocks** are scattered like bushes
-and are visually identical to them but conceal nothing — they move the behaviour not at all,
-so the agent is not merely reacting to clutter. **Where on the map the agent wakes up** should
+double as controls, and all three behave as they should. **Rocks** are scattered like bushes but
+conceal nothing, and unlike bushes they *hurt* (1-5 damage, high pain intensity). Their count
+moves the behaviour not at all, so the agent is neither reacting to clutter nor treating a
+damaging object as a reason to seek cover. **Where on the map the agent wakes up** should
 not matter in a symmetric arena, and does not. **Starting injury** is a quantity the agent
 provably cannot perceive, and lands at approximately zero.
 
@@ -102,13 +109,18 @@ the agent's own choice cannot manufacture the correlation:
 | a rabbit within 2 tiles (no predator) | 17.9% |
 | neither | 11.6% |
 
-The lagged version is *stronger* than the same-step version (67.9% vs 63.1%), which rules out
-the objection that predators merely linger near an already-hidden agent. These are
+The lagged version is *stronger* than the same-step version (67.9% vs 63.1%), which argues
+against the objection that predators merely linger near an already-hidden agent — though
+consecutive steps are autocorrelated, so it weakens that objection rather than eliminating it. These are
 associations, not causal effects — proximity is partly the agent's own doing.
 
 ### 2. The scent false alarm, and its price
 
-Both animals' scents are randomised per episode, so these are causal ladders.
+Both animals' scents are randomised per episode, so these are causal ladders. Each table is
+restricted to episodes containing **exactly one** animal of that type, so the scent is
+unambiguous; rows are the extreme sixths of the predator-likeness range (below -0.2, and above
+0.6). "Predator-likeness" is the difference between the two odour channels that separate the
+classes, derived from the run's config rather than assumed.
 
 | Rabbit's scent | Hides | Food per step | Starved | Killed | Survived |
 |---|---|---|---|---|---|
@@ -138,10 +150,12 @@ The response is aimed at the rabbit, roughly three times more strongly than anyw
 Hiding while that rabbit is nearby rises from 26.7% to 49.8% — approaching how the agent
 treats an actual predator (56.4%). This is a sensory misidentification, not a diffuse mood.
 
-*Caveat.* "Rabbit is nearby" is itself partly the agent's doing, so splitting on it conditions
-on a post-treatment variable and the +23.1 pp is not a clean causal estimate — it describes
-*where* the extra hiding lands, which is what distinguishes an aimed response from a diffuse
-one. The selection is small and works against the finding: when the rabbit smells
+*Caveat.* Proximity here is same-step, and "rabbit is nearby" is itself partly the agent's
+doing, so splitting on it conditions on a post-treatment variable. The three-way split is
+therefore a *descriptive localisation* of where the extra hiding lands — which is exactly what
+distinguishes an aimed response from a diffuse one — not a causal decomposition. The
+"nothing near" row (+8.0 pp) is the diffuse-vigilance baseline, so the aimed component is the
++15 pp excess over it. The selection is small and works against the finding: when the rabbit smells
 predator-like the agent spends slightly *less* time near it (13.0% of steps versus 14.3%),
 so the surviving near-moments are the ones it could not avoid.
 
@@ -162,12 +176,16 @@ conditioning on survival:
 | 80-100 | 19.2% | 70.5 |
 
 A **-1.0 pp** effect — roughly 25 times smaller than detection range, and pointing the wrong
-way. The reason sits in the sense table: **injury is not observable**. The agent has no
+way. Broken down step by step it is *zero* at the steps of maximal live contrast (t=1-4,
+where the injury gap is widest) and only becomes negative later in the window, which is the
+signature of differential survival rather than of injury perception: lightly-hurt episodes that
+got attacked early live on into the late window and hide, while their badly-hurt counterparts
+are already dead. The reason sits in the sense table: **injury is not observable**. The agent has no
 channel for it and feels pain only when actually struck.
 
 Raw counts appear to say the opposite: 26.3% hiding at severe injury against 17.8% at none.
-That comparison is confounded, and conditioning on what was actually happening dissolves it —
-the sign does not even hold:
+That comparison is confounded. Conditioning on what was actually happening makes it
+heterogeneous rather than uniform, and reverses it outright where a predator is near:
 
 | | mild injury (0-25) | severe injury (>=50) | difference |
 |---|---|---|---|
@@ -176,7 +194,11 @@ the sign does not even hold:
 | predator near, no recent damage | 56.9% | 35.5% | **-21.5 pp** |
 | predator near, recent damage | 36.9% | 40.2% | +3.3 pp |
 
-Injury was standing in for "a predator was around" — which is the factor doing the work.
+So injury is largely standing in for "a predator was around", which is the factor doing the
+work. One cell is worth naming rather than averaging away: with no predator near but damage
+taken recently, badly-hurt states carry +12.3 pp more hiding. That is what the sense table
+predicts — the agent cannot feel the wound, but it can feel the *strike*, and the pain trace
+persists after the predator has gone.
 
 ### 4. Hunger looks like a cause and is largely a footprint
 
@@ -185,15 +207,22 @@ straight, hunger drives hiding. Three pieces of evidence say the arrow mostly ru
 
 - **Hiding blocks foraging.** In a bush the agent eats on **7.3%** of steps; outside, **25.7%**.
   A bush holds no food, so cover is bought with meals.
-- **Randomised hunger does nothing immediately.** In the first ten steps, while nutrition is
-  still the random draw, there is no gradient at all — 18-20% flat across every hunger level.
+- **Randomised hunger acts immediately, in the *opposite* direction.** Binned by the
+  randomised starting value and measured unconditionally over the first ten steps, agents that
+  start starving hide **less**, not more: 16.4% at starting nutrition below 25, rising to 21.4%
+  above 75. A hungry agent leaves cover to forage, from the first few steps. That is the exact
+  reverse of the observational gradient.
 - **Randomised starting nutrition points the other way** over the whole episode: better-fed
   agents hide *more* (11.6% to 20.0%), because only a fed animal can afford cover.
 
-An honest caveat: the hunger-hiding association is enormous and it survives controlling for
-elapsed time (at steps 50-100 it is 72.9% versus 9.6%). Satiation *is* observable, so a genuine
-hunger-to-hiding channel cannot be excluded. What the randomised evidence rules out is hunger
-being the *primary* cause; most of the association is hiding producing hunger, not the reverse.
+So the randomised evidence and the observational association point in opposite directions.
+Hunger *is* perceivable — satiation tracks nutrition one-for-one — and the randomised effect
+shows a real hunger-to-behaviour channel: it pushes the agent **out** of cover, which is
+adaptive. The large positive observational association must therefore come from somewhere
+else. Two mechanisms are in play and this design cannot separate their shares: **reverse
+causation** (hiding blocks eating, so long bush stays produce low nutrition) and **context
+confounding** (a predator nearby both pins the agent in a bush and prevents it feeding, so
+predator presence drives hiding and hunger jointly).
 
 ## How to read these numbers
 
@@ -246,8 +275,28 @@ resolution:
 
 Its moderate findings on transient manipulation (finding 3, now windowed), the circular
 alignment assertion (a per-shard contiguity check is in `scripts/analysis/hiding_drivers.py`),
-and the false-alarm versus redundant-cue ambiguity (tested directly in finding 2) are all
-addressed above.
+and the false-alarm versus redundant-cue ambiguity (tested directly in finding 2) were all
+addressed, and a second round was requested on the revised text.
+
+**Round two found one factual error, and it was mine.** An earlier version of finding 4 claimed
+that randomised hunger "does nothing immediately — 18-20% flat across every hunger level" in
+the first ten steps. That was false. The 18-20% figures came from a table binned by the
+agent's *contemporaneous* nutrition at each step, which is not the randomised draw; I then
+described them as though they were. Binned by the actual starting value and measured
+unconditionally, hiding runs 16.4% to 21.4% — a real gradient, and one that points **opposite**
+to the observational association. Correcting the error strengthened the finding rather than
+weakening it, and finding 4 is now written around the corrected numbers. The offending script
+(`scripts/analysis/supplementary/timectrl.py`) is archived with its wart documented so the
+same misreading cannot be repeated.
+
+Round two also produced two upgrades adopted above: the start-injury effect is *zero* at the
+steps of maximal live contrast, with the small late-window negative attributable to
+differential survival; and the injury-versus-nutrition per-step curves form a matched control
+pair — the variable the agent cannot perceive does nothing immediately, the one it can perceive
+acts within about three steps. Its remaining moderate points on table subsets, reproduction
+scope, and the wording of "dissolves" and "rules out" are all incorporated; the hardcoded
+scent channels it flagged in the script are now derived from the run's config, with a hard
+failure if a run's configuration does not separate the two classes.
 
 ## Data
 

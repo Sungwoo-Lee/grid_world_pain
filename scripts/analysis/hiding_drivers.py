@@ -23,8 +23,11 @@ on different natural scales are directly comparable.
 
 Usage
 -----
-  python scripts/analysis/hiding_drivers.py --run results/JAX_RecurrentPPO/<RUN> --out <dir>
-  python scripts/analysis/hiding_drivers.py --run <RUN> --stage aggregate   # cache only
+  P=/home/vncuser/miniconda3/envs/grid_world_pain/bin/python
+  $P scripts/analysis/hiding_drivers.py --run results/JAX_RecurrentPPO/<RUN>
+  $P scripts/analysis/hiding_drivers.py --run <RUN> --stage aggregate   # cache only
+
+Run from the repo root: --run and the store globs are repo-relative.
 """
 from __future__ import annotations
 import argparse, glob, json, os, sys, time
@@ -52,7 +55,26 @@ def slot_layout(cfg: dict) -> dict:
         n = r["count_high"]
         (amb if max(r.get("damage", [0, 0])) > 0 else food).extend(range(s, s + n)); s += n
     return dict(pred=pred, neutral=neu, bush=bush, rock=rock, food=food, ambush=amb,
-                n_animal=s if False else len(pred) + len(neu))
+                n_animal=len(pred) + len(neu))
+
+
+def smell_channels(cfg: dict) -> tuple[int, int]:
+    """Find the two odour channels that separate predators from neutrals.
+
+    `pred_predatorness` is defined as (channel A - channel B), where A is the channel on which
+    predators sit highest relative to neutrals and B the reverse. Hardcoding channels 1/2 would
+    silently compute nonsense on a run whose scent layout differs, so derive them and refuse if
+    the config does not actually separate the two classes.
+    """
+    ent = cfg["environment"]["entities"]
+    pm = np.mean([e["properties"] for e in ent if e["class"] == "predator"], axis=0)
+    nm = np.mean([e["properties"] for e in ent if e["class"] != "predator"], axis=0)
+    d = np.asarray(pm) - np.asarray(nm)
+    a, b = int(np.argmax(d)), int(np.argmin(d))
+    if a == b or d[a] <= 0 or d[b] >= 0:
+        raise SystemExit("this run's scent config does not separate predators from neutrals; "
+                         "the predator-likeness regressor is undefined here")
+    return a, b
 
 
 def find_store(run: str, checkpoint: str | None) -> str:
@@ -75,7 +97,7 @@ def listcol(col, width):
 
 
 # -------------------------------------------------------------- aggregate ----
-def aggregate(store: str, lay: dict, verbose=True) -> dict:
+def aggregate(store: str, lay: dict, chans: tuple[int, int], verbose=True) -> dict:
     """One sweep of the step table -> per-episode arrays. Assumes (and asserts) that
     episodes are shard-aligned, seeds contiguous, and rows sorted by seed."""
     epf = sorted(glob.glob(store + "episodes_*.parquet"))
@@ -107,8 +129,8 @@ def aggregate(store: str, lay: dict, verbose=True) -> dict:
              pred_delay=mean_over(L("animal_attack_delay_sampled")[:, P], pa),
              pred_range=mean_over(L("animal_attack_range_sampled")[:, P], pa),
              pred_stamina=mean_over(L("animal_max_stamina_sampled")[:, P], pa),
-             pred_predatorness=mean_over(prop[:, P, 1] - prop[:, P, 2], pa),
-             rab_predatorness=mean_over(prop[:, R, 1] - prop[:, R, 2], rb))
+             pred_predatorness=mean_over(prop[:, P, chans[0]] - prop[:, P, chans[1]], pa),
+             rab_predatorness=mean_over(prop[:, R, chans[0]] - prop[:, R, chans[1]], rb))
 
     z = lambda: np.zeros(nep)
     G = {k: z() for k in ["n_rows", "n_steps", "bush_steps", "inj0", "nut0", "arow0", "acol0",
@@ -272,6 +294,7 @@ def main():
 
     cfg = yaml.safe_load(open(f"{a.run}/models/config.yaml"))
     lay = slot_layout(cfg)
+    chans = smell_channels(cfg)
     store = find_store(a.run, a.checkpoint)
     tag = os.path.basename(a.run.rstrip("/"))
     out = a.out or f"results/analysis/hiding_drivers/{tag}"
@@ -280,9 +303,10 @@ def main():
     print(f"slots predators={lay['pred']} neutrals={lay['neutral']} "
           f"bushes={len(lay['bush'])} rocks={len(lay['rock'])} "
           f"food={len(lay['food'])} ambush={len(lay['ambush'])}")
+    print(f"scent  predator-likeness = channel {chans[0]} minus channel {chans[1]}")
 
     if a.stage in ("aggregate", "all") and not os.path.exists(cache):
-        D = aggregate(store, lay)
+        D = aggregate(store, lay, chans)
         os.makedirs(out, exist_ok=True)
         np.savez_compressed(cache, **D)
         print(f"cached -> {cache}")
