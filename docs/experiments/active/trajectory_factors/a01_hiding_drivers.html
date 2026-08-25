@@ -65,6 +65,10 @@ svg{display:block;width:100%;height:auto;overflow:visible}
 .lbl{font-size:11px;fill:var(--fg)}
 .cell{font-family:var(--mono);font-size:9.5px}
 .note{font-size:.86rem;color:var(--muted);border-left:2px solid var(--rule);padding-left:.9rem}
+.motive{font-size:.9rem;line-height:1.6;border-left:3px solid var(--cover);
+  padding:.15rem 0 .15rem .95rem;margin:.2rem 0 .1rem}
+.motive b{display:block;font-family:var(--mono);font-size:.65rem;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--cover);margin-bottom:.3rem;font-weight:600}
 .method{font-size:.79rem;color:var(--muted);line-height:1.55;background:var(--panel2);
   border-radius:2px;padding:.7rem .85rem;margin-top:.2rem}
 .method b{display:block;font-family:var(--mono);font-size:.65rem;letter-spacing:.11em;
@@ -137,10 +141,25 @@ describe. Every claim below is labelled as one or the other.</div>
 </dl>
 </div>
 
+<div class="panel">
+<div class="fignum">How to read this document</div>
+<figcaption>Every analysis carries two blocks. A green-bordered <strong>Why this analysis</strong>
+before the figure says what question prompted it and what would count as an informative answer. A
+grey <strong>How this was computed</strong> after it gives the subset, the binning, what was
+conditioned on, and any known weakness in that specific number. If you only read one of the two,
+read the first &mdash; several figures here exist because an earlier one raised a doubt, and the
+motivation blocks carry that thread.<br><br>
+Sections 1&ndash;6 analyse a single trained agent. Section 7 asks whether the choice of agent
+matters. Sections 8&ndash;9 compare agents with and without a neuromodulator. Section 10 states what
+to trust, and section 11 gives the methods in full &mdash; including the four claims that were
+withdrawn or corrected during this work.</figcaption>
+</div>
+
 <h2>1 &nbsp;What the agent can actually sense</h2>
 <p>Every result turns on this, so it comes first. These are read from the settings each run itself
 saved, not from what we assumed.</p>
 
+<div class="motive"><b>Why this analysis</b>Before interpreting any behaviour we needed to know what the agent can actually perceive. This matters more than it sounds: an early draft of this document argued the agent cannot feel its own injury, which turned out to be wrong and had to be withdrawn. Reading the run's own saved settings first prevents a whole class of confident wrong conclusions downstream.</div>
 <figure class="panel">
 <div class="fignum">Figure 1 &mdash; the senses</div>
 <dl class="dl">
@@ -168,6 +187,7 @@ Since the agent is blind at distance, smell is all it has.</p>
 <p>Every feature the world rolls at random, ordered by how strongly it shifts hiding. Because the
 world rolls them before the agent acts, these are causes.</p>
 
+<div class="motive"><b>Why this analysis</b>The starting question was simply &ldquo;what makes this agent hide?&rdquo; Sixteen things vary from episode to episode at once, so no amount of watching individual episodes will answer it. Putting every factor on one common scale says where the behaviour actually comes from, and just as usefully, which factors do nothing.</div>
 <figure class="panel">
   <div class="fignum">Figure 2 &mdash; ranked causes</div>
   <div id="rank"></div>
@@ -200,6 +220,7 @@ channels, it is mostly just reading one of them.</div>
 <p>Ranking compresses each factor to one number. Here is the actual shape of each &mdash; how
 hiding and how long it lives change as the factor is dialled up.</p>
 
+<div class="motive"><b>Why this analysis</b>A single number per factor hides its shape. A factor might matter only at the extremes, or saturate halfway, or move behaviour and survival in opposite directions. We plot bush dwell and survival together because the informative cases are exactly where the two diverge &mdash; a factor that changes how the agent behaves without changing how long it lives is telling us something different from one that changes both.</div>
 <figure class="panel">
   <div class="fignum">Figure 3 &mdash; dose&ndash;response, twelve factors</div>
   <div id="curves"></div>
@@ -220,6 +241,7 @@ hiding and how long it lives change as the factor is dialled up.</p>
 a predator happens to smell strongly of predator &mdash; and, separately, when a harmless rabbit
 happens to smell exactly the same way.</p>
 
+<div class="motive"><b>Why this analysis</b>The ranking threw up something odd: the rabbit's smell moves behaviour almost as much as the predator's does. Rabbits are harmless, so if that is real it means the agent cannot tell the two apart from smell alone. This tests that directly, and attaches the consequence &mdash; because a mistake that costs nothing is not much of a mistake.</div>
 <figure class="panel">
   <div class="fignum">Figure 4 &mdash; same response, opposite consequence</div>
   <div id="dd"></div>
@@ -239,6 +261,7 @@ happens to smell exactly the same way.</p>
 ambiguous nose: treat a predator-ish smell as a predator. The world simply does not let it find out
 which is which until too late.</p>
 
+<div class="motive"><b>Why this analysis</b>Knowing the agent hides more is not enough on its own. We wanted the whole path from the misread smell to the outcome the project actually cares about &mdash; does it eat less, starve more, and die sooner? A mistake that costs nothing is not much of a mistake.</div>
 <figure class="panel scroll">
 <div class="fignum">Figure 5 &mdash; the full chain, from nose to grave</div>
 <table>
@@ -260,6 +283,7 @@ nothing and the missed meals are real.</figcaption>
 hides more everywhere. That would be a mood, not a mistake. The two can be told apart, because a
 mistake should be <em>aimed</em>.</p>
 
+<div class="motive"><b>Why this analysis</b>A sceptic could reasonably say the agent is not mistaking anything &mdash; a predator-ish smell anywhere just makes it generally nervous, so it hides more everywhere. That would be a mood, not a misidentification. The two make different predictions about WHERE the extra hiding shows up, so they can be told apart.</div>
 <figure class="panel">
   <div class="fignum">Figure 6 &mdash; the response is aimed at the rabbit</div>
   <div id="aim"></div>
@@ -275,6 +299,7 @@ mistake should be <em>aimed</em>.</p>
 </figure>
 
 <h2>4 &nbsp;Nearness</h2>
+<div class="motive"><b>Why this analysis</b>Before crediting smell with anything, check the simpler explanation: is a predator just physically close? This also lets us test the obvious reverse reading &mdash; that predators linger near an agent that is already hiding, rather than the agent hiding because a predator arrived.</div>
 <figure class="panel">
   <div class="fignum">Figure 7 &mdash; what was nearby one step earlier</div>
   <div id="prox"></div>
@@ -287,6 +312,12 @@ mistake should be <em>aimed</em>.</p>
 </figure>
 
 <h2>5 &nbsp;Pain</h2>
+<p>Sections 2 to 4 established that the agent's behaviour is dominated by things outside it &mdash;
+how many predators there are, how far they can see, how close they get. This section turns inward.
+The project's motivating interest is interoception, so the question here is what the agent's
+<em>own bodily state</em> contributes, and whether the answer survives the confounds that make
+internal state so treacherous to analyse. It mostly does not survive them intact, and the way it
+fails is the interesting part.</p>
 <p>The agent feels its wounds, but through a strange window: a blurred average of how hurt it
 has been over the last dozen steps, weighted towards about three steps ago, never including right
 now. A fresh wound is not yet felt; a healed one still is. That blur is useful to us, because it
@@ -304,6 +335,7 @@ confirms our hiding measure means what its name says.</figcaption>
 </figure>
 
 <h3>Getting hurt produces a reaction &mdash; a modest one</h3>
+<div class="motive"><b>Why this analysis</b>Does being hurt change what the agent does, and over what timescale? Aligning every damage event and averaging around it is the standard way to see a response emerge and decay. It also tells us whether the response timing is consistent with the agent's pain signal, which peaks three steps after an injury.</div>
 <figure class="panel">
   <div class="fignum">Figure 8 &mdash; behaviour around a moment of damage</div>
   <div id="peri"></div>
@@ -325,6 +357,7 @@ confirms our hiding measure means what its name says.</figcaption>
 <p>This is the sharpest thing the data say about pain. Take the moments when the agent feels
 pain and no predator is near, and split them by <em>how it came to be hurt</em>.</p>
 
+<div class="motive"><b>Why this analysis</b>This is the central question of the whole study. Pain could drive behaviour in two quite different ways: as something to flinch from, or as evidence that a predator is nearby. Those are indistinguishable in normal circumstances &mdash; but the environment randomly assigns some agents a wound at the start of an episode, with nothing having attacked them. That gives us pain without the evidence, and lets the two accounts come apart.</div>
 <figure class="panel">
   <div class="fignum">Figure 9 &mdash; feeling held constant, origin varied</div>
   <div id="hits"></div>
@@ -346,6 +379,7 @@ the only way to get hurt. The one case where it fails is precisely the wound it 
 strike count marks a hopeless situation as much as a memory.</p>
 
 <h3>Is pain just standing in for "late in the episode"?</h3>
+<div class="motive"><b>Why this analysis</b>A worry about every injury result so far: injury accumulates over an episode and so does almost everything else, so the wound-behaviour link might just be a proxy for &ldquo;late in the episode&rdquo;. Splitting by elapsed time as well as by wound level tests that directly.</div>
 <figure class="panel">
   <div class="fignum">Figure 10 &mdash; hiding by wound level and by how far into the episode</div>
   <div id="hminj"></div>
@@ -358,6 +392,7 @@ strike count marks a hopeless situation as much as a memory.</p>
 </figure>
 
 <h3>Approaching death</h3>
+<div class="motive"><b>Why this analysis</b>Clinical accounts of pain differ on what happens near the extreme &mdash; whether protective behaviour keeps rising or gives way. The environment has a hard lethal ceiling, so we can simply look.</div>
 <figure class="panel">
   <div class="fignum">Figure 11 &mdash; hiding as the wound nears fatal</div>
   <div id="lethal"></div>
@@ -401,6 +436,11 @@ moves bush dwell by +7.95 here against +3.59 in one-predator episodes, and
 </div>
 
 <h2>6 &nbsp;Hunger</h2>
+<p>Hunger is the other half of the agent's internal state, and the more obviously consequential one
+&mdash; starvation kills roughly a third of all episodes. It also sets up the trade-off the whole
+environment is built around: a bush is safe and holds no food, so time spent hidden is time not
+spent eating.</p>
+<div class="motive"><b>Why this analysis</b>The same confound check as for injury, applied to hunger. The raw hunger-hiding association is enormous, so before interpreting it we need to know whether it survives holding elapsed time constant.</div>
 <figure class="panel">
   <div class="fignum">Figure 12 &mdash; hiding by hunger and by how far into the episode</div>
   <div id="hmnut"></div>
@@ -428,10 +468,15 @@ it off the food. This design cannot say how the blame divides, but it can say th
 from hunger to hiding.</p>
 
 <h2>7 &nbsp;Does it matter which trained agent you use?</h2>
+<p>Everything so far comes from one trained agent, which raises an obvious worry: how much of it is
+about this task, and how much about this particular run? Ten agents were trained differing in one
+setting, and because all ten were evaluated on the identical set of worlds we can answer that
+question unusually cleanly.</p>
 <p>We trained ten, identical except for one dial &mdash; how much extra healing they earn for
 <em>continuing</em> to rest &mdash; and dropped all ten through the <em>same</em> million worlds. Any
 difference between them is the agent, never the world.</p>
 
+<div class="motive"><b>Why this analysis</b>Every result up to here comes from one trained agent. If different agents behave very differently, none of it generalises. Because all ten see the identical set of worlds, any difference between them is the agent and not the environment &mdash; which is a much cleaner comparison than usual.</div>
 <figure class="panel">
   <div class="fignum">Figure 13 &mdash; the ten agents</div>
   <div id="runs"></div>
@@ -443,6 +488,7 @@ difference between them is the agent, never the world.</p>
 <div class="method"><b>How this was computed</b><dl><dt>each dot</dt><dd>one trained agent, aggregated over its own million episodes</dd><dt>pairing</dt><dd>all ten replay the identical 1,000,000 world draws — verified by comparing every exogenous column across runs — so differences are the agent, never the world</dd><dt>shading</dt><dd><code>recovery_accel_rate</code>, read from each run's own config. The real values are 0, 0.3, 0.5, 0.7, 0.9, 1.0, 1.2, 1.5, 2.0, 2.7 — not the linear ramp an earlier version assumed</dd></dl></div>
 </figure>
 
+<div class="motive"><b>Why this analysis</b>The scatter shows the agents differ, but by how much compared with everything else? Since both the agent and the environment are deterministic, the variation can be split exactly rather than estimated &mdash; so we can put a precise number on how much choosing a different trained agent actually matters.</div>
 <figure class="panel">
   <div class="fignum">Figure 14 &mdash; where the variation comes from</div>
   <div id="var"></div>
@@ -470,6 +516,7 @@ difference between them is the agent, never the world.</p>
 </dl>
 </div>
 
+<div class="motive"><b>Why this analysis</b>Is the coupling between pain and behaviour a property of this task, or an accident of one training run? Ten independently trained agents give a direct answer.</div>
 <figure class="panel">
   <div class="fignum">Figure 15 &mdash; all ten react to pain the same way</div>
   <div id="armpain"></div>
@@ -481,6 +528,10 @@ difference between them is the agent, never the world.</p>
 </figure>
 
 <h2>8 &nbsp;Does a neuromodulator help?</h2>
+<p>The findings above describe an agent that reacts strongly to an ambiguous smell and pays for it
+in survival. A natural response is to give it machinery for adjusting its perception according to
+context &mdash; which is what the project's neuromodulator line does. This section asks whether that
+machinery helps, and it is the part of the document where the answer changed most under scrutiny.</p>
 <p>A separate line of work adds a small extra network &mdash; a <strong>modulator</strong> &mdash;
 that reads the agent's internal state and turns the volume up or down on what it perceives. The
 hope is specific: an agent that can adjust its senses according to how hurt or hungry it is should
@@ -491,6 +542,7 @@ are identical in every respect &mdash; same world, same body, same senses, same 
 same starting seed, the same moment in training &mdash; except one has the modulator and one does
 not. We ran all four pairs through the same million worlds each.</p>
 
+<div class="motive"><b>Why this analysis</b>The neuromodulator was built on a specific hope: an agent that can adjust its perception according to its internal state should respond to the world more appropriately. The rabbit false alarm is the sharpest available test of that, because it is a case where the agent's current perception is demonstrably leading it astray.</div>
 <figure class="panel">
   <div class="fignum">Figure 16 &mdash; four pairs, and they do not agree</div>
   <div id="nmn"></div>
@@ -508,6 +560,7 @@ where predators can pounce from two or three tiles away. And the survival effect
 different line entirely &mdash; by the return estimator the training used (GAE against Monte-Carlo). With only two
 pairs on each side, that could still be coincidence, but it is the pattern to watch.</p>
 
+<div class="motive"><b>Why this analysis</b>If the modulator does not reliably change average behaviour, does it change anything at all? Splitting the variation exactly, as in Figure 14, answers that without relying on any single comparison.</div>
 <figure class="panel">
   <div class="fignum">Figure 17 &mdash; what survives all four pairs</div>
   <div id="nmnvar"></div>
@@ -521,6 +574,9 @@ pairs on each side, that could still be coincidence, but it is the pattern to wa
 </figure>
 
 <h2>9 &nbsp;The measure built for the modulator</h2>
+<p>Section 8 asked whether the modulated agent behaves differently, and got four answers that split
+two-two. That suggests the question was wrong rather than the answer being unstable, so this section
+asks a different one &mdash; the one the modulator's design actually predicts.</p>
 <p>The comparisons above ask whether the modulated agent behaves differently. That is the wrong
 question for what a modulator is meant to do. A modulator adjusts perception <em>according to
 internal state</em> &mdash; so the sharp prediction is that its <strong>reaction to a nearby
@@ -536,6 +592,7 @@ situation. In the <strong>randomised</strong> version the world assigns the woun
 episode before the agent acts, so the pattern describes the agent's disposition. Only the
 second is a cause.</div>
 
+<div class="motive"><b>Why this analysis</b>The comparisons above ask whether the modulated agent behaves differently on average, which is arguably the wrong question. A modulator adjusts perception <em>according to internal state</em>, so its real prediction is an interaction: the agent's reaction to a nearby predator should depend more on how hurt it is. This is the measure built specifically to test that, and it is intended to be re-run against future versions of the modulator.</div>
 <figure class="panel">
   <div class="fignum">Figure 18 &mdash; predator-proximity effect against randomly assigned injury</div>
   <div id="ctx"></div>
@@ -550,6 +607,7 @@ second is a cause.</div>
 <div class="method"><b>How this was computed</b><dl><dt>predator-proximity effect</dt><dd>P(in bush | a predator within 2 tiles) &minus; P(in bush | none), computed separately within each level of internal state. A modulator that gates perception by state should make this vary more across states</dd><dt>this figure is the causal version</dt><dd>state is binned by the injury the world assigned at episode start, before the agent acted, and only the first 25 steps are counted. The observational version — binning by the agent's own current nociception — is computed too and disagrees in sign, which is why the two are kept apart</dd><dt>state bins</dt><dd>reconstructed nociception observation at 0, 0&ndash;8, 8&ndash;18, 18&ndash;32, &gt; 32. The zero bin is excluded from the trend because it is &ldquo;no signal at all&rdquo; rather than a level of signal, and it dominates the step count</dd><dt>tool</dt><dd><code>scripts/analysis/context_dependence.py</code>, run-agnostic and re-runnable against future checkpoints</dd></dl></div>
 </figure>
 
+<div class="motive"><b>Why this analysis</b>The figure above shows the shape of the effect; this puts a single number on it, so a future version of the modulator can be compared against this baseline rather than eyeballed.</div>
 <figure class="panel scroll">
 <div class="fignum">Figure 19 &mdash; does the modulator widen the effect?</div>
 <table>
