@@ -13,6 +13,7 @@ injury conditional table, the injury window, and the eat-block check — are arc
 reader challenge — see [Corrections](#review-response). Finding 3 was rewritten after the
 original claim ("the agent cannot perceive its own injury") was found to be **wrong**.
 **Replicated across all 10 trained arms** — see [Cross-arm](#cross-arm).
+Other runs that could be analysed: [What else](#other-runs).
 A step-level deep dive on the pain channel is in [Interoceptive pain](#nociception) —
 which concludes that the interoceptive channel's specific role is **not identified** by this
 data, and names the experiment that would settle it.
@@ -502,9 +503,43 @@ analysis identifies as null, which is exactly the behaviour a null should show.
 The scent false alarm is not a quirk of one training run — it is present in every agent, and
 a01, the arm this document analyses, has the **weakest** version of it.
 
+The ten arms differ in exactly one setting: `body.recovery_accel_rate`, the extra healing
+earned for *continuing* to rest. The values are **0.0, 0.3, 0.5, 0.7, 0.9, 1.0, 1.2, 1.5, 2.0,
+2.7** — denser at the low end, not a linear ramp. (An earlier version of the cross-arm table
+labelled these with an assumed linear ramp, which was wrong for seven of the ten arms. The
+labels were cosmetic — the parameter is never a regressor — but the script now reads each value
+from the run's own config rather than assuming.)
+
 Overall hiding ranges 16.6% to 19.0% and mean survival 180.3 to 189.9 steps across arms. No
 causal claim is made about the resting-bonus parameter: one training run per arm cannot
 separate the parameter from the run.
+
+<a id="other-runs"></a>
+## What else could be analysed
+
+This document covers **one family of runs**: `rppo_restprem`, final checkpoint (~100M steps),
+1,000,000 episodes replayed per arm. The repository holds 299 recurrent-PPO runs, 113
+Dreamer-SRL and 36 DreamerV3. The families worth considering next:
+
+| family | runs | trained to | config format | why it is interesting |
+|---|---|---|---|---|
+| **`rppo_restpremNH`** | 10 | ~59M | modern | **The paired counterfactual.** Identical to `restprem` — same ten healing values, same world — except the **ambush predators are removed entirely**. Directly tests whether the hiding behaviour depends on cover also being dangerous. |
+| `rppo_bushrefuge` | 4 | 100M | modern | Fully trained; cover-focused design. |
+| `rppo_nmn_g32_b04` | 3 | 36M | modern | Neuromodulation (FiLM) architecture. |
+| `rppo_nmn_tempceil10_p3_film_g1` | 3 | 10M | **legacy** | The only family with **`perceptual_noise.enabled: True`** — injury degrades the senses, giving the agent a second, indirect route to knowing it is hurt. The natural contrast for the unresolved pain question. |
+| `rppo_hg02` / `rppo_hg04` | 3 + 3 | 10M | modern | Hypervigilance series. |
+| `interoNocicept_*` | 4 | 100k | legacy | Too short to be worth replaying. |
+
+Two practical notes.
+
+**Budget matching.** `restpremNH` trained to ~59M steps against `restprem`'s ~100M, so a naive
+comparison confounds the manipulation with training length. `restprem` kept 1000 checkpoints, so
+a step-matched checkpoint near 59M exists and should be used instead of the final one.
+
+**Legacy configs.** `scripts/analysis/hiding_drivers.py` derives its slot layout from
+`environment.entities`. The `nmn_tempceil10` and `interoNocicept` families predate that key and
+carry `predators:` / `neutral_animals:` instead; the tool would need a legacy branch in
+`slot_layout` before it could read them.
 
 ## Data
 
