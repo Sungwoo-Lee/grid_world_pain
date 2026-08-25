@@ -152,8 +152,9 @@ hiding and how long it lives change as the factor is dialled up.</p>
     <span><i class="sw" style="background:var(--cover)"></i>share of time hidden</span>
     <span><i class="sw" style="background:var(--warm)"></i>steps survived</span>
   </div>
-  <figcaption>Each panel dials one world feature from its lowest setting to its highest. Note how
-  differently the two lines behave: a keener predator drives hiding up sharply <em>and</em> survival
+  <figcaption>Each panel dials one world feature from its lowest setting to its highest.
+  <strong>Each panel is scaled to its own range, so compare the shapes rather than the heights
+  between panels.</strong> Note how differently the two lines behave: a keener predator drives hiding up sharply <em>and</em> survival
   down sharply, while more food barely touches hiding but transforms survival. Flat lines are the
   controls.</figcaption>
 </figure>
@@ -280,9 +281,8 @@ strike count marks a hopeless situation as much as a memory.</p>
 <figure class="panel">
   <div class="fignum">Figure 10 &mdash; hiding by wound level and by how far into the episode</div>
   <div id="hminj"></div>
-  <figcaption>Darker means more hiding. Rows are how far into the episode; columns are how badly wounded. If
-  the wound-hiding link were merely a proxy for elapsed time, the pattern would run flat across
-  each row. It does not: within almost every time band,
+  <figcaption>Darker means more hiding. If the wound-hiding link were merely a proxy for elapsed
+  time, the pattern would run flat across each row. It does not: within almost every time band,
   hiding rises with the wound. But note the leftmost column &mdash; an <em>uninjured</em> creature
   hides a lot too, because hiding is exactly what keeps it uninjured.</figcaption>
 </figure>
@@ -313,8 +313,7 @@ signal held constant or falsified, and see whether behaviour moves.</figcaption>
 <figure class="panel">
   <div class="fignum">Figure 12 &mdash; hiding by hunger and by how far into the episode</div>
   <div id="hmnut"></div>
-  <figcaption>Rows are how far into the episode; columns are how well fed. The pattern is enormous and it does
-  <em>not</em> wash out with elapsed time
+  <figcaption>The pattern here is enormous and it does <em>not</em> wash out with elapsed time
   &mdash; a starving creature hides far more in every band. Read naively that says hunger drives
   hiding. It runs the other way.</figcaption>
 </figure>
@@ -556,12 +555,15 @@ const RANK=[["number of predators",16.03],["predator's eyesight",12.55],
  "spawn distance to nearest bush":"distance to cover","randomised START injury":"starting injury",
  "randomised START nutrition":"starting hunger","rocks":"rocks (control)",
  "predator max stamina":"stamina (control)"};
- const cols=3,cw=232,chh=126,W=cols*cw,H=Math.ceil(pick.length/cols)*chh+52;
+ const cols=3,cw=232,chh=126,W=cols*cw,H=Math.ceil(pick.length/cols)*chh+72;
  const s=svg(W,H);
- xlab(s,W/2,20,"each panel: one world feature dialled from its LOWEST to its HIGHEST setting");
+ xlab(s,W/2,16,"each panel: one world feature dialled from its LOWEST to its HIGHEST setting");
+ s.appendChild(txt(46,32,"\u25A0 LEFT axis: share of time hidden","axt",null,V("--cover")));
+ s.appendChild(txt(300,32,"\u25A0 RIGHT axis: steps survived","axt",null,V("--warm")));
+ s.appendChild(txt(46,44,"each panel is scaled to its own range \u2014 compare SHAPES, not heights, between panels","axu"));
  pick.forEach((k,i)=>{const c=D.curves[k]; if(!c)return;
-  const ox=(i%cols)*cw+46, oy=Math.floor(i/cols)*chh+56, pw=cw-72, ph=chh-64;
-  s.appendChild(txt(ox-38,oy-14,nice[k]||k,"lbl"));
+  const ox=(i%cols)*cw+46, oy=Math.floor(i/cols)*chh+76, pw=cw-72, ph=chh-64;
+  s.appendChild(txt(ox,oy-14,nice[k]||k,"lbl"));
   const dw=c.dwell, sv=c.survival, n=dw.length;
   const dmax=Math.max(60,Math.ceil(Math.max(...dw)/10)*10), smax=Math.max(...sv);
   const X=j=>ox+(n===1?pw/2:pw*j/(n-1));
@@ -579,8 +581,6 @@ const RANK=[["number of predators",16.03],["predator's eyesight",12.55],
   s.appendChild(txt(ox,oy+ph+14,c.labels[0],"ax"));
   s.appendChild(txt(ox+pw,oy+ph+14,c.labels[n-1],"ax","end"));
   s.appendChild(txt(ox+pw/2,oy+ph+25,"low → high","axu","middle"));});
- ylab(s,14,H/2,"LEFT axis: share of time hidden","axt",V("--cover"));
- ylab(s,W-10,H/2,"RIGHT axis: steps survived","axt",V("--warm"));
  put("curves",s);})();
 
 /* F4 double dissociation */
@@ -631,7 +631,7 @@ const RANK=[["number of predators",16.03],["predator's eyesight",12.55],
   s.appendChild(txt(L+xw*d[1]/100+7,y+15,d[1].toFixed(1)+"%","ax"));});
  for(const g of[0,25,50,75,100]){s.appendChild(txt(L+xw*g/100,H-32,g+"%","ax","middle"));}
  xlab(s,L+xw/2,H-14,"share of steps hidden");
- ylab(s,14,(H-40)/2,"what was nearby one step earlier");
+ ylab(s,14,(H-40)/2,"what was nearby");
  put("prox",s);})();
 
 /* F8 peri-event */
@@ -707,7 +707,7 @@ heat("hits",D.hits.hide,["feels nothing","a little","some","a lot","severe","ext
    s.appendChild(txt(X(j),Y(q)-9,q.toFixed(1),"ax","middle"));
    s.appendChild(txt(X(j),H-mb+15,labs[j],"ax","middle"));});
  xlab(s,ml+pw/2,H-30,"how badly wounded  →  (rightmost = close to death)");
- ylab(s,16,mt+ph/2,"share of steps hidden");
+ ylab(s,16,mt+ph/2,"share hidden");
  put("lethal",s);})();
 
 /* F13 ten agents scatter */
@@ -785,7 +785,7 @@ heat("hits",D.hits.hide,["feels nothing","a little","some","a lot","severe","ext
   s.appendChild(txt(cx-14,H-mb+30,help?"helps":"hurts","ax","middle",
     help?V("--cover"):V("--false")));});
  xlab(s,ml+pw/2,H-30,"which matched pair of creatures");
- ylab(s,16,mt+ph/2,"leans on the REAL cue vs the FALSE one");
+ ylab(s,16,mt+ph/2,"real cue vs false cue");
  s.appendChild(txt(ml,mt-18,"above the dashed line = weights the real predator more","axu"));
  [[V("--muted"),.6,"no modulator"],[V("--cover"),1,"with modulator"]].forEach((c,k)=>{
   const x=ml+pw-170+k*88; s.appendChild(el("rect",{x:x,y:mt-28,width:9,height:9,fill:c[0],
@@ -831,8 +831,8 @@ heat("hits",D.hits.hide,["feels nothing","a little","some","a lot","severe","ext
   s.appendChild(txt(ox,oy+ph+13,"less hurt","ax"));
   s.appendChild(txt(ox+pw,oy+ph+13,"more →","ax","end"));});
  xlab(s,W/2,H-46,"how badly the world wounded it at the start of the episode  →");
- ylab(s,16,52+(H-146)/2,"how much MORE it hides when a predator is near");
- s.appendChild(txt(20,H-16,"(percentage points). A rising line means a wounded creature is more alert.","axu"));
+ ylab(s,16,52+(H-146)/2,"alarm response");
+ s.appendChild(txt(20,H-16,"\u201Calarm response\u201D = how many MORE percentage points of its time it spends hidden when a predator is near. Rising = a wounded creature is more alert.","axu"));
  put("ctx",s);})();
 
 /* F19 context table */
