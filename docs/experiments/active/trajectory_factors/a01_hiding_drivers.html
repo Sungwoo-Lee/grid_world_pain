@@ -65,6 +65,14 @@ svg{display:block;width:100%;height:auto;overflow:visible}
 .lbl{font-size:11px;fill:var(--fg)}
 .cell{font-family:var(--mono);font-size:9.5px}
 .note{font-size:.86rem;color:var(--muted);border-left:2px solid var(--rule);padding-left:.9rem}
+.method{font-size:.79rem;color:var(--muted);line-height:1.55;background:var(--panel2);
+  border-radius:2px;padding:.7rem .85rem;margin-top:.2rem}
+.method b{display:block;font-family:var(--mono);font-size:.65rem;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:.35rem;font-weight:600}
+.method code{background:transparent;padding:0;font-size:.94em}
+.method dl{display:grid;grid-template-columns:auto 1fr;gap:.22rem .8rem;margin:0}
+.method dt{font-family:var(--mono);font-size:.72rem;color:var(--muted);white-space:nowrap}
+.method dd{margin:0}
 footer{font-size:.83rem;color:var(--muted);line-height:1.6;border-top:1px solid var(--rule);
   padding-top:1.3rem;margin-top:2.2rem}
 code{font-family:var(--mono);font-size:.85em;background:var(--panel);padding:.1em .35em;border-radius:2px}
@@ -143,6 +151,7 @@ saved, not from what we assumed.</p>
 </dl>
 <figcaption>The agent is blind at distance and its only long-range sense is smell. That single
 fact drives the largest finding in this document.</figcaption>
+<div class="method"><b>How this was computed</b><dl><dt>source</dt><dd>the run's own <code>models/config.yaml</code>, written at training time — not the repository defaults, which have since changed</dd><dt>keys read</dt><dd><code>sensory.visual_sensor_range</code> = 0, <code>sensory.olfactory_enabled</code> = true with <code>sensor_radius</code> 20, <code>sensory.injury_observable</code> = false, <code>sensory.nutrition_observable</code> = false, <code>sensory.interoceptive_nociception_enabled</code> = true</dd><dt>verified</dt><dd>today's environment code reproduces this run's sensors exactly — recorded actions from 25 episodes (5,298 steps) replayed through current code differ from the observations the original code wrote by at most 2.4e-07 across all 27 channels</dd></dl></div>
 </figure>
 
 <p>And here is a trap built into the world on purpose. There are two kinds of animal: predators,
@@ -167,6 +176,7 @@ world rolls them before the agent acts, these are causes.</p>
   <code>lose_interest_multiplier</code>, and every visual and resource property) are absent
   because they cannot have an effect. Three genuine controls land at zero:
   <code>rock_count</code>, where on the map the agent wakes up, and <code>max_stamina</code>.</figcaption>
+<div class="method"><b>How this was computed</b><dl><dt>outcome</dt><dd>bush dwell = bush steps &divide; chosen steps, per episode. The spawn row (<code>t=0</code>) is excluded from both, because the agent did not choose where it woke</dd><dt>model</dt><dd>quasi-binomial GLM: successes = bush steps, failures = the rest, logit link. Standard errors multiplied by &radic;(Pearson &chi;&sup2; / residual df) to absorb overdispersion, which runs 13&ndash;25 depending on the model</dd><dt>bar length</dt><dd>coefficient &times; the factor's standard deviation &times; p&#772;(1&minus;p&#772;) &times; 100, i.e. the percentage-point change in bush dwell for a one-standard-deviation move in that factor, evaluated at the observed mean dwell</dd><dt>subsets</dt><dd>factors defined for every episode use all 1,000,000. Predator traits use the 333,743 exactly-one-predator episodes so the trait is unambiguous; rabbit olfaction uses the 333,766 one-rabbit episodes</dd><dt>why per-SD</dt><dd>the factors have wildly different natural units (a count of 0&ndash;2 against a stamina of 30&ndash;150). Per-unit effects are also reported in the CSV output but are not comparable across rows</dd><dt>significance</dt><dd>not used for ranking. At n = 10<sup>6</sup> every factor clears any threshold; ordering is by effect size only</dd></dl></div>
 </figure>
 
 <p>Two features dominate everything else: whether predators exist at all, and how far they can
@@ -197,6 +207,8 @@ hiding and how long it lives change as the factor is dialled up.</p>
   differently the two lines behave: a keener predator drives hiding up sharply <em>and</em> survival
   down sharply, while more food barely touches hiding but transforms survival. Flat lines are the
   controls.</figcaption>
+
+<div class="method"><b>How this was computed</b><dl><dt>binning</dt><dd>each factor split at its own natural levels — integer counts get one bin per value; continuous ones (max stamina, start injury, start nutrition, distances) get fixed edges</dd><dt>green line</dt><dd>total bush steps in the bin &divide; total chosen steps in the bin. A ratio of sums, not a mean of per-episode ratios, so long and short episodes weight correctly</dd><dt>amber line</dt><dd>mean episode length in the bin, in steps</dd><dt>conditioning</dt><dd>none — every episode counts, including those that ended early. Because the factor was rolled at random before the agent acted, comparing bins is a causal contrast</dd><dt>scaling</dt><dd>each panel normalised to its own maximum: shapes comparable between panels, heights are not</dd></dl></div>
 </figure>
 
 <h2>3 &nbsp;The mistake it makes</h2>
@@ -215,6 +227,8 @@ happens to smell exactly the same way.</p>
   for the harmless rabbit just as readily as for the real predator. Right: what that costs.
   Reacting to a real predator's smell buys 30% more life. Reacting identically to a rabbit's smell
   costs 9% of it.</figcaption>
+
+<div class="method"><b>How this was computed</b><dl><dt>x quantity</dt><dd>olfactory identity = channel 1 &minus; channel 2 of <code>animal_property_sampled</code>, averaged over active animals of that class. Redrawn each episode from a clipped normal — predators around (0.7, 0.5), rabbits around (0.5, 0.7), spread 0.3 each</dd><dt>subsets</dt><dd>predator panel: the 333,743 exactly-one-predator episodes. Rabbit panel: the 333,766 one-rabbit episodes. One animal makes the draw unambiguous</dd><dt>bins</dt><dd>six, at identity &lt; &minus;0.2, then 0.2-wide steps to &gt; 0.6</dd><dt>causal status</dt><dd>drawn at reset before the agent acts, and verified in <code>src/environment/sensor.py</code> to feed only the olfactory sensor. Both ladders are causal</dd></dl></div>
 </figure>
 
 <p>The agent is not being stupid. It is doing the only thing available to a blind animal with an
@@ -232,6 +246,7 @@ which is which until too late.</p>
 chain: misread the smell, hide more, eat less, starve sooner. Hiding does buy real protection
 &mdash; being caught falls &mdash; but when the threat was never there the protection is worth
 nothing and the missed meals are real.</figcaption>
+<div class="method"><b>How this was computed</b><dl><dt>rows</dt><dd>the extreme bins of the same six-way split as the figure above, on the one-rabbit episodes</dd><dt>food per step</dt><dd>total <code>ate_food</code> events &divide; total chosen steps in the bin</dd><dt>starves / is caught</dt><dd>share of episodes in the bin whose <code>termination_reason</code> was starvation (2) or injury death (4)</dd><dt>survives</dt><dd>mean episode length in the bin</dd><dt>why it is a chain</dt><dd>every column is measured on the same randomised split, so the columns move together by construction of the experiment rather than by selection</dd></dl></div>
 </figure>
 
 <h3>Is it really mistaking the rabbit, or just generally jumpy?</h3>
@@ -250,6 +265,7 @@ mistake should be <em>aimed</em>.</p>
   nearby at the time. The response is aimed at the rabbit roughly three times more strongly than
   anywhere else. When that rabbit comes near, hiding jumps from 26.7% to 49.8% &mdash; close to how
   this agent treats a genuine predator, 56.4%.</figcaption>
+<div class="method"><b>How this was computed</b><dl><dt>subset</dt><dd>the 111,211 episodes with exactly one predator AND exactly one rabbit, so the predator context is held fixed while the rabbit's draw varies</dd><dt>split</dt><dd>rabbit olfactory identity &lt; 0 (&ldquo;smells rabbit-like&rdquo;) against &ge; 0.3 (&ldquo;smells predator-like&rdquo;)</dd><dt>nearby</dt><dd>Chebyshev distance &le; 2 tiles, same step, using the recorded per-step positions of every active animal</dd><dt>three states</dt><dd>predator near takes precedence; &ldquo;rabbit near&rdquo; means a rabbit within 2 and no predator within 2</dd><dt>caveat</dt><dd>splitting on &ldquo;rabbit is nearby&rdquo; conditions on a state the agent partly controls, so this localises where the extra dwell falls rather than estimating a causal effect. The selection runs against the finding: the predator-smelling group spends slightly less time near the rabbit, 13.0% of steps against 14.3%</dd></dl></div>
 </figure>
 
 <h2>4 &nbsp;Nearness</h2>
@@ -260,6 +276,8 @@ mistake should be <em>aimed</em>.</p>
   the agent's own choice cannot manufacture the pattern. A rabbit nearby lifts hiding a little; a
   predator nearby transforms it. This is an association, not a cause &mdash; how close a predator
   gets is partly the agent's own doing.</figcaption>
+
+<div class="method"><b>How this was computed</b><dl><dt>lagging</dt><dd>each step classified by animal positions at <code>t&minus;1</code>, scored by bush occupancy at <code>t</code>, within the same episode. Boundary steps dropped</dd><dt>nearby</dt><dd>Chebyshev distance &le; 2 tiles. &ldquo;Rabbit near&rdquo; means a rabbit within 2 and no predator within 2</dd><dt>population</dt><dd>all 189,906,610 chosen steps, unconditioned</dd><dt>why lagged</dt><dd>same-step gives 63.1 / 17.6 / 11.9. The lagged version being <em>stronger</em> argues against the reverse reading, though consecutive steps are autocorrelated so it weakens that objection rather than eliminating it</dd></dl></div>
 </figure>
 
 <h2>5 &nbsp;Pain</h2>
@@ -293,6 +311,8 @@ confirms our hiding measure means what its name says.</figcaption>
   looking only at injuries with no follow-up damage. That second figure flatters itself: filtering
   for "no further damage" preferentially keeps the cases where hiding worked. The truth is between
   one and four and a half points &mdash; real, but small.</figcaption>
+
+<div class="method"><b>How this was computed</b><dl><dt>events</dt><dd>every step with <code>damage</code> &gt; 0, aligned at lag 0; bush occupancy collected from lag &minus;10 to +25 within the same episode</dd><dt>isolated</dt><dd>the subset with no other damage event in the 10 steps before or 25 after</dd><dt>baseline</dt><dd>the value at lag &minus;10, not lag &minus;1 — lag &minus;1 is mechanically depressed because the agent must be out of cover to be hit</dd><dt>known bias</dt><dd>the isolated filter is a collider: hiding prevents damage, so it preferentially keeps cases where hiding worked. Treat it as an upper bound, all-events as a lower bound</dd><dt>correction</dt><dd>an earlier version quoted +8 pp sustained to +25, measured from lag &minus;1 on the isolated subset. Both choices inflated it</dd></dl></div>
 </figure>
 
 <h3>The same pain, but where did it come from?</h3>
@@ -307,6 +327,8 @@ pain and no predator is near, and split them by <em>how it came to be hurt</em>.
   <strong>40.9%</strong> of the time; one with identical nociception but <em>zero</em> strikes
   &mdash; which can only happen when the world assigned it a wound at the start &mdash; hides
   <strong>22.6%</strong>. Same feeling, near-double response.</figcaption>
+
+<div class="method"><b>How this was computed</b><dl><dt>nociception</dt><dd>reconstructed, because the store records <code>injury_level</code> but not the observation vector. Mirrors <code>core.py:115</code> — a 12-slot buffer of injury LEVELS, rolled each step, zeroed at reset — convolved with the alpha kernel from the run's own config (&tau; = 3, length 12, current step weighted zero)</dd><dt>pairing</dt><dd>bush occupancy at <code>t</code> against the percept at <code>t&minus;1</code>, since the action producing row <code>t</code> was chosen on the <code>t&minus;1</code> observation</dd><dt>columns</dt><dd>cumulative count of prior <code>damage</code> &gt; 0 events in the episode, excluding the current step</dd><dt>conditioning</dt><dd>steps with no predator within 2 tiles only, so current proximity cannot drive the pattern</dd><dt>bug fixed</dt><dd>the first version used a boundary guard that leaked the episode's randomised start injury into the first few reconstructed steps. About 5% of steps were inflated by up to 13.8 points, fabricating an all-zero column. Corrected and rerun; recorded in the bug registry</dd></dl></div>
 </figure>
 
 <p>That is what you would expect if the agent treats pain as <em>news that a predator is about</em>
@@ -325,6 +347,8 @@ strike count marks a hopeless situation as much as a memory.</p>
   time, the pattern would run flat across each row. It does not: within almost every time band,
   hiding rises with the wound. But note the leftmost column &mdash; an <em>uninjured</em> agent
   hides a lot too, because hiding is exactly what keeps it uninjured.</figcaption>
+
+<div class="method"><b>How this was computed</b><dl><dt>rows</dt><dd>elapsed-step bands 0&ndash;10, 10&ndash;25, 25&ndash;50, 50&ndash;100, 100&ndash;200, 200&ndash;500</dd><dt>columns</dt><dd><code>injury_level</code> at that step: exactly 0, then 0&ndash;25, 25&ndash;50, &ge; 50</dd><dt>cell</dt><dd>bush steps in the cell &divide; all steps in the cell</dd><dt>caveat</dt><dd>columns bin the <em>contemporaneous</em> wound, which is the agent's own doing — this shows the wound-dwell link is not merely a proxy for elapsed time, but it is not a causal estimate. The causal handle is the randomised start injury, reported separately</dd></dl></div>
 </figure>
 
 <h3>Approaching death</h3>
@@ -334,6 +358,8 @@ strike count marks a hopeless situation as much as a memory.</p>
   <figcaption>Hiding rises with the wound up to about three-quarters of fatal, then <strong>falls
   back</strong> as death approaches. Whatever the agent does when nearly dead, it is not seeking
   more cover.</figcaption>
+
+<div class="method"><b>How this was computed</b><dl><dt>bins</dt><dd><code>injury_level</code> at 0, 0&ndash;25, 25&ndash;50, 50&ndash;75, 75&ndash;90, 90&ndash;100, where 100 is fatal</dd><dt>conditioning</dt><dd>no predator within 2 tiles</dd><dt>cell size</dt><dd>the top bin holds 140,000 steps, the smallest reported anywhere in this document; all others exceed a million</dd></dl></div>
 </figure>
 
 <h3>What we cannot say about pain</h3>
@@ -375,6 +401,8 @@ moves bush dwell by +7.95 here against +3.59 in one-predator episodes, and
   <figcaption>The pattern here is enormous and it does <em>not</em> wash out with elapsed time
   &mdash; a starving agent hides far more in every band. Read naively that says hunger drives
   hiding. It runs the other way.</figcaption>
+
+<div class="method"><b>How this was computed</b><dl><dt>rows</dt><dd>the same elapsed-step bands as Figure 10</dd><dt>columns</dt><dd><code>nutrition</code> at that step: &lt; 25, 25&ndash;50, 50&ndash;75, &ge; 75</dd><dt>cell</dt><dd>bush steps &divide; all steps in the cell</dd><dt>correction</dt><dd>an earlier draft read this figure's first row as showing randomised hunger has no immediate effect. It does not show that — the columns bin contemporaneous nutrition, not the randomised draw. Binned correctly by the assigned start value, bush dwell runs 16.4% to 21.4%, the opposite direction to the observational gradient</dd></dl></div>
 </figure>
 
 <div class="panel">
@@ -405,6 +433,8 @@ difference between them is the agent, never the world.</p>
   ten steps of survival &mdash; where the <em>world</em> moves hiding by twenty-five points and
   survival by nearly two hundred. Survival does fall as the recovery accel rate rises, but see the caution
   below.</figcaption>
+
+<div class="method"><b>How this was computed</b><dl><dt>each dot</dt><dd>one trained agent, aggregated over its own million episodes</dd><dt>pairing</dt><dd>all ten replay the identical 1,000,000 world draws — verified by comparing every exogenous column across arms — so differences are the agent, never the world</dd><dt>shading</dt><dd><code>recovery_accel_rate</code>, read from each run's own config. The real values are 0, 0.3, 0.5, 0.7, 0.9, 1.0, 1.2, 1.5, 2.0, 2.7 — not the linear ramp an earlier version assumed</dd></dl></div>
 </figure>
 
 <figure class="panel">
@@ -414,6 +444,8 @@ difference between them is the agent, never the world.</p>
   the complete table, and it splits exactly. The world accounts for nearly everything. <em>Which</em>
   of the ten it is accounts for almost none of it on average. But the interaction &mdash; "this
   agent does something particular in <em>this</em> world" &mdash; is enormous.</figcaption>
+
+<div class="method"><b>How this was computed</b><dl><dt>why exact</dt><dd>both policy and environment are deterministic given (world, agent), so the 1,000,000 &times; 10 outcome table has no noise term and decomposes without residual</dd><dt>decomposition</dt><dd>total variance splits into the variance of the world means, the variance of the agent means, and the variance of the double-centred residual — world effect, agent effect, and their interaction</dd><dt>reading</dt><dd>the agent main effect asks whether agents differ on average; the interaction asks whether they differ world by world. Here the second is roughly 300&times; the first</dd></dl></div>
 </figure>
 
 <div class="panel">
@@ -438,6 +470,8 @@ difference between them is the agent, never the world.</p>
   <figcaption>Share of time hidden against how much pain is felt, one line per trained agent. The
   shape is the same in all ten &mdash; a shallow dip, then a steep climb. Whatever this coupling is,
   it is a property of the task rather than of any single upbringing.</figcaption>
+
+<div class="method"><b>How this was computed</b><dl><dt>per agent</dt><dd>the same nociception reconstruction as Figure 9, run independently on each of the ten stores using that run's own kernel settings</dd><dt>conditioning</dt><dd>none — all chosen steps, so this is the raw shape rather than the proximity-controlled version</dd><dt>slopes</dt><dd>top bin minus the 0&ndash;8 bin, ranging +19.7 to +27.5 pp across the ten agents</dd></dl></div>
 </figure>
 
 <h2>8 &nbsp;Does a neuromodulator help?</h2>
@@ -458,6 +492,8 @@ not. We ran all four pairs through the same million worlds each.</p>
   to the <em>misleading</em> one (a rabbit's). Above the line means it weights the real threat more.
   Two pairs say the modulator helps; two say it hurts. It cannot be both, so on this measure the
   modulator has <strong>no effect you can carry from one setup to another</strong>.</figcaption>
+
+<div class="method"><b>How this was computed</b><dl><dt>the ratio</dt><dd>the GLM coefficient on predator olfactory identity divided by the coefficient on rabbit olfactory identity, both from the same model on the same episodes. Above 1 means the agent weights the real cue more</dd><dt>pairing</dt><dd>within each pair the two runs differ only in the seven keys of <code>agent.modulation</code> — environment, sensory, body, perceptual-noise and training configs are byte-identical, both from seed 42, both replayed at a step-matched checkpoint over the same million worlds</dd><dt>step matching</dt><dd>b04 pairs match at exactly 45,700,001 steps (zero apart); b03 at 43,600,044 vs 43,600,085 (41 apart)</dd><dt>modulation verified live</dt><dd>the two agents' behaviour diverges in 2,931 of the first 5,000 paired episodes, so the modulated checkpoint is not being silently loaded into an unmodulated model</dd></dl></div>
 </figure>
 
 <p>The split is not random, though. Both pairs where the modulator <em>helped</em> came from a world
@@ -474,6 +510,8 @@ pairs on each side, that could still be coincidence, but it is the pattern to wa
   something particular in a particular situation &mdash; is consistently large. It reliably changes
   <em>which world produces which behaviour</em> and reliably does almost nothing on average. This is
   the same shape the ten agents in section 7 produced.</figcaption>
+
+<div class="method"><b>How this was computed</b><dl><dt>decomposition</dt><dd>identical to Figure 14 but with two agents instead of ten</dd><dt>reading</dt><dd>the modulator's own share never exceeds 0.27% in any pair, while its interaction with the world runs 25&ndash;32% for bush dwell and 8&ndash;12% for survival</dd></dl></div>
 </figure>
 
 <h2>9 &nbsp;The measure built for the modulator</h2>
@@ -502,6 +540,8 @@ second is a cause.</div>
   <figcaption>Four pairs, each line rising from left to right: <strong>an agent the world wounded
   reacts more strongly to a nearby predator.</strong> That is heightened alertness, and because the
   wound was assigned at random it is a genuine cause, present in all eight agents.</figcaption>
+
+<div class="method"><b>How this was computed</b><dl><dt>alarm response</dt><dd>P(in bush | a predator within 2 tiles) &minus; P(in bush | none), computed separately within each level of internal state. A modulator that gates perception by state should make this vary more across states</dd><dt>this figure is the causal version</dt><dd>state is binned by the injury the world assigned at episode start, before the agent acted, and only the first 25 steps are counted. The observational version — binning by the agent's own current nociception — is computed too and disagrees in sign, which is why the two are kept apart</dd><dt>state bins</dt><dd>reconstructed nociception at 0, 0&ndash;8, 8&ndash;18, 18&ndash;32, &gt; 32. The zero bin is excluded from the trend because it is &ldquo;no signal at all&rdquo; rather than a level of signal, and it dominates the step count</dd><dt>tool</dt><dd><code>scripts/analysis/context_dependence.py</code>, run-agnostic and re-runnable against future checkpoints</dd></dl></div>
 </figure>
 
 <figure class="panel scroll">
@@ -514,6 +554,8 @@ second is a cause.</div>
 means internal state matters more to the agent's reaction &mdash; which is the thing a modulator
 is for. <strong>The modulated agent is wider in all four pairs.</strong> This is the only
 directionally consistent result across all four in this entire comparison.</figcaption>
+
+<div class="method"><b>How this was computed</b><dl><dt>the number</dt><dd>the span of the alarm response across state bins — its maximum minus its minimum — in percentage points. Wider means internal state matters more to the agent's reaction</dd><dt>caveat</dt><dd>effects are 0.2 to 1.4 pp, and all eight agents come from seed 42, so this is not attributable to the modulator. It is a baseline to re-run against</dd></dl></div>
 </figure>
 
 <p>The effect is small &mdash; a few tenths of a point to about one and a half. And all eight
@@ -552,6 +594,100 @@ ten, because it measures how much two identical runs differ, which is the number
 needs and none of them has.</dd>
 </dl>
 </div>
+
+<h2>11 &nbsp;Methods in full</h2>
+
+<h3>Where the numbers come from</h3>
+<div class="panel">
+<dl class="dl">
+<dt>the replay</dt><dd>Each trained agent is frozen at one checkpoint and run back through its own
+training environment for 1,000,000 episodes. Actions are taken deterministically (the highest-scoring
+action, no sampling), so an episode is a pure function of its seed.</dd>
+<dt>seeds</dt><dd>Episode seeds 1,000,000 to 1,999,999 for every run, so every agent meets an
+identical set of worlds. This is what makes the agent comparisons paired.</dd>
+<dt>what is recorded</dt><dd>Per step: position, action, satiation, nutrition, injury, rest streak,
+damage, the ate / rested / collided / hit flags, bush occupancy, and the position and state of every
+animal, resource and obstacle. Per episode: every quantity the world rolled at reset. 14 million
+episodes and about 2.6 billion step rows in total.</dd>
+<dt>storage</dt><dd>Sharded columnar Parquet, 5,000 episodes per shard, written by atomic rename so a
+crashed run leaves whole files rather than truncated ones. Every store carries a manifest recording
+the checkpoint, the config fingerprint, the seed base and the collection code version.</dd>
+</dl>
+</div>
+
+<h3>The outcome</h3>
+<p><strong>Bush dwell</strong> is bush steps divided by chosen steps, per episode. Two deliberate
+choices: the spawn row is excluded from both numerator and denominator, because the agent did not
+choose where it woke; and where bins are aggregated it is always a ratio of sums rather than a mean
+of per-episode ratios, so a 400-step episode counts more than a 20-step one.</p>
+
+<h3>The model</h3>
+<div class="panel">
+<dl class="dl">
+<dt>form</dt><dd>Quasi-binomial GLM with a logit link — successes are bush steps, failures are the
+rest. This models the rate directly rather than the count, so episode length does not have to be
+carried as a covariate.</dd>
+<dt>overdispersion</dt><dd>Standard errors are multiplied by the square root of the Pearson
+&chi;&sup2; over residual degrees of freedom, which lands between 13 and 25. Without that correction
+every interval would be roughly four times too narrow.</dd>
+<dt>reported effect</dt><dd>Coefficient &times; the factor's standard deviation &times;
+p&#772;(1&minus;p&#772;) &times; 100 — the percentage-point change in bush dwell for a
+one-standard-deviation move, evaluated at the observed mean. This is a linearisation and is accurate
+for the small effects tabulated; it is <em>not</em> applied to the large endogenous exposure terms,
+where the model-implied change is far bigger than the linear approximation suggests.</dd>
+<dt>p-values</dt><dd>Computed but never used for ranking. At a million episodes every factor clears
+any threshold, so ordering is by effect size throughout.</dd>
+</dl>
+</div>
+
+<h3>Which factors are included, and why some are not</h3>
+<p>The store was audited column by column: any per-episode column taking more than one distinct
+value across a million episodes is a candidate factor, and all of them appear in Figure 2. Settings
+that turned out pinned to a single value cannot have an effect and are absent — these are
+<code>move_interval</code>, <code>stamina_recovery_rate</code>, <code>hunt_stamina_threshold</code>,
+<code>lose_interest_multiplier</code>, every visual property, and every resource and obstacle
+property. Auditing the data rather than reading the config also caught three factors that earlier
+versions of this analysis had missed entirely: olfactory <em>intensity</em>, the asymmetry between
+the two olfactory channels, and the third of all episodes containing two predators, which every
+trait model had been silently discarding.</p>
+
+<h3>Causal versus associational</h3>
+<p>The environment rolls predator and rabbit counts, all predator traits, both olfactory channels of
+every animal, bush / rock / food / hiding-predator counts, spawn position, and both start injury and
+start nutrition — all before the agent takes its first action. Contrasts across those are causal.
+Everything measured during an episode — proximity, injury sustained, nutrition spent, damage taken,
+episode length — is partly the agent's own doing, and is reported as association only. Where the two
+disagree, and they do for both injury and hunger, the randomised version is the one to believe.</p>
+
+<h3>Corrections made during this analysis</h3>
+<div class="panel">
+<dl class="dl">
+<dt>reconstruction bug</dt><dd>The nociception signal is reconstructed from recorded injury, because
+the store does not save the observation vector. The first version leaked the randomised start injury
+into the first few steps of each episode, inflating about 5% of steps by up to 13.8 points and
+fabricating an all-zero column that a draft had interpreted as a finding. Corrected and rerun.</dd>
+<dt>a wrong claim, withdrawn</dt><dd>An early draft asserted the agent cannot perceive its own
+injury, resting on <code>sensory.injury_observable: false</code>. That flag removes only the
+instantaneous readout; the interoceptive channel convolves a buffer of injury <em>levels</em>, so the
+agent does feel its wound, blurred and delayed. Two review passes carried the error before a reader
+caught it.</dd>
+<dt>an over-read magnitude</dt><dd>The post-damage response was quoted at +8 pp sustained for 25
+steps. Measured from a sound baseline and reported on both the filtered and unfiltered event sets, it
+is between +0.9 and +4.6 pp.</dd>
+<dt>a replication failure</dt><dd>The claim that the modulator does not improve threat discrimination
+held in one matched pair and reversed in a second. All four pairs were then run; the direction splits
+two-two. The claim is withdrawn.</dd>
+</dl>
+</div>
+
+<h3>Reproducing any of this</h3>
+<p>The factor ranking, all multivariate models and the same-step cross-tabs come from
+<code>scripts/analysis/hiding_drivers.py</code>, which derives its slot layout from each run's own
+saved config and so works on any collected run. The context-dependence measure is
+<code>scripts/analysis/context_dependence.py</code>. Everything else — lagged proximity, the scent
+ladders, the targeting split, the peri-event alignment, the injury window, the eat-block check, the
+spawn geometry and the untested-factor audit — is archived under
+<code>scripts/analysis/supplementary/</code> with a per-script map of which figure it produces.</p>
 
 <footer>
 Hiding is measured as the share of the agent's own chosen steps spent inside a bush; the spawn
