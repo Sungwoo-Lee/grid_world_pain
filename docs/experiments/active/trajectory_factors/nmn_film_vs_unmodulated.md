@@ -4,6 +4,8 @@
 **Reproduce:** `scripts/analysis/hiding_drivers.py --store-root results/trajectories_nmn` on both
 runs, then `scripts/analysis/supplementary/compare_pair.py <unmod.npz> <film.npz>`
 **Sibling study:** [[a01_hiding_drivers]] (a different world — see Scope)
+**Context-dependence tool:** `scripts/analysis/context_dependence.py` — re-run this against new
+modulator checkpoints; the metrics are defined to stay comparable across runs and worlds.
 
 ## Question
 
@@ -128,6 +130,42 @@ changes *which world produces which behaviour* and reliably does almost nothing 
 
 That is a real finding about what this kind of modulator does, and it is the only claim here
 supported by four independent instances.
+
+## Context dependence: the measure built for the modulator
+
+Everything above asks whether the modulated agent *behaves* differently. That is the wrong question
+for what a modulator does. A FiLM modulator rescales perception **according to internal state**, so
+the sharp prediction is that its **response to an external cue should depend more on that state**.
+
+`scripts/analysis/context_dependence.py` measures this directly. For each level of felt pain it
+computes the **alarm response** — how much more the agent hides with a predator within two tiles
+than without — and then asks how far that response ranges across pain levels. A modulator doing its
+job should widen that range.
+
+The tool reports two versions. In the **observed** version the agent's pain is its own doing, so the
+pattern describes its situation. In the **randomised** version the environment assigns the wound at
+episode start before the agent acts, so the pattern describes its disposition. Only the second is
+causally identified, and it is the one quoted here.
+
+| pair | alarm-response range, no modulator | with modulator | difference |
+|---|---|---|---|
+| b04_mc | 3.2 pp | 4.0 pp | **+0.7** |
+| b03_mc | 2.1 pp | 2.3 pp | **+0.2** |
+| b04_gae | 4.5 pp | 5.0 pp | **+0.4** |
+| b03_gae | 3.0 pp | 4.4 pp | **+1.4** |
+
+**The modulated agent is wider in all four pairs.** This is the only directionally consistent result
+across all four in the whole comparison — everything else in this document splits two-two.
+
+Two supporting observations. All eight agents show a **rising** alarm response with randomised
+injury (trend +0.83 to +1.92 pp per bin): an agent the world wounded reacts more strongly to a
+nearby predator. That is causally identified hypervigilance, present everywhere. And the same
+measure applied to **nutrition shows no consistent modulator effect** — two pairs wider, two
+narrower. Whatever the modulator is doing, it is doing it with injury.
+
+The effects are small (0.2 to 1.4 pp) and all eight agents share seed 42, so this is not attributable
+to the modulator either. It is a **baseline**: the numbers to re-run against when an updated
+modulator lands.
 
 ## The methodological verdict
 
