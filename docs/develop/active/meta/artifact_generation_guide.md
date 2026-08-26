@@ -204,6 +204,19 @@ wrong; the difference was invisible until the choice had to be written down.
 | 14 | Too few figures for an internal document | reader | §2.5 |
 | 15 | Untested factors omitted from the ranking | reader | audit the data, not the config |
 | 16 | "mistake" asserted without evidence | reader | §7 |
+| 17 | Figure 5 still blank in the COMMITTED file — source fixed, HTML never rebuilt | readability review | §3.3, and rebuild before every publish |
+| 18 | Agent and episode counts wrong (14 / 14M vs 18 / 18M) | readability review | §9 |
+| 19 | Withdrawn-claim count disagreed with itself (four vs two) | readability review | §9 |
+| 20 | A caption's comparator ("twenty-five points") appeared in no figure | readability review | §9 |
+| 21 | Figure 8's caption described a quantity the figure does not plot | readability review | §9 |
+| 22 | Pair names `b03`/`b04` used on four figures, never decoded | readability review | §9 |
+| 23 | Flagship figure's axis omitted its own unit ("per 1 SD") | readability review | §2.2 |
+| 24 | Nociception's numeric scale never stated | readability review | §9 |
+| 25 | Outcome variable had five different names across axes | readability review | §1.1 |
+| 26 | Statistical terms undefined (quasi-binomial, overdispersion, collider, 1 SD, pp) | readability review | §9 |
+| 27 | Action set, episode cap and hazards never stated | readability review | §9 |
+| 28 | No conclusion — the document's three questions never answered together | readability review | §9 |
+| 29 | Retracted values still shipping inside the data blob | readability review | §9 |
 
 ---
 
@@ -226,6 +239,34 @@ would have made it false. If nothing would, it is a label rather than a finding.
 
 ---
 
+## 9. What only a fresh reader finds
+
+The failures above were mostly mechanical. A separate review, by an agent told to read as a
+colleague who knows the project but was not present, found a different class — and found more of
+them than every other check combined. They divide into three kinds.
+
+**Things that were true once.** Counts drift as work continues. This document said fourteen agents
+and fourteen million rollouts; by the end there were eighteen of each. It promised four withdrawn
+claims in one place and two in another. A caption cited "twenty-five points" as its comparator and
+no figure contained that number. **Recompute every headline number from the data at publish time**
+rather than carrying it forward by hand.
+
+**Things the author cannot un-know.** The four pair names `b03_mc`, `b04_mc`, `b03_gae`,
+`b04_gae` appeared as axis labels on four figures and were never decoded anywhere. The nociception
+axis was binned three different ways with no statement of what scale it was on. The action set,
+the episode cap and the list of things that can injure the agent were never given. Every one of
+these was obvious to the author and invisible to the reader.
+
+**Claims with nowhere to land.** The document had no conclusion. It opened by promising three
+answers and never put them in one place — the reader had to assemble them from eleven sections.
+
+The cheapest fix for all three: **a setup panel early** (grid, actions, cap, hazards, what "near"
+means, per-step vs per-episode) and **a findings box late** (the opening questions, answered).
+Neither existed until a reader asked for them.
+
+One further habit worth keeping: the reviewer checked each figure *with the prose covered up*. A
+figure whose units are only in its caption fails that test, and several here did.
+
 ## 8. Pre-publication checklist
 
 - [ ] Every term matches its config name, or is defined at first use
@@ -242,3 +283,11 @@ would have made it false. If nothing would, it is a label rather than a finding.
 - [ ] Corrections made during the work are recorded
 - [ ] One script per figure, and the merge step fails loudly
 - [ ] Every interpretive claim has a result that would have falsified it
+- [ ] The HTML has been **rebuilt** since the last source edit, and republished
+- [ ] Every headline count recomputed from the data, not carried forward
+- [ ] Internal counts agree with each other (agents, episodes, corrections)
+- [ ] Every abbreviation and code name used on a chart is decoded somewhere
+- [ ] Setup panel present: grid, action set, episode cap, hazards, what "near" means
+- [ ] Findings box present: the opening questions, answered together
+- [ ] Each figure read once with the prose covered — do its own labels carry it?
+- [ ] No retracted values left in the shipped data
