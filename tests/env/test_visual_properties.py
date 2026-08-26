@@ -167,6 +167,8 @@ def _make_v4_config() -> str:
           placement:
             mode: per_entity
         sensory:
+          visual_value_mode: sum
+          visual_occlusion_enabled: false
           sensor_radius: 3.0
           decay_power: 1.5
           olfactory_grid_range: 0
@@ -287,6 +289,8 @@ def _make_v4_config_with_noise() -> str:
           placement:
             mode: per_entity
         sensory:
+          visual_value_mode: sum
+          visual_occlusion_enabled: false
           sensor_radius: 3.0
           decay_power: 1.5
           olfactory_grid_range: 0
@@ -439,6 +443,8 @@ def _base_yaml_v4_resource_missing_vp() -> str:
           placement:
             mode: per_entity
         sensory:
+          visual_value_mode: sum
+          visual_occlusion_enabled: false
           sensor_radius: 3.0
           decay_power: 1.5
           olfactory_grid_range: 0

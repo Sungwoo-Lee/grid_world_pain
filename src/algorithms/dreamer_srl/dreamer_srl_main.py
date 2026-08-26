@@ -768,11 +768,11 @@ def main() -> None:
     # -----------------------------------------------------------------------
     # 4b. Pre-flight obs/action + modality-fingerprint check (curriculum only)
     # Ported from train.py:483-534. Validates that all stage configs produce
-    # the same obs_dim, action_dim, and 18-field modality fingerprint so the
+    # the same obs_dim, action_dim, and 23-field modality fingerprint so the
     # retained weights fit every stage. Fails fast with a descriptive error.
     # -----------------------------------------------------------------------
     def _modality_fingerprint(p):
-        """18-field tuple of sensor enables + shape params affecting obs layout.
+        """23-field tuple of sensor enables + shape params affecting obs layout.
 
         Ported verbatim from train.py:L485-L503.
         If any two stages produce different fingerprints, obs semantics differ
@@ -804,6 +804,14 @@ def main() -> None:
             tuple(int(x) for x in p.res_visual_mask),
             tuple(int(x) for x in p.animal_visual_mask),
             tuple(int(x) for x in p.obs_visual_mask),
+            # v3.2: both change observation SEMANTICS at an identical dim count.
+            # The cone angle and strength are continuous and stay out, same
+            # reasoning as the blur knobs.
+            p.visual_value_mode,
+            p.visual_occlusion_enabled,
+            tuple(bool(x) for x in p.res_blocks_sight),
+            tuple(bool(x) for x in p.animal_blocks_sight),
+            tuple(bool(x) for x in p.obs_blocks_sight),
             # NOT fingerprinted, deliberately: visual_blur_radial_scale /
             # _anisotropy / _sigma_floor are continuous, and fingerprinting floats
             # would forbid legitimate schedules. Same pre-existing choice applies

@@ -277,6 +277,18 @@ class EnvParams:
     animal_visual_mask: jnp.ndarray   # [N]          int32
     obs_visual_mask: jnp.ndarray      # [num_obs]    int32
 
+    # How per-cell entity contributions combine: "sum" (a count / weighted sum,
+    # pre-v3.2 behaviour) or "clamp" (per-channel presence, capped at 1.0).
+    visual_value_mode: str = struct.field(pytree_node=False)
+    # Line-of-sight occlusion: a nearer sight-blocking entity inside the shadow
+    # cone of the ray agent->entity hides it.
+    visual_occlusion_enabled: bool = struct.field(pytree_node=False)
+    visual_occlusion_cos: float       # cos(cone half-angle); traced, sweepable
+    visual_occlusion_strength: float  # 1.0 = fully hidden, <1.0 = attenuated
+    res_blocks_sight: jnp.ndarray     # [num_res]    bool
+    animal_blocks_sight: jnp.ndarray  # [N]          bool
+    obs_blocks_sight: jnp.ndarray     # [num_obs]    bool
+
     # Hidden-state observability flags
     injury_observable: bool = struct.field(pytree_node=False)
     nutrition_observable: bool = struct.field(pytree_node=False)

@@ -259,6 +259,8 @@ body:
 
 
 sensory:
+  visual_value_mode: sum
+  visual_occlusion_enabled: false
   using_sensory: true
   #Olfactory sensor
   olfactory_enabled: true

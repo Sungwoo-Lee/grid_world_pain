@@ -231,6 +231,20 @@ sensory:
   # continuous and fingerprinting floats would forbid legitimate schedules.
   # visual_blur_enabled and per-entity visual_mask ARE fingerprinted, because they
   # change observation semantics at an identical dimension count.
+  # v3.2 — how per-cell entity contributions combine.
+  #   sum   = weighted sum / count (pre-v3.2 behaviour; two rocks read 2.0)
+  #   clamp = per-channel presence, capped at 1.0 (an RF-like "something is here")
+  # Applies to the ENTITY contribution only; terrain keeps its own value.
+  visual_value_mode: sum
+  # v3.2 — line-of-sight occlusion. A nearer entity flagged `blocks_sight: true`
+  # hides anything inside the shadow cone of the ray to it. The two sub-keys are
+  # read ONLY when this is true (CONFIG_GUIDE.md §5 conditional-key pattern).
+  # CALIBRATION WARNING: this scene holds up to 36 entities on 100 cells, so
+  # occlusion is aggressive. Measured share of live entities hidden, obstacles-only
+  # blocking: 5° -> 31%, 10° -> 47%, 15° -> 59%, 30° -> 75%. Start narrow.
+  visual_occlusion_enabled: false
+  # visual_occlusion_cone_deg: 10.0     # half-angle of the shadow cone
+  # visual_occlusion_strength: 1.0      # 1.0 = fully hidden, <1.0 = attenuated
   visual_background_properties:   # grass / sand / plain
     - [1,0,0,0,0,0,0,0]
     - [0,1,0,0,0,0,0,0]

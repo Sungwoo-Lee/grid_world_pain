@@ -79,6 +79,8 @@ body:
   eating_nutrition_cost: 0.0
   eating_reward_penalty: 0.0
 sensory:
+  visual_value_mode: sum
+  visual_occlusion_enabled: false
   injury_observable: false
   nutrition_observable: false
   sensor_radius: 5.0

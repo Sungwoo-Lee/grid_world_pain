@@ -874,6 +874,8 @@ perceptual_noise:
       sigma: 0.2
 seed: 42
 sensory:
+  visual_value_mode: sum
+  visual_occlusion_enabled: false
   collision_sensor_range: 1
   decay_power: 2.0
   olfactory_grid_range: 0

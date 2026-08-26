@@ -101,6 +101,8 @@ body:
   start_injury_low: 0
   start_injury_high: 100
 sensory:
+  visual_value_mode: sum
+  visual_occlusion_enabled: false
   olfactory_enabled: false
   sensor_radius: 5.0
   vector_size: 5

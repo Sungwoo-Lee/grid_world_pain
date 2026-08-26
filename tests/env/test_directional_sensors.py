@@ -204,3 +204,82 @@ def test_range_zero_matches_the_single_point_sensor_bitwise():
     a = np.asarray(sense_olfaction_cells(st, p))
     b = np.asarray(_sense_olfaction_at(st.agent_pos, st, p))
     assert a.tobytes() == b.tobytes()
+
+
+# ------------------------------------------------ v3.2 value mode + occlusion ---
+
+def test_value_mode_defaults_to_sum_and_rejects_unknown():
+    assert params().visual_value_mode == 'sum'
+    with pytest.raises(ValueError, match='visual_value_mode'):
+        params(**{'sensory.visual_value_mode': 'average'})
+
+
+def test_clamp_caps_a_cell_at_one_per_channel():
+    """Two entities in one cell read 2.0 under 'sum' and 1.0 under 'clamp'."""
+    outs = {}
+    for mode in ('sum', 'clamp'):
+        p = params(**{'sensory.visual_sensor_range': 1, 'sensory.visual_value_mode': mode})
+        st, _ = one_state(p)
+        agent = jnp.array([5, 5])
+        # stack two obstacles (channel 6) on the agent's own cell
+        st2 = st.replace(
+            agent_pos=agent,
+            obs_pos=jnp.full_like(st.obs_pos, 99).at[0].set(agent).at[1].set(agent),
+            obs_active=jnp.zeros_like(st.obs_active).at[0].set(True).at[1].set(True),
+            res_active=jnp.zeros_like(st.res_active),
+            animal_active=jnp.zeros_like(st.animal_active))
+        outs[mode] = np.asarray(sense_visual(agent, st2, p)).reshape(-1, 8)[0, 6]
+    assert outs['sum'] == pytest.approx(2.0)
+    assert outs['clamp'] == pytest.approx(1.0)
+
+
+def test_occlusion_defaults_off_and_validates_its_subkeys():
+    p = params()
+    assert p.visual_occlusion_enabled is False
+    for bad, key in [({'sensory.visual_occlusion_enabled': True,
+                       'sensory.visual_occlusion_cone_deg': 120.0,
+                       'sensory.visual_occlusion_strength': 1.0}, 'cone_deg'),
+                     ({'sensory.visual_occlusion_enabled': True,
+                       'sensory.visual_occlusion_cone_deg': 10.0,
+                       'sensory.visual_occlusion_strength': 3.0}, 'strength')]:
+        with pytest.raises(ValueError, match=key):
+            params(**bad)
+
+
+def test_occlusion_hides_only_what_is_behind_a_blocker():
+    """A blocker at 2 cells hides a target at 4 cells on the same bearing, and
+    leaves a target on a different bearing alone."""
+    from src.environment.sensor import _occlusion_gate
+    p = params(**{'sensory.visual_sensor_range': 2,
+                  'sensory.visual_occlusion_enabled': True,
+                  'sensory.visual_occlusion_cone_deg': 15.0,
+                  'sensory.visual_occlusion_strength': 1.0})
+    agent = jnp.array([5, 5])
+    pos = jnp.array([[3, 5],     # 0: blocker, 2 north
+                     [1, 5],     # 1: target,  4 north  -> hidden by 0
+                     [5, 9]])    # 2: target,  4 east   -> unaffected
+    active = jnp.array([True, True, True])
+    blocks = jnp.array([True, False, False])
+    g = np.asarray(_occlusion_gate(agent, pos, active, blocks, p))[0]
+    assert g[0] == pytest.approx(1.0), "the blocker itself stays visible"
+    assert g[1] == pytest.approx(0.0), "target behind the blocker must be hidden"
+    assert g[2] == pytest.approx(1.0), "target on another bearing is unaffected"
+
+
+def test_occlusion_strength_attenuates_rather_than_hides():
+    from src.environment.sensor import _occlusion_gate
+    p = params(**{'sensory.visual_sensor_range': 2,
+                  'sensory.visual_occlusion_enabled': True,
+                  'sensory.visual_occlusion_cone_deg': 15.0,
+                  'sensory.visual_occlusion_strength': 0.4})
+    agent = jnp.array([5, 5])
+    pos = jnp.array([[3, 5], [1, 5]])
+    g = np.asarray(_occlusion_gate(agent, pos, jnp.array([True, True]),
+                                   jnp.array([True, False]), p))[0]
+    assert g[1] == pytest.approx(0.6), "strength 0.4 should leave 60% through"
+
+
+def test_nothing_blocks_sight_by_default():
+    p = params()
+    for arr in (p.res_blocks_sight, p.animal_blocks_sight, p.obs_blocks_sight):
+        assert not bool(np.asarray(arr).any())

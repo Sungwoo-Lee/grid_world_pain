@@ -48,6 +48,8 @@ body:
   overeating_death: false
 
 sensory:
+  visual_value_mode: sum
+  visual_occlusion_enabled: false
   using_sensory: true
   olfactory_enabled: true
   sensor_radius: 20

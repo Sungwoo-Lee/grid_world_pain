@@ -327,6 +327,12 @@ def _read_visual_mask(entry: dict, entity_label: str) -> int:
     return _VISUAL_MASK_CODES[key]
 
 
+def _read_blocks_sight(entry: dict) -> bool:
+    """Per-entity `blocks_sight` (v3.2). Distinct from `blocking` (movement) and
+    `hides_agent` (concealment from predators). Absent -> False."""
+    return bool(entry.get('blocks_sight', False))
+
+
 def _read_properties_std(entry, entity_label):
     """Same, for the `*_std` variant."""
     if 'properties_std' in entry:
@@ -610,6 +616,7 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
         animal_visual_property = jnp.zeros((0, visual_vector_size), dtype=jnp.float32)
         animal_visual_property_std = jnp.zeros((0, visual_vector_size), dtype=jnp.float32)
         animal_visual_mask = jnp.zeros(0, dtype=jnp.int32)
+        animal_blocks_sight = jnp.zeros(0, dtype=jnp.bool_)
         animal_classes = ()
         animal_behaviours = ()
         animal_tags = ()
@@ -632,6 +639,7 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
             animal_classes_int, animal_behaviours_int,
             animal_is_damaging, animal_disengage_on_contact, animal_visual_channel,
             animal_visual_property, animal_visual_property_std, animal_visual_mask,
+            animal_blocks_sight,
             animal_classes, animal_behaviours, animal_tags,
             hunt_idx, wander_idx, static_idx,
             predator_indices, neutral_indices,
@@ -808,6 +816,7 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
     visual_property_list = []
     visual_property_std_list = []
     visual_mask_list = []
+    blocks_sight_list = []
     classes_tuple = []
     behaviours_tuple = []
     tags_tuple = []
@@ -850,6 +859,7 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
         visual_property_list.append(_read_visual_properties(_raw_src, default_vis_ch, V, e['tag_label']))
         visual_property_std_list.append(_read_visual_properties_std(_raw_src, V, e['tag_label']))
         visual_mask_list.append(_read_visual_mask(_raw_src, e['tag_label']))
+        blocks_sight_list.append(_read_blocks_sight(_raw_src))
         classes_tuple.append(cls)
         behaviours_tuple.append(beh)
         tags_tuple.append(_normalise_tag(e['tag_raw'], i, e.get('type_label', e['tag_label'])))
@@ -905,6 +915,7 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
     animal_visual_property = jnp.array(visual_property_list, dtype=jnp.float32)      # [N, V]
     animal_visual_property_std = jnp.array(visual_property_std_list, dtype=jnp.float32)  # [N, V]
     animal_visual_mask = jnp.array(visual_mask_list, dtype=jnp.int32)                # [N]
+    animal_blocks_sight = jnp.array(blocks_sight_list, dtype=jnp.bool_)              # [N]
 
     animal_classes = tuple(classes_tuple)
     animal_behaviours = tuple(behaviours_tuple)
@@ -938,6 +949,7 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
         animal_classes_int, animal_behaviours_int,
         animal_is_damaging, animal_disengage_on_contact, animal_visual_channel,
         animal_visual_property, animal_visual_property_std, animal_visual_mask,
+        animal_blocks_sight,
         animal_classes, animal_behaviours, animal_tags,
         hunt_idx, wander_idx, static_idx,
         predator_indices, neutral_indices,
@@ -992,6 +1004,27 @@ def load_env_params(config: Config) -> EnvParams:
     # Read-site default of 8: preserves byte-parity for all ~86 archived configs
     # that do not declare this key. The one permitted read-site default in this
     # plan (see CONFIGURABLE_VISUAL_PROPERTIES_PLAN.md §D1).
+    # v3.2 visual options. The two enabling keys are mandatory; their sub-keys are
+    # read ONLY when enabled, per CONFIG_GUIDE.md §5's conditional-key pattern, so a
+    # config that leaves occlusion off never needs to carry the cone settings.
+    _vis_value_mode = str(config.get_mandatory('sensory.visual_value_mode')).strip().lower()
+    if _vis_value_mode not in ('sum', 'clamp'):
+        raise ValueError(
+            f"sensory.visual_value_mode must be 'sum' or 'clamp', got {_vis_value_mode!r}.")
+    _occ_on = bool(config.get_mandatory('sensory.visual_occlusion_enabled'))
+    if _occ_on:
+        _occ_deg = float(config.get_mandatory('sensory.visual_occlusion_cone_deg'))
+        if not (0.0 < _occ_deg < 90.0):
+            raise ValueError(
+                f"sensory.visual_occlusion_cone_deg must be in (0, 90), got {_occ_deg}.")
+        _occ_cos = float(jnp.cos(jnp.radians(_occ_deg)))
+        _occ_strength = float(config.get_mandatory('sensory.visual_occlusion_strength'))
+        if not (0.0 <= _occ_strength <= 1.0):
+            raise ValueError(
+                f"sensory.visual_occlusion_strength must be in [0, 1], got {_occ_strength}.")
+    else:
+        _occ_cos, _occ_strength = 1.0, 0.0     # inert; never read when disabled
+
     _vis_v = config.get('sensory.visual_vector_size')
     visual_vector_size: int = int(_vis_v) if _vis_v is not None else 8
 
@@ -1044,6 +1077,7 @@ def load_env_params(config: Config) -> EnvParams:
         _res_vis_list = []
         _res_vis_std_list = []
         _res_mask_list = []
+        _res_blocks_list = []
         for r in expanded_resources:
             _rtype = r_get(r, 'type')
             _default_ch = 3 if _rtype == 'food' else 4  # food=3, hiding_predator=4
@@ -1056,9 +1090,11 @@ def load_env_params(config: Config) -> EnvParams:
             _res_vis_list.append(_read_visual_properties(r, _default_ch, visual_vector_size, f'Resource({_rtype})'))
             _res_vis_std_list.append(_read_visual_properties_std(r, visual_vector_size, f'Resource({_rtype})'))
             _res_mask_list.append(_read_visual_mask(r, f'Resource({_rtype})'))
+            _res_blocks_list.append(_read_blocks_sight(r))
         res_visual_property = jnp.array(_res_vis_list, dtype=jnp.float32)
         res_visual_property_std = jnp.array(_res_vis_std_list, dtype=jnp.float32)
         res_visual_mask = jnp.array(_res_mask_list, dtype=jnp.int32)
+        res_blocks_sight = jnp.array(_res_blocks_list, dtype=jnp.bool_)
     else:
         res_type = jnp.zeros(0, dtype=jnp.int32)
         res_property = jnp.zeros((0, 5))
@@ -1071,6 +1107,7 @@ def load_env_params(config: Config) -> EnvParams:
         res_visual_property = jnp.zeros((0, visual_vector_size), dtype=jnp.float32)
         res_visual_property_std = jnp.zeros((0, visual_vector_size), dtype=jnp.float32)
         res_visual_mask = jnp.zeros(0, dtype=jnp.int32)
+        res_blocks_sight = jnp.zeros(0, dtype=jnp.bool_)
 
     # ── Guard against stale `predator_enabled` key (removed in v2.0) ──────────
     # The 86 migrated configs have this key stripped by the CP1 migration sweep.
@@ -1095,6 +1132,7 @@ def load_env_params(config: Config) -> EnvParams:
         animal_classes_int, animal_behaviours_int,
         animal_is_damaging, animal_disengage_on_contact, animal_visual_channel,
         animal_visual_property, animal_visual_property_std, animal_visual_mask,
+        animal_blocks_sight,
         animal_classes, animal_behaviours, animal_tags,
         hunt_idx, wander_idx, static_idx,
         predator_indices, neutral_indices,
@@ -1192,6 +1230,7 @@ def load_env_params(config: Config) -> EnvParams:
         _obs_vis_list = []
         _obs_vis_std_list = []
         _obs_mask_list = []
+        _obs_blocks_list = []
         for o in expanded_obstacles:
             _oname = o.get('name', 'rock')
             if visual_vector_size != 8 and 'visual_properties' not in o:
@@ -1203,9 +1242,11 @@ def load_env_params(config: Config) -> EnvParams:
             _obs_vis_list.append(_read_visual_properties(o, 6, visual_vector_size, f'Obstacle({_oname})'))
             _obs_vis_std_list.append(_read_visual_properties_std(o, visual_vector_size, f'Obstacle({_oname})'))
             _obs_mask_list.append(_read_visual_mask(o, f'Obstacle({_oname})'))
+            _obs_blocks_list.append(_read_blocks_sight(o))
         obs_visual_property = jnp.array(_obs_vis_list, dtype=jnp.float32)
         obs_visual_property_std = jnp.array(_obs_vis_std_list, dtype=jnp.float32)
         obs_visual_mask = jnp.array(_obs_mask_list, dtype=jnp.int32)
+        obs_blocks_sight = jnp.array(_obs_blocks_list, dtype=jnp.bool_)
     else:
         obs_blocking = jnp.zeros(0, dtype=jnp.bool_)
         obs_hides_agent = jnp.zeros(0, dtype=jnp.bool_)
@@ -1221,6 +1262,7 @@ def load_env_params(config: Config) -> EnvParams:
         obs_visual_property = jnp.zeros((0, visual_vector_size), dtype=jnp.float32)
         obs_visual_property_std = jnp.zeros((0, visual_vector_size), dtype=jnp.float32)
         obs_visual_mask = jnp.zeros(0, dtype=jnp.int32)
+        obs_blocks_sight = jnp.zeros(0, dtype=jnp.bool_)
     
     # Build Grid Location Types
     import numpy as np
@@ -1519,6 +1561,13 @@ def load_env_params(config: Config) -> EnvParams:
         visual_blur_radial_scale=float(config.get_mandatory('sensory.visual_blur_radial_scale')),
         visual_blur_anisotropy=float(config.get_mandatory('sensory.visual_blur_anisotropy')),
         visual_blur_sigma_floor=float(config.get_mandatory('sensory.visual_blur_sigma_floor')),
+        visual_value_mode=_vis_value_mode,
+        visual_occlusion_enabled=_occ_on,
+        visual_occlusion_cos=_occ_cos,
+        visual_occlusion_strength=_occ_strength,
+        res_blocks_sight=res_blocks_sight,
+        animal_blocks_sight=animal_blocks_sight,
+        obs_blocks_sight=obs_blocks_sight,
         res_visual_mask=res_visual_mask,
         animal_visual_mask=animal_visual_mask,
         obs_visual_mask=obs_visual_mask,

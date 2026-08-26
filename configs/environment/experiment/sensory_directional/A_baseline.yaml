@@ -24,6 +24,8 @@
 extends: environment/default
 
 sensory:
+  visual_value_mode: sum
+  visual_occlusion_enabled: false
   olfactory_grid_range: 0
   visual_sensor_range: 0
   visual_blur_enabled: false

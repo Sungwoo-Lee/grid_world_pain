@@ -812,6 +812,14 @@ def main():
             tuple(int(x) for x in p.res_visual_mask),
             tuple(int(x) for x in p.animal_visual_mask),
             tuple(int(x) for x in p.obs_visual_mask),
+            # v3.2: both change observation SEMANTICS at an identical dim count.
+            # The cone angle and strength are continuous and stay out, same
+            # reasoning as the blur knobs.
+            p.visual_value_mode,
+            p.visual_occlusion_enabled,
+            tuple(bool(x) for x in p.res_blocks_sight),
+            tuple(bool(x) for x in p.animal_blocks_sight),
+            tuple(bool(x) for x in p.obs_blocks_sight),
             # NOT fingerprinted, deliberately: visual_blur_radial_scale /
             # _anisotropy / _sigma_floor are continuous, and fingerprinting floats
             # would forbid legitimate schedules. Same pre-existing choice applies

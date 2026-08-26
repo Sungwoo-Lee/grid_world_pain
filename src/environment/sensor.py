@@ -232,6 +232,29 @@ def _visual_mask_gate(agent_pos, all_pos, all_mask):
     return keep[None, :]
 
 
+def _occlusion_gate(agent_pos, all_pos, all_active, all_blocks, params: EnvParams):
+    """Line-of-sight gate, [1, Total_E]. v3.2.
+
+    An entity is hidden when a NEARER sight-blocking entity lies inside the shadow
+    cone of the ray from the agent to it. A cone rather than a strict grid line:
+    on an integer grid, exact collinearity fires almost only along the axes and
+    perfect diagonals, which would make the sensor blind north-south and
+    clear-sighted obliquely -- a worse artefact than the thing it models.
+
+    Returns a per-entity factor, so it composes with the static visual_mask gate
+    and the activity mask by plain multiplication. strength=1 hides fully;
+    lower values attenuate.
+    """
+    rel = (all_pos - agent_pos).astype(jnp.float32)                    # [E,2]
+    d = jnp.sqrt(jnp.maximum(jnp.sum(rel * rel, axis=-1), 1e-12))      # [E]
+    u = rel / d[:, None]
+    cos = u @ u.T                                                      # [E,E] pairwise bearing
+    nearer = d[None, :] < d[:, None]                                   # j nearer than i
+    blocker = (all_active & all_blocks)[None, :] & (d[None, :] > 1e-6)
+    occluded = jnp.any(nearer & (cos > params.visual_occlusion_cos) & blocker, axis=1)
+    return (1.0 - params.visual_occlusion_strength * occluded.astype(jnp.float32))[None, :]
+
+
 def sense_visual(agent_pos, state: EnvState, params: EnvParams):
     """Matmul-optimized Visual Sensor (configurable per-entity appearance vectors).
 
@@ -308,15 +331,19 @@ def sense_visual(agent_pos, state: EnvState, params: EnvParams):
     obs_props = state.obs_visual_property_sampled        # [num_obs, V]
     parts_props = [res_props]
     parts_mask = [params.res_visual_mask]
+    parts_blocks = [params.res_blocks_sight]
     if num_animal > 0:
         # Each animal uses its per-episode sampled visual property vector
         animal_props = state.animal_visual_property_sampled  # [N, V]
         parts_props.append(animal_props)
         parts_mask.append(params.animal_visual_mask)
+        parts_blocks.append(params.animal_blocks_sight)
     parts_props.append(obs_props)
     parts_mask.append(params.obs_visual_mask)
+    parts_blocks.append(params.obs_blocks_sight)
     all_props = jnp.concatenate(parts_props, axis=0)  # [Total_E, V]
     all_mask = jnp.concatenate(parts_mask, axis=0)    # [Total_E] int
+    all_blocks = jnp.concatenate(parts_blocks, axis=0)  # [Total_E] bool
 
     # Weight matrix [num_cells, Total_E]: gaussian point-spread when blur is on,
     # exact cell match otherwise. The OFF branch is bit-identical to pre-v3.1 --
@@ -329,9 +356,16 @@ def sense_visual(agent_pos, state: EnvState, params: EnvParams):
                     axis=-1).astype(jnp.float32)
     W = W * all_active[None, :].astype(jnp.float32)
     W = W * _visual_mask_gate(agent_pos, all_pos, all_mask)
+    if params.visual_occlusion_enabled:                # static branch, trace time
+        W = W * _occlusion_gate(agent_pos, all_pos, all_active, all_blocks, params)
 
     # Sum properties: [num_cells, Total_E] @ [Total_E, V] -> [num_cells, V]
     vis_entities = jnp.matmul(W, all_props)
+    if params.visual_value_mode == 'clamp':            # static branch, trace time
+        # Per-channel presence rather than a count: two rocks in a cell read 1.0,
+        # not 2.0. Applied to the ENTITY contribution only -- terrain is ground,
+        # not an object, and keeps its own value.
+        vis_entities = jnp.minimum(vis_entities, 1.0)
 
     # Final assembly
     total_vis = vis_background + vis_entities

@@ -102,6 +102,8 @@ body:
   death_penalty: 0.0
   overeating_death: false
 sensory:
+  visual_value_mode: sum
+  visual_occlusion_enabled: false
   using_sensory: true
   olfactory_enabled: false
   sensor_radius: 5
