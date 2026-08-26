@@ -1011,6 +1011,35 @@ def load_env_params(config: Config) -> EnvParams:
     if _vis_value_mode not in ('sum', 'clamp'):
         raise ValueError(
             f"sensory.visual_value_mode must be 'sum' or 'clamp', got {_vis_value_mode!r}.")
+    # Non-negative range guard. Without it a typo like -1 loads clean and dies far
+    # downstream with "axis 1 is out of bounds for array of dimension 1", which names
+    # neither the key nor the value. Both diamond radii are checked here; collision
+    # range is left alone (pre-existing, and not part of this change).
+    for _k in ('sensory.olfactory_grid_range', 'sensory.visual_sensor_range'):
+        _v = int(config.get_mandatory(_k))
+        if _v < 0:
+            raise ValueError(f"{_k} must be >= 0 (a diamond radius), got {_v}.")
+
+    # Blur knobs are traced, so load time is the ONLY place they can be checked.
+    # Unvalidated, sigma_floor=0 with radial_scale=0 loads clean and produces an
+    # all-NaN observation (1/(2*pi*0*0)); anisotropy=0 divides by zero and blinds
+    # vision without ever raising. Checked whether or not blur is currently on, so
+    # a config cannot carry a landmine that only detonates when someone enables it.
+    _blur_scale = float(config.get_mandatory('sensory.visual_blur_radial_scale'))
+    _blur_rho = float(config.get_mandatory('sensory.visual_blur_anisotropy'))
+    _blur_floor = float(config.get_mandatory('sensory.visual_blur_sigma_floor'))
+    if _blur_scale < 0.0:
+        raise ValueError(
+            f"sensory.visual_blur_radial_scale must be >= 0, got {_blur_scale}.")
+    if _blur_rho <= 0.0:
+        raise ValueError(
+            f"sensory.visual_blur_anisotropy must be > 0 (it divides sigma_par), "
+            f"got {_blur_rho}.")
+    if _blur_floor <= 0.0:
+        raise ValueError(
+            f"sensory.visual_blur_sigma_floor must be > 0 (it is the only thing "
+            f"keeping the kernel's normalisation finite), got {_blur_floor}.")
+
     _occ_on = bool(config.get_mandatory('sensory.visual_occlusion_enabled'))
     if _occ_on:
         _occ_deg = float(config.get_mandatory('sensory.visual_occlusion_cone_deg'))
@@ -1558,9 +1587,9 @@ def load_env_params(config: Config) -> EnvParams:
         location_sensor_enabled=config.get_mandatory('sensory.location_sensor'),
         olfactory_grid_range=int(config.get_mandatory('sensory.olfactory_grid_range')),
         visual_blur_enabled=bool(config.get_mandatory('sensory.visual_blur_enabled')),
-        visual_blur_radial_scale=float(config.get_mandatory('sensory.visual_blur_radial_scale')),
-        visual_blur_anisotropy=float(config.get_mandatory('sensory.visual_blur_anisotropy')),
-        visual_blur_sigma_floor=float(config.get_mandatory('sensory.visual_blur_sigma_floor')),
+        visual_blur_radial_scale=_blur_scale,
+        visual_blur_anisotropy=_blur_rho,
+        visual_blur_sigma_floor=_blur_floor,
         visual_value_mode=_vis_value_mode,
         visual_occlusion_enabled=_occ_on,
         visual_occlusion_cos=_occ_cos,

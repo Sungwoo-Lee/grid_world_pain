@@ -771,6 +771,17 @@ def main() -> None:
     # the same obs_dim, action_dim, and 23-field modality fingerprint so the
     # retained weights fit every stage. Fails fast with a descriptive error.
     # -----------------------------------------------------------------------
+    def _mask_fp(arr):
+        """Per-entity flag array -> fingerprint entry.
+
+        Returns the sentinel "none" when every entry is falsy, so the fingerprint
+        does not encode entity COUNT via tuple length. Only a config that actually
+        masks or blocks something contributes a count-dependent value, and such a
+        config genuinely does change observation semantics.
+        """
+        vals = tuple(int(x) for x in arr)
+        return "none" if not any(vals) else vals
+
     def _modality_fingerprint(p):
         """23-field tuple of sensor enables + shape params affecting obs layout.
 
@@ -801,17 +812,21 @@ def main() -> None:
             # break the `!=` comparison below, which is tuple equality.
             p.olfactory_grid_range,
             p.visual_blur_enabled,
-            tuple(int(x) for x in p.res_visual_mask),
-            tuple(int(x) for x in p.animal_visual_mask),
-            tuple(int(x) for x in p.obs_visual_mask),
+            # Collapsed to a sentinel when nothing is masked, so two curriculum
+            # stages with DIFFERENT ENTITY COUNTS but no masking still match.
+            # A raw tuple here would make its length entity-count-dependent and
+            # forbid the historically legal food-only -> full-task pattern.
+            _mask_fp(p.res_visual_mask),
+            _mask_fp(p.animal_visual_mask),
+            _mask_fp(p.obs_visual_mask),
             # DIRECTIONAL_SENSORS: both change observation SEMANTICS at an identical dim count.
             # The cone angle and strength are continuous and stay out, same
             # reasoning as the blur knobs.
             p.visual_value_mode,
             p.visual_occlusion_enabled,
-            tuple(bool(x) for x in p.res_blocks_sight),
-            tuple(bool(x) for x in p.animal_blocks_sight),
-            tuple(bool(x) for x in p.obs_blocks_sight),
+            _mask_fp(p.res_blocks_sight),
+            _mask_fp(p.animal_blocks_sight),
+            _mask_fp(p.obs_blocks_sight),
             # NOT fingerprinted, deliberately: visual_blur_radial_scale /
             # _anisotropy / _sigma_floor are continuous, and fingerprinting floats
             # would forbid legitimate schedules. Same pre-existing choice applies

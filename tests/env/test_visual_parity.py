@@ -50,11 +50,17 @@ _FIXTURE_DIR = os.path.join(_ROOT, "tests", "env", "fixtures", "visual_parity")
 # Multi-config parametrize list: (slug_label, config_path)
 _PARITY_CONFIGS = [
     ("default",         os.path.join(_ROOT, "configs", "environment", "default.yaml")),
-    ("00-forage_5x5",   os.path.join(_ROOT, "configs", "environment", "experiment", "basic", "00-forage_5x5.yaml")),
-    ("01-slowPred_5x5", os.path.join(_ROOT, "configs", "environment", "experiment", "basic", "01-slowPred_5x5.yaml")),
-    ("02-fastPred_8x8", os.path.join(_ROOT, "configs", "environment", "experiment", "basic", "02-fastPred_8x8.yaml")),
-    ("03-multiPred_10x10", os.path.join(_ROOT, "configs", "environment", "experiment", "basic", "03-multiPred_10x10.yaml")),
-    ("04-keenPred_10x10",  os.path.join(_ROOT, "configs", "environment", "experiment", "basic", "04-keenPred_10x10.yaml")),
+    # 2026-08-26: the five entries here previously named `00-forage_5x5`,
+    # `01-slowPred_5x5`, `02-fastPred_8x8`, `03-multiPred_10x10`,
+    # `04-keenPred_10x10` — files that no longer exist under any name. The
+    # `basic/` curriculum was replaced, and because the gate below skips a
+    # missing path rather than failing, FIVE OF SEVEN configs were silently not
+    # being checked. Repointed at the live curriculum.
+    ("00-static_predator_5x5", os.path.join(_ROOT, "configs", "environment", "experiment", "basic", "00-static_predator_5x5.yaml")),
+    ("01-slow_predator_5x5",   os.path.join(_ROOT, "configs", "environment", "experiment", "basic", "01-slow_predator_5x5.yaml")),
+    ("02-predator_and_rabbit_10x10", os.path.join(_ROOT, "configs", "environment", "experiment", "basic", "02-predator_and_rabbit_10x10.yaml")),
+    ("03-random_init_10x10",   os.path.join(_ROOT, "configs", "environment", "experiment", "basic", "03-random_init_10x10.yaml")),
+    ("04-jump_attack_10x10",   os.path.join(_ROOT, "configs", "environment", "experiment", "basic", "04-jump_attack_10x10.yaml")),
     ("08-singlePredRabbit_disengage", os.path.join(_ROOT, "configs", "environment", "experiment", "archive", "hypervigilance", "08-singlePredRabbit_disengage.yaml")),
 ]
 
@@ -145,7 +151,10 @@ def pytest_addoption(parser):
 def test_visual_parity_byte_equal(label, cfg_path, request):
     """Visual sensor slice must be byte-identical to the pinned pre-change fixture."""
     if not os.path.exists(cfg_path):
-        pytest.skip(f"Config not found: {cfg_path}")
+        # Deliberately a FAILURE, not a skip: a silently-skipped parity config is
+        # indistinguishable from a passing one, which is how five of these rotted
+        # away unnoticed. If a config is legitimately retired, remove its entry.
+        pytest.fail(f"Parity config listed but missing: {cfg_path}")
 
     params = _load_params(cfg_path)
     fp = _fixture_path(cfg_path)
