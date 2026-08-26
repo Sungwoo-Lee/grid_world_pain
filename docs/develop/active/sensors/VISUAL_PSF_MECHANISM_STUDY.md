@@ -113,8 +113,16 @@ exactly the mass the blur pushed outside the diamond:
 | d = 4 | 0.486 | 0.032 |
 
 Normalising by the kernel's full analytic mass (`2π σ_∥ σ_⊥`) reports only the fraction landing
-inside the diamond, giving a ~30× falloff from d=1 to d=5 **for free** — vision would then need no
-separate `1/d^γ` term at all.
+inside the diamond, so the falloff comes **for free** — vision needs no separate `1/d^γ` term. The
+mechanism is real and the monotonicity holds; the *magnitude* quoted here was wrong, see the
+correction below.
+
+> **Correction (2026-08-26, math review).** This section originally claimed "~30×" from d=1 to d=5.
+> Measured on the **shipped** kernel that number is **9.1×** for the in-diamond total (17× for the
+> brightest cell). The 30× came from this study's sandbox, which has **no σ floor**; the
+> implementation floors both widths at half a cell, which fattens the near-field kernel and flattens
+> the ratio. The table above is likewise a range-1 brightest-cell quantity, not the range-2 totals
+> Fig 4 plots — read it as illustrative of the *mechanism*, not as the shipped numbers.
 
 ## Cost — measured, not estimated
 
@@ -218,6 +226,24 @@ Four things the reference implementation gets right, each of which is easy to ge
    entity standing on the agent (`d = 0` → `σ_∥ = 0`) sends the peak to infinity. A floor of ~0.5
    cells fixes it — and it is principled rather than a patch: half a cell is the grid's sampling
    limit, and Fig 6 independently found that sub-cell `σ_⊥` buys nothing but larger value ratios.
+
+   **The floor has a consequence this study understated: it caps the effective anisotropy at short
+   range.** With the shipped `scale = 0.5`, `ρ = 3.0`, `floor = 0.5`:
+
+   | entity distance | σ_∥ | σ_⊥ | **effective ρ** |
+   |---|---|---|---|
+   | 1 | 0.50 | 0.50 | **1.00 — isotropic** |
+   | 2 | 1.00 | 0.50 | 2.00 |
+   | ≥ 3 | 0.5·d | 0.5·d/3 | 3.00 (as configured) |
+
+   So "distance goes vague while bearing stays sharp" is true from three cells out, and **at one cell
+   the kernel is isotropic no matter what ρ is set to**. That is defensible — an adjacent object's
+   bearing is already unambiguous — but it is enforced, not chosen, and Fig 6's "past σ_⊥ < half a
+   cell you buy nothing" is therefore a hard cap in the implementation rather than advice.
+
+   **The figures in this study were generated without the floor** (`psf_lib.py` omits it), so panels
+   at d < 3 depict the idealised kernel rather than the shipped one. Panels at d ≥ 3 — including
+   Fig 2's worked case at d = 3.5 — are unaffected.
 4. **Keep the new config values as traced arrays, not static.** `visual_sensor_range` is
    shape-determining and must stay static; the blur scale, anisotropy and floor must not, or every
    sweep value triggers a recompile.

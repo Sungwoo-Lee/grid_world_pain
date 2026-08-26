@@ -269,7 +269,8 @@ class EnvParams:
     # Selects the visual code path at trace time. False == exact cell match.
     visual_blur_enabled: bool = struct.field(pytree_node=False)
     # Continuous blur knobs are TRACED: sweeping them must not recompile jax_step.
-    visual_blur_radial_scale: float   # sigma_parallel  = scale * distance
+    visual_blur_radial_scale: float   # sigma_par = max(scale*d, floor) -- the floor CAPS
+                                      # effective anisotropy at short range (rho=1 at d=1)
     visual_blur_anisotropy: float     # rho = sigma_par / sigma_perp; 1.0 == isotropic
     visual_blur_sigma_floor: float    # cells; the grid's sampling limit
     # Per-entity visibility: 0 = none, 1 = far (visible only when co-located), 2 = all

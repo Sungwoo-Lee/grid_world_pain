@@ -54,7 +54,7 @@ FIGS = [
      "reducing the radial blur at all. Distance vagueness and bearing sharpness are independent axes."),
     ("fig4_normalisation.png", "4", "Does a distant object get fainter?",
      "Normalising each object's kernel by its full analytic mass (green) reports only the fraction "
-     "that lands inside the diamond, so signal falls about thirtyfold from d=1 to d=5 — blur width "
+     "that lands inside the diamond, so signal falls about ninefold from d=1 to d=5 on the shipped kernel — blur width "
      "alone produces the distance falloff, and vision needs no separate 1/d<sup>γ</sup> term. "
      "Normalising over the visible cells instead (red) puts that mass straight back: a predator five "
      "cells away stays exactly as loud as one next door. Unnormalised (purple) is worse still — "
