@@ -1,0 +1,30 @@
+# ============================================================================
+# DIRECTIONAL SENSORS sweep — arm D of 5
+# Wider vision, BLURRED (anisotropic). obs 123.
+#
+# QUESTION: the v3.1 sensors let smell carry a direction (a diamond of sampling
+# cells instead of one) and let vision be positionally uncertain (an anisotropic
+# point-spread blur). Do either change what the agent can do?
+#
+# SINGLE VARIABLE per arm, each against a NAMED control:
+#   B vs A   directional smell
+#   C vs A   wider vision, still sharp
+#   D vs C   the blur itself      (same obs width, 123, only sharpness differs)
+#   D' vs D  the ANISOTROPY       (same obs width and blur width, only shape)
+# The sharp-wide arm C exists because blur needs cells to spread into: without
+# it, "blur on" would change both range AND sharpness against the baseline.
+#
+# Base task is the shipped default scene, deliberately -- not one of the
+# bush-refuge / rest-premium variants -- so no unrelated manipulation is
+# inherited. Single seed (42, config-owned). Everything else default.
+#
+# Plan: docs/develop/active/sensors/DIRECTIONAL_SENSORS_PLAN.md
+# Report: docs/develop/active/sensors/V31_IMPLEMENTATION_REPORT.md
+# ============================================================================
+extends: environment/default
+
+sensory:
+  olfactory_grid_range: 0
+  visual_sensor_range: 2
+  visual_blur_enabled: true
+  visual_blur_anisotropy: 3.0

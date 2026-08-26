@@ -117,6 +117,7 @@ These are commands hardcoded in skills and agent profiles with the full conda in
 | `scripts/lab/launch_sheeprl.sh` | agent `training-runner` (L16); `run_command.py` docstring examples (L26,126); `pytorch_agents/run_dreamer_v3.py:10` docstring. The one real training-launch path. |
 | `scripts/lab/bootstrap_lab_ssh.sh` | agent `training-runner` (L81). |
 | `scripts/lab/gpu_status.py` | skill `gpu-status` (.claude/skills/gpu-status/SKILL.md); top-level Claude's GPU-assignment-before-launch flow; maintenance command in `docs/environment/LAB_NODE_GPU_SPEC.md`. Read-only direct-SSH nvidia-smi query across nodes 101-114. |
+| `scripts/lab/launch_sensory_arm.sh` | Launches one arm of the directional-sensors sweep (`configs/environment/experiment/sensory_directional/*.yaml`) via `train.py`. Called remotely by `run_command.py`; does its own `cd` + explicit interpreter, same contract as `train_command-new.sh`. Added 2026-08-21 with [[DIRECTIONAL_SENSORS_PLAN]]. |
 | `scripts/claude/regen_code_graph.py` | on-demand hint only — skill `wiki-read` (L53), agents `senior-developer`/`code-reviewer`, README. Output is gitignored; low stakes. |
 
 **Lower-stakes (doc-mention only, no executable caller):** `scripts/claude/lint_wiki.py`, `scripts/claude/open_conversation.py`.
