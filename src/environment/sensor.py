@@ -44,15 +44,15 @@ def _sense_olfaction_at(point, state: EnvState, params: EnvParams):
 def sense_olfaction_cells(state: EnvState, params: EnvParams):
     """Olfactory field sampled at every cell of a Manhattan diamond (v3.1).
 
-    olfactory_sensor_range == 0 takes a static fallback to the original
+    olfactory_grid_range == 0 takes a static fallback to the original
     single-point expression, so parity does not depend on vmap-of-one compiling
     identically. Out-of-bounds cells read zero across all channels, matching the
     visual sensor. Flattened cell-major: cell 0's channels, then cell 1's, ...
     """
-    if params.olfactory_sensor_range == 0:          # static branch, trace time
+    if params.olfactory_grid_range == 0:          # static branch, trace time
         return _sense_olfaction_at(state.agent_pos, state, params)
 
-    offsets = get_visual_offsets(params.olfactory_sensor_range)   # [C,2]
+    offsets = get_visual_offsets(params.olfactory_grid_range)   # [C,2]
     cells = state.agent_pos + offsets
     # Built here rather than reused from sense_visual: the two sensors have
     # INDEPENDENT ranges, so their cell sets and in-bounds masks differ.
@@ -418,7 +418,7 @@ def get_observation(state: EnvState, params: EnvParams, apply_noise=True):
     # B2 fix: unified animal_chem replaces separate pred_chem + neutral_chem calls.
     if params.olfactory_enabled:
         # v3.1: sampled at every cell of a Manhattan diamond of radius
-        # olfactory_sensor_range. At range 0 this is the pre-v3.1 single sample,
+        # olfactory_grid_range. At range 0 this is the pre-v3.1 single sample,
         # bit-identical. Per-episode active masks keep inactive entities silent.
         obs_parts.append(sense_olfaction_cells(state, params))
     
@@ -466,8 +466,8 @@ def get_observation_breakdown(params: EnvParams):
     
     # 5. Olfaction
     if params.olfactory_enabled:
-        n_olf_cells = (2 * (params.olfactory_sensor_range ** 2)
-                       + 2 * params.olfactory_sensor_range + 1)
+        n_olf_cells = (2 * (params.olfactory_grid_range ** 2)
+                       + 2 * params.olfactory_grid_range + 1)
         breakdown["Olfaction"] = int(n_olf_cells * params.res_property.shape[-1])
     
     # 6. Collision
@@ -517,12 +517,12 @@ def build_sensory_viz(obs, state, params, true_obs=None):
             # diamond renderer below does not.
             _olf_labels = (['FOOD', 'AN-A', 'AN-B', 'BUSH', 'TREE'] if _V == 5
                            else [f'C{i}' for i in range(_V)])
-            if params.olfactory_sensor_range > 0:
+            if params.olfactory_grid_range > 0:
                 # v3.1: one reading per diamond cell -> render as a spatial grid,
                 # the same pod the visual sensor uses.
                 viz.append({'name': 'Olfactory', 'vector': olf_obs, 'true_vector': olf_true,
                             'type': 'visual_grid', 'num_features': _V,
-                            'range': params.olfactory_sensor_range, 'labels': _olf_labels})
+                            'range': params.olfactory_grid_range, 'labels': _olf_labels})
             else:
                 viz.append({'name': 'Olfactory', 'vector': olf_obs, 'true_vector': olf_true,
                             'type': 'spectrum', 'labels': _olf_labels})

@@ -49,7 +49,7 @@ def one_state(p, seed=7):
 
 def test_shipped_defaults_are_off():
     p = params()
-    assert p.olfactory_sensor_range == 0
+    assert p.olfactory_grid_range == 0
     assert p.visual_blur_enabled is False
     for m in (p.res_visual_mask, p.animal_visual_mask, p.obs_visual_mask):
         assert int(np.asarray(m).sum()) == 0, "no entity is masked by default"
@@ -84,7 +84,7 @@ def test_observation_is_bit_identical_to_stored_pre_change_fixture():
 @pytest.mark.parametrize('olf,vis', [(0, 0), (1, 0), (0, 2), (1, 2), (2, 1)])
 def test_breakdown_sums_to_actual_observation_width(olf, vis):
     """CP2 — a mismatch here silently mis-assigns perceptual noise."""
-    p = params(**{'sensory.olfactory_sensor_range': olf, 'sensory.visual_sensor_range': vis})
+    p = params(**{'sensory.olfactory_grid_range': olf, 'sensory.visual_sensor_range': vis})
     _, obs = one_state(p)
     bd = get_observation_breakdown(p)
     assert sum(bd.values()) == obs.shape[0]
@@ -165,7 +165,7 @@ def test_unknown_visual_mask_string_raises_at_load():
 # ------------------------------------------------------- olfactory diamond ---
 
 def test_diamond_reading_is_highest_toward_the_source():
-    p = params(**{'sensory.olfactory_sensor_range': 1})
+    p = params(**{'sensory.olfactory_grid_range': 1})
     st, _ = one_state(p)
     agent = jnp.array([5, 5])
     V = int(p.res_property.shape[-1])
@@ -186,7 +186,7 @@ def test_diamond_reading_is_highest_toward_the_source():
 
 def test_out_of_bounds_diamond_cells_read_exactly_zero():
     """Without this the suite stays green while olfaction reads through walls."""
-    p = params(**{'sensory.olfactory_sensor_range': 1})
+    p = params(**{'sensory.olfactory_grid_range': 1})
     st, _ = one_state(p)
     V = int(p.res_property.shape[-1])
     st2 = st.replace(agent_pos=jnp.array([0, 0]))              # top-left corner

@@ -77,7 +77,7 @@ bought nothing. That was a property of the estimator, not of the sensor.
 
 ## What it costs
 
-| `olfactory_sensor_range` | cells | olfaction dims | total observation |
+| `olfactory_grid_range` | cells | olfaction dims | total observation |
 |---|---|---|---|
 | 0 (today) | 1 | 5 | 27 |
 | 1 | 5 | 25 | 47 |
@@ -139,7 +139,7 @@ can act on, and act on wrongly. Worth knowing before interpreting any approach-b
 | Item | Decision |
 |---|---|
 | Sampling | For each diamond cell, run the existing `sense_resource` with that cell as the sampling point — distances and the `sensor_radius` cutoff both measured from the cell, not the agent. |
-| Parity | `olfactory_sensor_range: 0` reproduces today's observation byte-for-byte. The centre cell is the current computation unchanged, so parity is structural rather than something to test for. |
+| Parity | `olfactory_grid_range: 0` reproduces today's observation byte-for-byte. The centre cell is the current computation unchanged, so parity is structural rather than something to test for. |
 | Scope | Olfaction gets the diamond and nothing else — no mask key, no added noise. It already decays with distance, and an entity is already made unsmellable by an all-zero signature. |
 
 ### Open

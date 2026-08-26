@@ -20,7 +20,7 @@ from src.environment.sensor import get_observation
 
 RUN='results/JAX_RecurrentPPO/20260810-185749_rppo_restprem_a01_n106'
 S=sorted(glob.glob('results/trajectories/*_a01_*/*/*/'))[0]
-NEW={'sensory.olfactory_sensor_range':0,'sensory.visual_blur_enabled':False,
+NEW={'sensory.olfactory_grid_range':0,'sensory.visual_blur_enabled':False,
      'sensory.visual_blur_radial_scale':0.0,'sensory.visual_blur_anisotropy':0.0,
      'sensory.visual_blur_sigma_floor':0.0}
 raw=yaml.safe_load(open(RUN+'/models/config.yaml'))
@@ -29,7 +29,7 @@ for k,v in NEW.items():
     for p in parts[:-1]: d=d.setdefault(p,{})
     d[parts[-1]]=v
 params=load_env_params(Config(raw))
-print(f"params built. olfactory_sensor_range={params.olfactory_sensor_range} "
+print(f"params built. olfactory_grid_range={params.olfactory_grid_range} "
       f"visual_blur_enabled={params.visual_blur_enabled}")
 
 f=sorted(glob.glob(S+'steps_*.parquet'))[0]

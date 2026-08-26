@@ -228,7 +228,7 @@ Four things the reference implementation gets right, each of which is easy to ge
 
 | Item | Decision |
 |---|---|
-| Olfaction | Per-cell diamond, field resampled at each cell; distances and the `sensor_radius` cutoff measured from that cell. Nothing else changes — no mask key, no added noise. `olfactory_sensor_range: 0` must stay byte-identical to today. |
+| Olfaction | Per-cell diamond, field resampled at each cell; distances and the `sensor_radius` cutoff measured from that cell. Nothing else changes — no mask key, no added noise. `olfactory_grid_range: 0` must stay byte-identical to today. |
 | Masking | Per-entity `visual_mask: none \| far \| all` |
 | Blur | Deterministic. No stochastic term. |
 | Support | Folded into the entity matmul — a weight matrix replaces the boolean match matrix, so the periphery is soft and objects outside the diamond bleed into its edge. |

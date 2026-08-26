@@ -1514,7 +1514,7 @@ def load_env_params(config: Config) -> EnvParams:
         olfactory_enabled=config.get_mandatory('sensory.olfactory_enabled'),
         nociception_enabled=config.get_mandatory('sensory.nociception_enabled'),
         location_sensor_enabled=config.get_mandatory('sensory.location_sensor'),
-        olfactory_sensor_range=int(config.get_mandatory('sensory.olfactory_sensor_range')),
+        olfactory_grid_range=int(config.get_mandatory('sensory.olfactory_grid_range')),
         visual_blur_enabled=bool(config.get_mandatory('sensory.visual_blur_enabled')),
         visual_blur_radial_scale=float(config.get_mandatory('sensory.visual_blur_radial_scale')),
         visual_blur_anisotropy=float(config.get_mandatory('sensory.visual_blur_anisotropy')),

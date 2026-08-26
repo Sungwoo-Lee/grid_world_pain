@@ -169,7 +169,7 @@ def _make_v4_config() -> str:
         sensory:
           sensor_radius: 3.0
           decay_power: 1.5
-          olfactory_sensor_range: 0
+          olfactory_grid_range: 0
           visual_blur_enabled: false
           visual_blur_radial_scale: 0.5
           visual_blur_anisotropy: 3.0
@@ -289,7 +289,7 @@ def _make_v4_config_with_noise() -> str:
         sensory:
           sensor_radius: 3.0
           decay_power: 1.5
-          olfactory_sensor_range: 0
+          olfactory_grid_range: 0
           visual_blur_enabled: false
           visual_blur_radial_scale: 0.5
           visual_blur_anisotropy: 3.0
@@ -441,7 +441,7 @@ def _base_yaml_v4_resource_missing_vp() -> str:
         sensory:
           sensor_radius: 3.0
           decay_power: 1.5
-          olfactory_sensor_range: 0
+          olfactory_grid_range: 0
           visual_blur_enabled: false
           visual_blur_radial_scale: 0.5
           visual_blur_anisotropy: 3.0

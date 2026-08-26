@@ -97,7 +97,7 @@ it says — visible only when the agent is standing on it.
 
 ### What is NOT in scope
 
-Values. `visual_sensor_range`, `olfactory_sensor_range`, γ, ρ and the blur scale are experiment
+Values. `visual_sensor_range`, `olfactory_grid_range`, γ, ρ and the blur scale are experiment
 configuration, chosen per run. This plan ships them all at parity-preserving defaults and does not
 recommend training values.
 
@@ -141,7 +141,7 @@ Four implementation constraints, each of which is a real trap:
    information.
 3. **`û` needs a guarded divide** at `d = 0`. With the floor in place the direction is irrelevant
    there, but the NaN is not.
-4. **Static versus traced.** `visual_sensor_range` and `olfactory_sensor_range` are shape-determining
+4. **Static versus traced.** `visual_sensor_range` and `olfactory_grid_range` are shape-determining
    and must stay `pytree_node=False`. `visual_blur_enabled` is a trace-time Python branch. The three
    continuous blur knobs **must be traced arrays**, or every sweep value recompiles `jax_step`.
 
@@ -154,7 +154,7 @@ Four implementation constraints, each of which is a real trap:
   # --- Olfactory directional sampling (v3.1) -------------------------------
   # 0 = today's single sample at the agent's cell (byte-parity). >0 samples the
   # same field at every cell of a Manhattan diamond, so readings carry a gradient.
-  olfactory_sensor_range: 0
+  olfactory_grid_range: 0
 
   # --- Visual point-spread blur (v3.1) ------------------------------------
   # false = exact cell match, byte-identical to pre-v3.1 behaviour.
@@ -185,7 +185,7 @@ Per-entity, optional, on every resource / entity / obstacle entry (default `none
     ...
     visual_sensor_range: int = struct.field(pytree_node=False)
     # v3.1 directional sensors ------------------------------------------------
-    olfactory_sensor_range: int = struct.field(pytree_node=False)   # shape-determining
+    olfactory_grid_range: int = struct.field(pytree_node=False)   # shape-determining
     visual_blur_enabled: bool = struct.field(pytree_node=False)     # trace-time branch
     visual_blur_radial_scale: float      # traced — sweeping must not recompile
     visual_blur_anisotropy: float        # traced
@@ -231,15 +231,15 @@ under `jit` — so the equivalence is checked in the form the sensor actually ev
 def sense_olfaction_cells(state, params):
     """Olfactory field sampled at every cell of a Manhattan diamond.
 
-    olfactory_sensor_range == 0 reproduces the pre-v3.1 single sample exactly:
+    olfactory_grid_range == 0 reproduces the pre-v3.1 single sample exactly:
     the diamond is [[0,0]], so the sampling point IS the agent's cell. The
     range-0 case takes a STATIC fallback to the original un-vmapped expression
     so parity does not depend on vmap-of-one compiling identically -- the same
     belt-and-braces the visual path gets from visual_blur_enabled.
     """
-    if params.olfactory_sensor_range == 0:          # static branch, trace time
+    if params.olfactory_grid_range == 0:          # static branch, trace time
         return _sense_olfaction_point(state.agent_pos, state, params)   # today's code, verbatim
-    offsets = get_visual_offsets(params.olfactory_sensor_range)      # [C,2]
+    offsets = get_visual_offsets(params.olfactory_grid_range)      # [C,2]
     cells = state.agent_pos + offsets
 
     def at(p):
@@ -331,7 +331,7 @@ entity's blur tail.
     # BEFORE:
     breakdown["Olfaction"] = int(params.res_property.shape[-1])
     # AFTER:
-    n_olf_cells = 2 * (params.olfactory_sensor_range**2) + 2 * params.olfactory_sensor_range + 1
+    n_olf_cells = 2 * (params.olfactory_grid_range**2) + 2 * params.olfactory_grid_range + 1
     breakdown["Olfaction"] = int(n_olf_cells * params.res_property.shape[-1])
 ```
 
@@ -349,14 +349,14 @@ inert today because `draw_spectrum_pod` ignores `labels`, but a diamond renderer
 **Corrected after review — the first draft misdiagnosed this.** Both files carry a duplicated
 13-field modality fingerprint that gates whether curriculum stages share an observation layout, and
 it has no olfactory range field because none existed. The first draft claimed two stages differing
-only in `olfactory_sensor_range` would pass validation. **That is false**: both validators check
+only in `olfactory_grid_range` would pass validation. **That is false**: both validators check
 obs_dim equality *first* (`train.py:816-822`, `dreamer_srl_main.py:806-812`) and an olfactory-range
 change always changes obs_dim, so it is already rejected today.
 
 The fingerprint addition is still correct, but for a different and narrower reason:
 **`visual_blur_enabled` is the only genuinely new hazard** — it changes observation *semantics* at an
 *identical* dimension count, which is precisely the case obs_dim equality cannot catch. Adding
-`olfactory_sensor_range` is defence in depth rather than a fix. The test must therefore target the
+`olfactory_grid_range` is defence in depth rather than a fix. The test must therefore target the
 fingerprint-specific rejection (see Test Plan), or it passes without the change and proves nothing.
 
 ```python
@@ -374,7 +374,7 @@ fingerprint-specific rejection (see Test Plan), or it passes without the change 
         p.visual_sensor_range,
         ...
         p.sensor_range,
-        p.olfactory_sensor_range,   # v3.1 — changes obs_dim
+        p.olfactory_grid_range,   # v3.1 — changes obs_dim
         p.visual_blur_enabled,      # v3.1 — changes obs SEMANTICS at identical dim
     )
 ```
@@ -439,7 +439,7 @@ disclosed here rather than discovered by whoever next re-evaluates an old run.
       vector for a fixed seed and 20 steps, before and after the change. Must be **bit-identical**.
       Compare saved arrays, not a recomputation from source.
 - [ ] **CP2 — breakdown arithmetic.** `sum(get_observation_breakdown(params).values()) ==
-      get_observation(...).shape[0]` at `olfactory_sensor_range` ∈ {0,1,2} × `visual_sensor_range` ∈
+      get_observation(...).shape[0]` at `olfactory_grid_range` ∈ {0,1,2} × `visual_sensor_range` ∈
       {0,1,2}. Catches slice drift that silently mis-assigns noise.
 - [ ] **CP3 — kernel sanity on known geometry.** ρ=1 reproduces an isotropic Gaussian; an object at
       exactly 45° gives equal north and east weights; an object on the agent's own cell produces a
@@ -460,12 +460,12 @@ New, under `tests/env/`:
 
 | Test | Asserts |
 |---|---|
-| `test_olfaction_range0_parity.py` | `olfactory_sensor_range: 0` gives observations bit-identical to a stored pre-change reference |
+| `test_olfaction_range0_parity.py` | `olfactory_grid_range: 0` gives observations bit-identical to a stored pre-change reference |
 | `test_visual_blur_disabled_parity.py` | `visual_blur_enabled: false` likewise, **including** the moved activity mask |
 | `test_visual_psf_kernel.py` | CP3 + CP4 as unit assertions on the weight matrix. **Must pin `jax_default_matmul_precision`**, or exact-geometry assertions are flaky at the 1e-4 level on GPU |
 | `test_visual_mask.py` | With blur ON, a `far`-masked entity at distance ≥ 1 contributes **exactly zero to every cell including the centre** (the leak regression test); it contributes normally when the agent stands on it; `all` zeroes everything; `none` unchanged; an unknown string raises at load |
 | `test_olfaction_diamond.py` | At range 1 with a single source, the cell toward the source reads higher than the cell away from it, for several bearings. **Plus: with the agent on a boundary, every out-of-bounds cell reads exactly zero across all `vector_size` channels** — without this the suite stays green while olfaction reads through walls |
-| `test_modality_fingerprint.py` | Two configs with **identical obs_dim** but different `visual_blur_enabled` are rejected by the curriculum-stage validator, in both `train.py` and `dreamer_srl_main.py`. Must assert the *fingerprint* error, not the obs_dim error — a test built on `olfactory_sensor_range` passes without the change and proves nothing |
+| `test_modality_fingerprint.py` | Two configs with **identical obs_dim** but different `visual_blur_enabled` are rejected by the curriculum-stage validator, in both `train.py` and `dreamer_srl_main.py`. Must assert the *fingerprint* error, not the obs_dim error — a test built on `olfactory_grid_range` passes without the change and proves nothing |
 
 Extend: `test_no_recompile.py` (CP5), `test_visual_parity.py` / `test_visual_properties.py` /
 `test_visual_sampling.py` (must still pass unchanged — they are the existing parity net).
@@ -493,7 +493,7 @@ answered by the user (2026-08-20); the fourth is still open.**
 | # | Question | Decision |
 |---|---|---|
 | — | `visual_sensor_range` for blur runs | **2** (13 cells, 104 visual dims, observation 27 → 123). The smallest diamond with room for the kernel to place an off-axis lobe, and the range both Fig 2 and Fig 3 were measured on. |
-| — | `olfactory_sensor_range` | **1** (5 cells, 25 olfaction dims, observation 27 → 47). Cheapest range that gives direction, and per Fig 3 the *most accurate* one while perceptual noise is off — which is the default. |
+| — | `olfactory_grid_range` | **1** (5 cells, 25 olfaction dims, observation 27 → 47). Cheapest range that gives direction, and per Fig 3 the *most accurate* one while perceptual noise is off — which is the default. |
 | 2 | The on-source decay rule | **Option B — express the constant as a half-cell floor, `1 / (0.5^γ)`.** Verified bit-identical to the hard-coded `2.0` in float32 at the shipped γ=1, so parity holds and no test changes; correct at every other γ, where the constant silently is not. Study: [[ONSOURCE_RULE_STUDY]]. |
 | 3 | Continuous blur knobs unfingerprinted | **Accept, and say so in the code comment.** ρ, radial scale and σ floor stay out of the modality fingerprint: fingerprinting floats is brittle and would forbid legitimate schedules. The asymmetry against `visual_blur_enabled` — which *is* fingerprinted — must be a deliberate comment at the fingerprint site, not an accident a later reader has to reverse-engineer. Same applies to the pre-existing unfingerprinted `visual_vector_size`. |
 | 4 | Fingerprinting `visual_blur_enabled` forecloses a sharp→blurred curriculum | **Accept.** Correct per the check's stated purpose — observation semantics must not change mid-run. A perceptual-degradation curriculum would need its own weight-compatibility story and should be designed deliberately rather than enabled by an omission. |

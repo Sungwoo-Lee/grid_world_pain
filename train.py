@@ -800,14 +800,14 @@ def main():
             p.injury_observable,
             p.nutrition_observable,
             p.sensor_range,
-            # v3.1 directional sensors. olfactory_sensor_range changes obs_dim (so
+            # v3.1 directional sensors. olfactory_grid_range changes obs_dim (so
             # the dim check already catches it) -- included as defence in depth.
             # visual_blur_enabled and the per-entity visual_mask arrays change what
             # the observation MEANS at an identical dim count, which is the case
             # the dim check cannot catch and the only reason this tuple exists.
             # Masks go in as tuples of ints: appending a jnp array would silently
             # break the `!=` comparison below, which is tuple equality.
-            p.olfactory_sensor_range,
+            p.olfactory_grid_range,
             p.visual_blur_enabled,
             tuple(int(x) for x in p.res_visual_mask),
             tuple(int(x) for x in p.animal_visual_mask),

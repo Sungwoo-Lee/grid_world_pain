@@ -190,12 +190,20 @@ sensory:
   sensor_radius: 20
   vector_size: 5
   decay_power: 1.0
+  # NOTE — two different distances live in this block, do not confuse them:
+  #   sensor_radius         = how FAR a smell carries (a property of the field;
+  #                           at 20 it exceeds the grid, so it never binds)
+  #   olfactory_grid_range  = WHERE we sample that field (a property of the
+  #                           sensor: the grid of sampling cells around the agent)
+  # olfactory_grid_range is a RADIUS, not a side length: 0 -> 1 cell,
+  # 1 -> 5 cells, 2 -> 13 cells (a Manhattan diamond, same shape the visual and
+  # collision sensors use).
   # v3.1 directional olfaction. 0 = the pre-v3.1 single sample at the agent's own
   # cell (byte-identical). >0 samples the same field at every cell of a Manhattan
   # diamond, so the readings carry a gradient and therefore a direction.
   # Out-of-bounds cells read zero, matching the visual sensor.
   # Dimensions = (2r^2 + 2r + 1) * vector_size.
-  olfactory_sensor_range: 0
+  olfactory_grid_range: 0
   #Collision sensor
   collision_sensor_range: 1
   #Location sensor

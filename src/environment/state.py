@@ -265,7 +265,7 @@ class EnvParams:
 
     # --- v3.1 directional sensors -------------------------------------------
     # Shape-determining -> static. 0 reproduces the pre-v3.1 single-point sample.
-    olfactory_sensor_range: int = struct.field(pytree_node=False)
+    olfactory_grid_range: int = struct.field(pytree_node=False)
     # Selects the visual code path at trace time. False == exact cell match.
     visual_blur_enabled: bool = struct.field(pytree_node=False)
     # Continuous blur knobs are TRACED: sweeping them must not recompile jax_step.

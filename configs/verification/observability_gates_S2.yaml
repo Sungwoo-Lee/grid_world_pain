@@ -269,7 +269,7 @@ sensory:
   # docs/develop/active/sensors/DIRECTIONAL_SENSORS_PLAN.md). Added by the v3.1
   # sweep: this config carries a full standalone `sensory:` block, so it does not
   # inherit these from configs/environment/default.yaml.
-  olfactory_sensor_range: 0
+  olfactory_grid_range: 0
   visual_blur_enabled: false
   visual_blur_radial_scale: 0.5
   visual_blur_anisotropy: 3.0

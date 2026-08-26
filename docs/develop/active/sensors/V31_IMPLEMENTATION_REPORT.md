@@ -20,7 +20,7 @@ Three opt-in behaviours plus one unconditional correction.
 
 | change | switch | ships as |
 |---|---|---|
-| Olfaction sampled over a Manhattan diamond, so its readings carry a direction | `sensory.olfactory_sensor_range` | `0` (off) |
+| Olfaction sampled over a Manhattan diamond, so its readings carry a direction | `sensory.olfactory_grid_range` | `0` (off) |
 | Anisotropic point-spread blur on vision — distance vague, bearing sharp | `sensory.visual_blur_enabled` | `false` (off) |
 | Per-entity invisibility | `visual_mask: none \| far \| all` | `none` (off) |
 | On-source decay expressed as a half-cell floor `1/(0.5^γ)` | none | always |

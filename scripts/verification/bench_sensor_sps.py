@@ -56,10 +56,10 @@ def sps_for(overrides, label):
 
 CASES = [
     ({}, 'baseline (all new features off)'),
-    ({'sensory.olfactory_sensor_range': 1}, 'olfaction range 1'),
+    ({'sensory.olfactory_grid_range': 1}, 'olfaction range 1'),
     ({'sensory.visual_sensor_range': 2}, 'vision range 2, blur off'),
     ({'sensory.visual_sensor_range': 2, 'sensory.visual_blur_enabled': True}, 'vision range 2 + blur'),
-    ({'sensory.olfactory_sensor_range': 1, 'sensory.visual_sensor_range': 2,
+    ({'sensory.olfactory_grid_range': 1, 'sensory.visual_sensor_range': 2,
       'sensory.visual_blur_enabled': True}, 'BOTH (chosen settings)'),
 ]
 

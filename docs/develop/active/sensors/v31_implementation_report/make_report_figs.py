@@ -63,7 +63,7 @@ def draw_grid(ax, st, p, title):
                 ax.plot(c, r, mk, ms=6, mfc=col, mec='black', mew=.5)
     ar, ac = np.asarray(st.agent_pos)
     ax.plot(ac, ar, marker='X', ms=13, mfc='#111', mec='white', mew=1.3)
-    for rr, col in [(p.olfactory_sensor_range, TEAL), (p.visual_sensor_range, PLUM)]:
+    for rr, col in [(p.olfactory_grid_range, TEAL), (p.visual_sensor_range, PLUM)]:
         if rr > 0:
             ax.plot([ac, ac+rr, ac, ac-rr, ac], [ar-rr, ar, ar+rr, ar, ar-rr],
                     color=col, lw=1.6, ls='--')
@@ -95,7 +95,7 @@ def cell_names(r):
 # ------------------------------------------------------------------ FIG 1 ---
 def fig1():
     p_b = P()
-    p_a = P(**{'sensory.olfactory_sensor_range': 1, 'sensory.visual_sensor_range': 2,
+    p_a = P(**{'sensory.olfactory_grid_range': 1, 'sensory.visual_sensor_range': 2,
                'sensory.visual_blur_enabled': True})
     st_b, ob = scene(p_b); st_a, oa = scene(p_a)
     fig = plt.figure(figsize=(13.6, 6.6))
@@ -153,7 +153,7 @@ def fig2():
 # ------------------------------------------------------------------ FIG 3 ---
 def fig3():
     """Olfactory gradient: put one food source at a known bearing and read the diamond."""
-    p = P(**{'sensory.olfactory_sensor_range': 1})
+    p = P(**{'sensory.olfactory_grid_range': 1})
     st, _ = scene(p)
     agent = jnp.array([5, 5])
     fig, axes = plt.subplots(1, 4, figsize=(13.2, 3.6))

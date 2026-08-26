@@ -66,7 +66,7 @@ SETTLED = [
     ("Sampling", "For each diamond cell, run the existing <code>sense_resource</code> with that cell "
                  "as the sampling point — distances and the <code>sensor_radius</code> cutoff both "
                  "measured from the cell, not from the agent."),
-    ("Parity", "<code>olfactory_sensor_range: 0</code> must reproduce today's observation "
+    ("Parity", "<code>olfactory_grid_range: 0</code> must reproduce today's observation "
                "byte-for-byte. The centre cell is the current computation unchanged."),
     ("Scope", "Olfaction gets the diamond and nothing else — no mask key, no added noise. It already "
               "degrades with distance through 1/d<sup>γ</sup>, and an entity is already made "
@@ -396,7 +396,7 @@ dimensions in total, of which olfaction is {O.VECSIZE_CFG}.</p>
 
 <div class="tablewrap col">
 <table>
-<thead><tr><th>olfactory_sensor_range</th><th>cells</th><th>olfaction dims</th><th>total observation</th></tr></thead>
+<thead><tr><th>olfactory_grid_range</th><th>cells</th><th>olfaction dims</th><th>total observation</th></tr></thead>
 <tbody>
 {dim_html}
 </tbody>

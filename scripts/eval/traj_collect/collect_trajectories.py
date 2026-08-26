@@ -305,7 +305,7 @@ def _np_list(x):
 # Patching happens before `env_fingerprint`, so the store's `env_fp` — a guarded manifest
 # field — reflects the config actually used.
 PRE_V31_SENSOR_DEFAULTS = {
-    "olfactory_sensor_range": 0,        # 0 = the original single-point sample
+    "olfactory_grid_range": 0,        # 0 = the original single-point sample
     "visual_blur_enabled": False,
     "visual_blur_radial_scale": 0.0,
     "visual_blur_anisotropy": 0.0,
@@ -657,7 +657,7 @@ def parse_args(argv=None):
                         "INDEPENDENTLY established which scene the run trained on.")
     p.add_argument("--assume-pre-v31-sensors", action="store_true",
                    help="Supply the five sensory keys that commit 0e8a4ef made mandatory "
-                        "(olfactory_sensor_range, visual_blur_*) at the values that "
+                        "(olfactory_grid_range, visual_blur_*) at the values that "
                         "reproduce the pre-v3.1 sensors exactly. Required to replay any run "
                         "trained before 2026-08-21. Refuses if the run already sets them.")
     p.add_argument("--allow-weak-restore-check", action="store_true",
