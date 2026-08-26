@@ -17,7 +17,13 @@ from src.utils.config import dump_config_yaml
 from src.environment.config_loader import load_env_config
 
 OUT = 'configs/environment/experiment/sensory_directional'
-SIGHT_BLOCKERS = {'rock', 'tree'}       # NOT bush: it already carries hides_agent
+# Which entities occlude. Named per arm so the blocker SET is itself a variable:
+# a bush that conceals the agent from predators is physically opaque and arguably
+# ought to block the agent's own view too, so "does vegetation block sight?" is a
+# question worth measuring rather than deciding.
+SCENERY = {'rock', 'tree'}                       # solid scenery only
+SCENERY_VEG = SCENERY | {'bush'}                 # + vegetation
+EVERYTHING = SCENERY_VEG | {'pred', 'rabbit', 'hiding_predator'}   # + living things
 
 ARMS = [
     ('E_clamp',        dict(visual_value_mode='clamp'), None, False,
@@ -27,14 +33,27 @@ ARMS = [
     ('G_presence_binary', dict(visual_value_mode='clamp'), 1, False,
      'Identity and count both removed — the RF-like sensor: "something is there".'),
     ('H_occlusion05',  dict(visual_occlusion_enabled=True, visual_occlusion_cone_deg=5.0,
-                            visual_occlusion_strength=1.0), None, True,
-     'Line-of-sight occlusion, 5 deg cone (~31% of live entities hidden).'),
+                            visual_occlusion_strength=1.0), None, SCENERY,
+     'Occlusion, 5 deg cone, ROCKS only (~19% of live entities hidden).'),
     ('I_occlusion15',  dict(visual_occlusion_enabled=True, visual_occlusion_cone_deg=15.0,
-                            visual_occlusion_strength=1.0), None, True,
-     'Same, 15 deg cone (~59% hidden). Brackets where occlusion starts to bite.'),
+                            visual_occlusion_strength=1.0), None, SCENERY,
+     'Occlusion, 15 deg cone, ROCKS only (~44% hidden).'),
     ('J_all_weakened', dict(visual_value_mode='clamp', visual_occlusion_enabled=True,
-                            visual_occlusion_cone_deg=5.0, visual_occlusion_strength=1.0), 1, True,
+                            visual_occlusion_cone_deg=5.0, visual_occlusion_strength=1.0), 1, SCENERY,
      'Every weakening stacked: no identity, no count, occluded. The floor.'),
+    # --- blocker-set sweep: H and I hold the cone fixed and vary WHAT blocks ---
+    ('K_occl05_veg',   dict(visual_occlusion_enabled=True, visual_occlusion_cone_deg=5.0,
+                            visual_occlusion_strength=1.0), None, SCENERY_VEG,
+     'Occlusion, 5 deg, rocks AND BUSHES block (~31% hidden). vs H: does vegetation block?'),
+    ('L_occl15_veg',   dict(visual_occlusion_enabled=True, visual_occlusion_cone_deg=15.0,
+                            visual_occlusion_strength=1.0), None, SCENERY_VEG,
+     'Occlusion, 15 deg, rocks AND BUSHES block (~58% hidden). vs I: same question, wider cone.'),
+    ('M_occl05_all',   dict(visual_occlusion_enabled=True, visual_occlusion_cone_deg=5.0,
+                            visual_occlusion_strength=1.0), None, EVERYTHING,
+     'Occlusion, 5 deg, EVERYTHING blocks incl. creatures (~38% hidden). The physically complete version.'),
+    ('N_occl15_all',   dict(visual_occlusion_enabled=True, visual_occlusion_cone_deg=15.0,
+                            visual_occlusion_strength=1.0), None, EVERYTHING,
+     'Occlusion, 15 deg, EVERYTHING blocks (~65% hidden). The darkest arm.'),
 ]
 
 HEADER = """# ============================================================================
@@ -59,7 +78,7 @@ HEADER = """# ==================================================================
 """
 
 
-def build(sensory_ov, vec, occl):
+def build(sensory_ov, vec, blockers):
     d = copy.deepcopy(load_env_config('configs/environment/default.yaml').to_dict())
     d.pop('extends', None)
     d['sensory']['visual_sensor_range'] = 2
@@ -72,8 +91,9 @@ def build(sensory_ov, vec, occl):
             if vec is not None:
                 e['visual_properties'] = [1.0] * vec
                 e['visual_properties_std'] = [0.0] * vec
-            if occl:
-                e['blocks_sight'] = bool(e.get('name') in SIGHT_BLOCKERS)
+            if blockers:
+                nm = e.get('name') or e.get('tag')
+                e['blocks_sight'] = bool(nm in blockers)
     return d
 
 
@@ -82,8 +102,8 @@ def main():
     from src.utils.config import Config
     from src.environment.config_loader import load_env_params
     from src.environment.wrapper import ParallelEnv
-    for name, ov, vec, occl, desc in ARMS:
-        d = build(ov, vec, occl)
+    for name, ov, vec, blockers, desc in ARMS:
+        d = build(ov, vec, blockers)
         p = load_env_params(Config(copy.deepcopy(d)))
         env = ParallelEnv(p)
         _, o = env.reset(jax.random.PRNGKey(0), 2)
@@ -98,7 +118,7 @@ def main():
                          'Read results with that confound in mind.'),
                 gen='configs/environment/experiment/sensory_directional/generate_weakened_vision_arms.py'))
             dump_config_yaml(d, fh)
-        print(f"  {name:<22} obs={obs:>4}  blockers={'rock,tree' if occl else '-':<10} "
+        print(f"  {name:<22} obs={obs:>4}  blockers={','.join(sorted(blockers)) if blockers else '-':<28} "
               f"V={p.visual_vector_size} mode={p.visual_value_mode}")
 
 

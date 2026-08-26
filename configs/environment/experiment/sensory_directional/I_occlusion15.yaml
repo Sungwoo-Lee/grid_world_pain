@@ -1,6 +1,6 @@
 # ============================================================================
 # DIRECTIONAL SENSORS sweep — weakened-vision arm I_occlusion15
-# Same, 15 deg cone (~59% hidden). Brackets where occlusion starts to bite.
+# Occlusion, 15 deg cone, ROCKS only (~44% hidden).
 #
 # CONTROL is arm C (C_vision_sharp.yaml): visual_sensor_range 2, sharp, V=8,
 # value_mode sum. Every arm here removes exactly one thing from C, except J

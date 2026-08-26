@@ -1,6 +1,6 @@
 # ============================================================================
-# DIRECTIONAL SENSORS sweep — weakened-vision arm H_occlusion05
-# Occlusion, 5 deg cone, ROCKS only (~19% of live entities hidden).
+# DIRECTIONAL SENSORS sweep — weakened-vision arm L_occl15_veg
+# Occlusion, 15 deg, rocks AND BUSHES block (~58% hidden). vs I: same question, wider cone.
 #
 # CONTROL is arm C (C_vision_sharp.yaml): visual_sensor_range 2, sharp, V=8,
 # value_mode sum. Every arm here removes exactly one thing from C, except J
@@ -158,7 +158,7 @@ environment:
     properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
     visual_properties: [0, 0, 0, 0, 0, 0, 1, 0]
     visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
-    blocks_sight: false
+    blocks_sight: true
 body:
   with_satiation: true
   with_nutrition: true
@@ -218,7 +218,7 @@ sensory:
   interoceptive_convolution_enabled: true
   interoceptive_kernel_tau: 3.0
   interoceptive_kernel_length: 12
-  visual_occlusion_cone_deg: 5.0
+  visual_occlusion_cone_deg: 15.0
   visual_occlusion_strength: 1.0
 visualization:
   local_view_size: 5
