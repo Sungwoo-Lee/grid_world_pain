@@ -1,4 +1,4 @@
-"""Build index.html for the v3.1 directional-sensors implementation report."""
+"""Build index.html for the DIRECTIONAL_SENSORS directional-sensors implementation report."""
 import base64, json, pathlib
 
 V = json.loads(pathlib.Path('verification.json').read_text())
@@ -63,7 +63,7 @@ HTML = f"""<title>Directional Sensors Shipped</title>
 
 <div class="wrap">
 <header>
-  <span class="eyebrow">GridWorld Pain · v3.1 · implementation report</span>
+  <span class="eyebrow">GridWorld Pain · DIRECTIONAL_SENSORS · implementation report</span>
   <h1>Directional Sensors Shipped</h1>
   <p class="standfirst">Smell can now point, and vision can now be uncertain. Both ship switched off,
   and the shipped configuration produces byte-identical observations to before. What was built, what

@@ -31,7 +31,7 @@ def _sense_olfaction_at(point, state: EnvState, params: EnvParams):
     """The three-pool olfactory sum evaluated at ONE sampling point.
 
     Kept as three separate sense_resource calls summed in the original order
-    (res + animal + obs) so float accumulation is bit-identical to pre-v3.1.
+    (res + animal + obs) so float accumulation is bit-identical to pre-DIRECTIONAL_SENSORS.
     """
     return (sense_resource(point, state.res_pos, state.res_active,
                            state.res_property_sampled, params.sensor_radius, params.sensor_decay)
@@ -42,7 +42,7 @@ def _sense_olfaction_at(point, state: EnvState, params: EnvParams):
 
 
 def sense_olfaction_cells(state: EnvState, params: EnvParams):
-    """Olfactory field sampled at every cell of a Manhattan diamond (v3.1).
+    """Olfactory field sampled at every cell of a Manhattan diamond (DIRECTIONAL_SENSORS).
 
     olfactory_grid_range == 0 takes a static fallback to the original
     single-point expression, so parity does not depend on vmap-of-one compiling
@@ -233,7 +233,7 @@ def _visual_mask_gate(agent_pos, all_pos, all_mask):
 
 
 def _occlusion_gate(agent_pos, all_pos, all_active, all_blocks, params: EnvParams):
-    """Line-of-sight gate, [1, Total_E]. v3.2.
+    """Line-of-sight gate, [1, Total_E]. DIRECTIONAL_SENSORS.
 
     An entity is hidden when a NEARER sight-blocking entity lies inside the shadow
     cone of the ray from the agent to it. A cone rather than a strict grid line:
@@ -346,7 +346,7 @@ def sense_visual(agent_pos, state: EnvState, params: EnvParams):
     all_blocks = jnp.concatenate(parts_blocks, axis=0)  # [Total_E] bool
 
     # Weight matrix [num_cells, Total_E]: gaussian point-spread when blur is on,
-    # exact cell match otherwise. The OFF branch is bit-identical to pre-v3.1 --
+    # exact cell match otherwise. The OFF branch is bit-identical to pre-DIRECTIONAL_SENSORS --
     # the activity mask moved from all_props onto W, which is exact because both
     # matches and all_active are exactly 0.0 or 1.0.
     if params.visual_blur_enabled:                     # static branch, trace time
@@ -451,8 +451,8 @@ def get_observation(state: EnvState, params: EnvParams, apply_noise=True):
     # 5. Olfaction Sensor (Resources + Animals + Obstacles)
     # B2 fix: unified animal_chem replaces separate pred_chem + neutral_chem calls.
     if params.olfactory_enabled:
-        # v3.1: sampled at every cell of a Manhattan diamond of radius
-        # olfactory_grid_range. At range 0 this is the pre-v3.1 single sample,
+        # DIRECTIONAL_SENSORS: sampled at every cell of a Manhattan diamond of radius
+        # olfactory_grid_range. At range 0 this is the pre-DIRECTIONAL_SENSORS single sample,
         # bit-identical. Per-episode active masks keep inactive entities silent.
         obs_parts.append(sense_olfaction_cells(state, params))
     
@@ -552,7 +552,7 @@ def build_sensory_viz(obs, state, params, true_obs=None):
             _olf_labels = (['FOOD', 'AN-A', 'AN-B', 'BUSH', 'TREE'] if _V == 5
                            else [f'C{i}' for i in range(_V)])
             if params.olfactory_grid_range > 0:
-                # v3.1: one reading per diamond cell -> render as a spatial grid,
+                # DIRECTIONAL_SENSORS: one reading per diamond cell -> render as a spatial grid,
                 # the same pod the visual sensor uses.
                 viz.append({'name': 'Olfactory', 'vector': olf_obs, 'true_vector': olf_true,
                             'type': 'visual_grid', 'num_features': _V,

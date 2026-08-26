@@ -1,4 +1,4 @@
-"""v3.1 directional sensors — parity, kernel geometry, masking, diamond behaviour.
+"""directional sensors — parity, kernel geometry, masking, diamond behaviour.
 
 Plan: docs/develop/active/sensors/DIRECTIONAL_SENSORS_PLAN.md
 
@@ -206,7 +206,7 @@ def test_range_zero_matches_the_single_point_sensor_bitwise():
     assert a.tobytes() == b.tobytes()
 
 
-# ------------------------------------------------ v3.2 value mode + occlusion ---
+# ------------------------------------------------ DIRECTIONAL_SENSORS value mode + occlusion ---
 
 def test_value_mode_defaults_to_sum_and_rejects_unknown():
     assert params().visual_value_mode == 'sum'

@@ -167,12 +167,12 @@ A bushed (`hides_agent`) agent can never be jumped onto — the jump reuses the 
 
 ---
 
-### 3.8 Directional sensors (v3.1 / v3.2)
+### 3.8 Directional sensors (DIRECTIONAL_SENSORS feature set)
 
 Six `sensory:` knobs and two per-entity keys that let smell carry a direction and
 vision be positionally uncertain. **Every one defaults to the pre-change behaviour**,
 so a config that sets none of them is byte-identical to before. Deep key list:
-[02_config_schema.md](02_config_schema.md#directional-sensors-v31--v32).
+[02_config_schema.md](02_config_schema.md#directional-sensors-directional_sensors-feature-set).
 
 ```yaml
 sensory:

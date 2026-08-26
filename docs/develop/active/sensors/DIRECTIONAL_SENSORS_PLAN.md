@@ -151,13 +151,13 @@ Four implementation constraints, each of which is a real trap:
 
 ```yaml
 # AFTER — added to sensory:
-  # --- Olfactory directional sampling (v3.1) -------------------------------
+  # --- Olfactory directional sampling (DIRECTIONAL_SENSORS) -------------------------------
   # 0 = today's single sample at the agent's cell (byte-parity). >0 samples the
   # same field at every cell of a Manhattan diamond, so readings carry a gradient.
   olfactory_grid_range: 0
 
-  # --- Visual point-spread blur (v3.1) ------------------------------------
-  # false = exact cell match, byte-identical to pre-v3.1 behaviour.
+  # --- Visual point-spread blur (DIRECTIONAL_SENSORS) ------------------------------------
+  # false = exact cell match, byte-identical to pre-DIRECTIONAL_SENSORS behaviour.
   visual_blur_enabled: false
   visual_blur_radial_scale: 0.5    # sigma_parallel = scale * distance
   visual_blur_anisotropy: 3.0      # rho = sigma_par / sigma_perp; 1.0 == isotropic
@@ -184,7 +184,7 @@ Per-entity, optional, on every resource / entity / obstacle entry (default `none
     sensor_decay: float
     ...
     visual_sensor_range: int = struct.field(pytree_node=False)
-    # v3.1 directional sensors ------------------------------------------------
+    # directional sensors ------------------------------------------------
     olfactory_grid_range: int = struct.field(pytree_node=False)   # shape-determining
     visual_blur_enabled: bool = struct.field(pytree_node=False)     # trace-time branch
     visual_blur_radial_scale: float      # traced — sweeping must not recompile
@@ -231,7 +231,7 @@ under `jit` — so the equivalence is checked in the form the sensor actually ev
 def sense_olfaction_cells(state, params):
     """Olfactory field sampled at every cell of a Manhattan diamond.
 
-    olfactory_grid_range == 0 reproduces the pre-v3.1 single sample exactly:
+    olfactory_grid_range == 0 reproduces the pre-DIRECTIONAL_SENSORS single sample exactly:
     the diamond is [[0,0]], so the sampling point IS the agent's cell. The
     range-0 case takes a STATIC fallback to the original un-vmapped expression
     so parity does not depend on vmap-of-one compiling identically -- the same
@@ -374,8 +374,8 @@ fingerprint-specific rejection (see Test Plan), or it passes without the change 
         p.visual_sensor_range,
         ...
         p.sensor_range,
-        p.olfactory_grid_range,   # v3.1 — changes obs_dim
-        p.visual_blur_enabled,      # v3.1 — changes obs SEMANTICS at identical dim
+        p.olfactory_grid_range,   # DIRECTIONAL_SENSORS — changes obs_dim
+        p.visual_blur_enabled,      # DIRECTIONAL_SENSORS — changes obs SEMANTICS at identical dim
     )
 ```
 
@@ -558,7 +558,7 @@ warrants a second pass. Status stays **PLANNED** pending re-review.
 > **Date**: 2026-08-21 · commit `0e8a4ef`
 
 Implemented as planned. Full write-up, figures and throughput numbers:
-[[V31_IMPLEMENTATION_REPORT]].
+[[DIRECTIONAL_SENSORS_REPORT]].
 
 Two deviations, both deliberate: tests consolidated into one module rather than six, and the config
 sweep covered 146 files rather than the ~98 estimated — found empirically rather than by pattern, which
@@ -579,7 +579,7 @@ asserts it.
 - Throughput measured before and after: free when disabled, −13.5% at the chosen settings, with the
   cost dominated by observation width rather than sensor arithmetic.
 
-Outstanding: [[09_sensors_and_observation]] has **not** been updated for v3.1 and still carries the
+Outstanding: [[09_sensors_and_observation]] has **not** been updated for DIRECTIONAL_SENSORS and still carries the
 pre-v3.0 staleness in §6/§9. That is the one maintenance-contract item this change leaves open.
 
 ---

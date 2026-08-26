@@ -263,8 +263,8 @@ class EnvParams:
     nociception_enabled: bool = struct.field(pytree_node=False)
     location_sensor_enabled: bool = struct.field(pytree_node=False)
 
-    # --- v3.1 directional sensors -------------------------------------------
-    # Shape-determining -> static. 0 reproduces the pre-v3.1 single-point sample.
+    # --- DIRECTIONAL_SENSORS -------------------------------------------
+    # Shape-determining -> static. 0 reproduces the pre-DIRECTIONAL_SENSORS single-point sample.
     olfactory_grid_range: int = struct.field(pytree_node=False)
     # Selects the visual code path at trace time. False == exact cell match.
     visual_blur_enabled: bool = struct.field(pytree_node=False)
@@ -278,7 +278,7 @@ class EnvParams:
     obs_visual_mask: jnp.ndarray      # [num_obs]    int32
 
     # How per-cell entity contributions combine: "sum" (a count / weighted sum,
-    # pre-v3.2 behaviour) or "clamp" (per-channel presence, capped at 1.0).
+    # pre-DIRECTIONAL_SENSORS behaviour) or "clamp" (per-channel presence, capped at 1.0).
     visual_value_mode: str = struct.field(pytree_node=False)
     # Line-of-sight occlusion: a nearer sight-blocking entity inside the shadow
     # cone of the ray agent->entity hides it.

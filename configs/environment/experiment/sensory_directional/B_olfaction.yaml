@@ -2,7 +2,7 @@
 # DIRECTIONAL SENSORS sweep — arm B of 5
 # Directional smell ONLY. obs 47.
 #
-# QUESTION: the v3.1 sensors let smell carry a direction (a diamond of sampling
+# QUESTION: the DIRECTIONAL_SENSORS sensors let smell carry a direction (a diamond of sampling
 # cells instead of one) and let vision be positionally uncertain (an anisotropic
 # point-spread blur). Do either change what the agent can do?
 #
@@ -19,7 +19,7 @@
 # inherited. Single seed (42, config-owned). Everything else default.
 #
 # Plan: docs/develop/active/sensors/DIRECTIONAL_SENSORS_PLAN.md
-# Report: docs/develop/active/sensors/V31_IMPLEMENTATION_REPORT.md
+# Report: docs/develop/active/sensors/DIRECTIONAL_SENSORS_REPORT.md
 # ============================================================================
 extends: environment/default
 

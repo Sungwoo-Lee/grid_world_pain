@@ -267,8 +267,8 @@ sensory:
   sensor_radius: 20
   vector_size: 5
   decay_power: 2.0
-  # v3.1 directional sensors — parity-preserving defaults (see
-  # docs/develop/active/sensors/DIRECTIONAL_SENSORS_PLAN.md). Added by the v3.1
+  # directional sensors — parity-preserving defaults (see
+  # docs/develop/active/sensors/DIRECTIONAL_SENSORS_PLAN.md). Added by the DIRECTIONAL_SENSORS
   # sweep: this config carries a full standalone `sensory:` block, so it does not
   # inherit these from configs/environment/default.yaml.
   olfactory_grid_range: 0

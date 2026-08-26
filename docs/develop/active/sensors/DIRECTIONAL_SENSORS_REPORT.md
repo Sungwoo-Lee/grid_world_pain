@@ -1,18 +1,18 @@
 ---
-title: "v3.1 directional sensors — implementation report (parity, tests, throughput)"
+title: "Directional sensors — implementation report (parity, tests, throughput)"
 topic: sensors
 status: active
 created: 2026-08-21
 last_updated: 2026-08-21
 phase: null
-aliases: [v31-implementation-report, directional-sensors-report]
+aliases: [directional-sensors-report]
 ---
 
-# v3.1 directional sensors — implementation report
+# Directional sensors — implementation report
 
 **Shareable page:** https://claude.ai/code/artifact/873a463d-53ae-46a3-9ee9-08515d8182bd
 **Commit:** `0e8a4ef` on `v3.0` · 153 files
-**Plan:** [[DIRECTIONAL_SENSORS_PLAN]] · **Sandbox:** [`v31_implementation_report/`](v31_implementation_report/)
+**Plan:** [[DIRECTIONAL_SENSORS_PLAN]] · **Sandbox:** [`directional_sensors_report/`](directional_sensors_report/)
 
 ## What shipped
 
@@ -79,7 +79,7 @@ balance is the observation growing 27 → 143 numbers, which the whole rollout c
 diamond size, not sensor code.** Ten million environment steps: ~115 min at the chosen settings versus
 ~100 min at baseline.
 
-## v3.2 addendum — value mode and occlusion
+## Addendum — value mode and occlusion — value mode and occlusion
 
 Two further visual options, added 2026-08-21 (commit `9771e98`) after the first five training
 arms were already running. Both are config knobs rather than baked-in choices, so they can be
@@ -95,7 +95,7 @@ swept like the blur.
 
 **Single-channel presence needed no new code** — `visual_vector_size: 1` with zeroed
 `visual_background_properties` already worked via the v3.0 configurable-properties system. What
-v3.2 adds is the sum-vs-clamp choice.
+DIRECTIONAL_SENSORS adds is the sum-vs-clamp choice.
 
 ### Occlusion cost, measured properly
 
@@ -154,5 +154,5 @@ the agent. Next step is choosing an experiment, not more code.
 ## Related
 
 - [[DIRECTIONAL_SENSORS_PLAN]] · [[VISUAL_PSF_MECHANISM_STUDY]] · [[OLFACTORY_EXPANSION_STUDY]] · [[ONSOURCE_RULE_STUDY]]
-- [[09_sensors_and_observation]] — **still needs updating** for v3.1, and still carries the pre-v3.0
+- [[09_sensors_and_observation]] — **still needs updating** for DIRECTIONAL_SENSORS, and still carries the pre-v3.0
   staleness in §6 and §9 found during the studies.

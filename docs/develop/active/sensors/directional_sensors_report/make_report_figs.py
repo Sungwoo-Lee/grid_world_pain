@@ -1,4 +1,4 @@
-"""Figures for the v3.1 directional-sensors implementation report.
+"""Figures for the DIRECTIONAL_SENSORS directional-sensors implementation report.
 
 Everything here comes from the REAL environment via load_env_params +
 ParallelEnv -- not from the mechanism-study sandboxes.

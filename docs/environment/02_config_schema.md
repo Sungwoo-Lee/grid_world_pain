@@ -6,17 +6,17 @@
 
 ---
 
-## Directional sensors (v3.1 / v3.2)
+## Directional sensors (DIRECTIONAL_SENSORS feature set)
 
 Eight keys added by the directional-sensors work. **All default to the pre-change
 behaviour**, so a config that sets none of them produces byte-identical observations.
-Full rationale: [[DIRECTIONAL_SENSORS_PLAN]], [[V31_IMPLEMENTATION_REPORT]].
+Full rationale: [[DIRECTIONAL_SENSORS_PLAN]], [[DIRECTIONAL_SENSORS_REPORT]].
 
 ### `sensory:` keys
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `olfactory_grid_range` | int, static | `0` | Radius of the diamond of olfactory **sampling cells**. `0` = the single pre-v3.1 sample at the agent's own cell. Contributes `(2r²+2r+1) × vector_size` dims. **Not to be confused with `sensor_radius`**, which is how far a smell *carries*; this is where it is *measured*. A radius, not a side length: `1` → 5 cells, `2` → 13. Out-of-bounds cells read exactly zero. |
+| `olfactory_grid_range` | int, static | `0` | Radius of the diamond of olfactory **sampling cells**. `0` = the single pre-DIRECTIONAL_SENSORS sample at the agent's own cell. Contributes `(2r²+2r+1) × vector_size` dims. **Not to be confused with `sensor_radius`**, which is how far a smell *carries*; this is where it is *measured*. A radius, not a side length: `1` → 5 cells, `2` → 13. Out-of-bounds cells read exactly zero. |
 | `visual_blur_enabled` | bool, static | `false` | Replaces the exact cell match with an anisotropic gaussian point-spread. Needs `visual_sensor_range ≥ 1` to have anywhere to spread. |
 | `visual_blur_radial_scale` | float, traced | `0.5` | `σ_parallel = scale × distance` — how fast distance judgement degrades. |
 | `visual_blur_anisotropy` | float, traced | `3.0` | `ρ = σ_parallel / σ_perp`. `1.0` is exactly an isotropic kernel, which makes an ablation a one-value change. |
@@ -104,14 +104,14 @@ body:
 
 sensory:
   olfactory_enabled, sensor_radius, vector_size, decay_power
-  olfactory_grid_range                                   # v3.1
+  olfactory_grid_range                                   # DIRECTIONAL_SENSORS
   collision_sensor_range
   nociception_enabled, nociception_size
   visual_sensor_enabled, visual_sensor_range
-  visual_blur_enabled, visual_blur_radial_scale,         # v3.1
-    visual_blur_anisotropy, visual_blur_sigma_floor      # v3.1
-  visual_value_mode                                      # v3.2
-  visual_occlusion_enabled                               # v3.2
+  visual_blur_enabled, visual_blur_radial_scale,         # DIRECTIONAL_SENSORS
+    visual_blur_anisotropy, visual_blur_sigma_floor      # DIRECTIONAL_SENSORS
+  visual_value_mode                                      # DIRECTIONAL_SENSORS
+  visual_occlusion_enabled                               # DIRECTIONAL_SENSORS
     [+ visual_occlusion_cone_deg, visual_occlusion_strength
        — read ONLY when occlusion is enabled]
   proprioception_enabled

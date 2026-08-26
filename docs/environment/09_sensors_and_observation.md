@@ -6,7 +6,7 @@
 
 ## Overview — What this doc covers
 
-The agent in GridWorld Pain does not observe the world state directly. Instead, it receives a flat numerical vector assembled from up to ten distinct sensors. **Since v3.1 the two exteroceptive senses are also spatial** — see [Directional sensors](#directional-sensors-v31--v32) at the end of this doc. Some sensors measure conditions *inside* the agent's body (body temperature, injury, hunger — called **interoceptive**). Others measure conditions *outside* — what is nearby, what is bumping into the agent, what chemical traces are in the air (called **exteroceptive**). Some sensors are optional and can be switched off by a config flag; doing so removes their dimensions from the vector entirely.
+The agent in GridWorld Pain does not observe the world state directly. Instead, it receives a flat numerical vector assembled from up to ten distinct sensors. **Since the DIRECTIONAL_SENSORS change the two exteroceptive senses are also spatial** — see [Directional sensors](#directional-sensors-directional_sensors-feature-set) at the end of this doc. Some sensors measure conditions *inside* the agent's body (body temperature, injury, hunger — called **interoceptive**). Others measure conditions *outside* — what is nearby, what is bumping into the agent, what chemical traces are in the air (called **exteroceptive**). Some sensors are optional and can be switched off by a config flag; doing so removes their dimensions from the vector entirely.
 
 This doc catalogs every sensor in the order they appear in the assembled observation vector: the exact code that produces each value, the formula used, which config flag enables it, and how many numbers it contributes to the vector.
 
@@ -859,13 +859,13 @@ It iterates `get_observation_breakdown(params)` to find each sensor's slice in t
 
 ---
 
-## Directional sensors (v3.1 / v3.2)
+## Directional sensors (DIRECTIONAL_SENSORS feature set)
 
 Both outward-facing senses gained optional spatial structure. **Everything here defaults off**;
-a config that sets none of these keys produces byte-identical observations to pre-v3.1.
-Config reference: [02_config_schema.md](02_config_schema.md#directional-sensors-v31--v32).
+a config that sets none of these keys produces byte-identical observations to pre-DIRECTIONAL_SENSORS.
+Config reference: [02_config_schema.md](02_config_schema.md#directional-sensors-directional_sensors-feature-set).
 Rationale and measurements: [[VISUAL_PSF_MECHANISM_STUDY]], [[OLFACTORY_EXPANSION_STUDY]],
-[[ONSOURCE_RULE_STUDY]], [[V31_IMPLEMENTATION_REPORT]].
+[[ONSOURCE_RULE_STUDY]], [[DIRECTIONAL_SENSORS_REPORT]].
 
 ### Olfaction over a diamond — `sense_olfaction_cells`
 

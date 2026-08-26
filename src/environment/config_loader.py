@@ -312,10 +312,10 @@ _VISUAL_MASK_CODES = {'none': 0, 'far': 1, 'all': 2}
 
 
 def _read_visual_mask(entry: dict, entity_label: str) -> int:
-    """Read optional per-entity `visual_mask` (v3.1) as an int code.
+    """Read optional per-entity `visual_mask` (DIRECTIONAL_SENSORS) as an int code.
 
     none = 0 (always visible), far = 1 (visible only when the agent is co-located
-    with it), all = 2 (never visible). Absent -> 0, which is the pre-v3.1
+    with it), all = 2 (never visible). Absent -> 0, which is the pre-DIRECTIONAL_SENSORS
     behaviour. An unrecognised string is an error, never a silent 'none'.
     """
     raw = entry.get('visual_mask', 'none')
@@ -328,7 +328,7 @@ def _read_visual_mask(entry: dict, entity_label: str) -> int:
 
 
 def _read_blocks_sight(entry: dict) -> bool:
-    """Per-entity `blocks_sight` (v3.2). Distinct from `blocking` (movement) and
+    """Per-entity `blocks_sight` (DIRECTIONAL_SENSORS). Distinct from `blocking` (movement) and
     `hides_agent` (concealment from predators). Absent -> False."""
     return bool(entry.get('blocks_sight', False))
 
@@ -1004,7 +1004,7 @@ def load_env_params(config: Config) -> EnvParams:
     # Read-site default of 8: preserves byte-parity for all ~86 archived configs
     # that do not declare this key. The one permitted read-site default in this
     # plan (see CONFIGURABLE_VISUAL_PROPERTIES_PLAN.md §D1).
-    # v3.2 visual options. The two enabling keys are mandatory; their sub-keys are
+    # DIRECTIONAL_SENSORS visual options. The two enabling keys are mandatory; their sub-keys are
     # read ONLY when enabled, per CONFIG_GUIDE.md §5's conditional-key pattern, so a
     # config that leaves occlusion off never needs to carry the cone settings.
     _vis_value_mode = str(config.get_mandatory('sensory.visual_value_mode')).strip().lower()

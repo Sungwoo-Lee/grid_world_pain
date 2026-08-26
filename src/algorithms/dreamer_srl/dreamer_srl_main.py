@@ -792,7 +792,7 @@ def main() -> None:
             p.injury_observable,
             p.nutrition_observable,
             p.sensor_range,
-            # v3.1 directional sensors. olfactory_grid_range changes obs_dim (so
+            # directional sensors. olfactory_grid_range changes obs_dim (so
             # the dim check already catches it) -- included as defence in depth.
             # visual_blur_enabled and the per-entity visual_mask arrays change what
             # the observation MEANS at an identical dim count, which is the case
@@ -804,7 +804,7 @@ def main() -> None:
             tuple(int(x) for x in p.res_visual_mask),
             tuple(int(x) for x in p.animal_visual_mask),
             tuple(int(x) for x in p.obs_visual_mask),
-            # v3.2: both change observation SEMANTICS at an identical dim count.
+            # DIRECTIONAL_SENSORS: both change observation SEMANTICS at an identical dim count.
             # The cone angle and strength are continuous and stay out, same
             # reasoning as the blur knobs.
             p.visual_value_mode,
