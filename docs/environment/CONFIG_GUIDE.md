@@ -167,6 +167,57 @@ A bushed (`hides_agent`) agent can never be jumped onto — the jump reuses the 
 
 ---
 
+### 3.8 Directional sensors (v3.1 / v3.2)
+
+Six `sensory:` knobs and two per-entity keys that let smell carry a direction and
+vision be positionally uncertain. **Every one defaults to the pre-change behaviour**,
+so a config that sets none of them is byte-identical to before. Deep key list:
+[02_config_schema.md](02_config_schema.md#directional-sensors-v31--v32).
+
+```yaml
+sensory:
+  # --- smell can point ---
+  olfactory_grid_range: 1      # radius of the SAMPLING diamond; 1 -> 5 cells, 2 -> 13
+                               # NOT sensor_radius, which is how far a smell carries
+  # --- vision can be uncertain ---
+  visual_sensor_range: 2       # blur needs cells to spread into; >= 1 required
+  visual_blur_enabled: true
+  visual_blur_anisotropy: 3.0  # 1.0 == isotropic, i.e. a one-value ablation
+  # --- vision can be coarse ---
+  visual_value_mode: clamp     # presence instead of a count
+  # --- vision can be blocked ---
+  visual_occlusion_enabled: true
+  visual_occlusion_cone_deg: 5.0
+  visual_occlusion_strength: 1.0
+
+environment:
+  obstacles:
+    - name: "rock"
+      blocks_sight: true       # independent of `blocking` and `hides_agent`
+    - name: "hiding_predator"
+      visual_mask: far         # visible ONLY when the agent is standing on it
+```
+
+Three things that bite:
+
+- **Blur is inert at `visual_sensor_range: 0`.** One cell, nothing to spread into.
+- **`olfactory_grid_range` and `sensor_radius` are different quantities** with
+  confusingly similar names. The first is where the field is *sampled*; the second is
+  how far the field *reaches*. `default.yaml` carries a note to the same effect.
+- **Occlusion is aggressive on the shipped scene** — up to 36 entities on 100 cells.
+  Obstacles-only blocking hides 31% of live entities at 5° and 59% at 15°. Start narrow
+  and check before assuming a null result means the mechanism did nothing.
+- **Occlusion costs about 4.6% of a step** (+3.7 µs at 128 envs, measured paired and
+  interleaved against occlusion-off at `visual_sensor_range: 2`). The cone angle does **not**
+  change the cost — the tensor shapes are identical either way, only the threshold moves. So
+  sweep the angle freely; it is a science knob, not a budget one.
+
+`visual_occlusion_cone_deg` and `visual_occlusion_strength` are **conditional-mandatory**
+(§5 pattern): read only when `visual_occlusion_enabled` is true, so configs that leave
+occlusion off never carry them.
+
+---
+
 ## 4. How to author a new config (worked example)
 
 Goal: a 5×5 foraging world with food only — no animals, no obstacles — inheriting everything else (body, sensors, noise) from the base.

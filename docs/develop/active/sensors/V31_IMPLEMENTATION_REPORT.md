@@ -79,6 +79,57 @@ balance is the observation growing 27 → 143 numbers, which the whole rollout c
 diamond size, not sensor code.** Ten million environment steps: ~115 min at the chosen settings versus
 ~100 min at baseline.
 
+## v3.2 addendum — value mode and occlusion
+
+Two further visual options, added 2026-08-21 (commit `9771e98`) after the first five training
+arms were already running. Both are config knobs rather than baked-in choices, so they can be
+swept like the blur.
+
+| key | default | meaning |
+|---|---|---|
+| `sensory.visual_value_mode` | `sum` | `sum` = weighted sum (two rocks read 2.0); `clamp` = per-channel presence capped at 1.0. Entity contribution only — terrain keeps its own value. |
+| `sensory.visual_occlusion_enabled` | `false` | A nearer `blocks_sight` entity hides anything inside the shadow cone of the ray to it. |
+| `sensory.visual_occlusion_cone_deg` | *(conditional)* | Half-angle of the cone. Read only when occlusion is on. |
+| `sensory.visual_occlusion_strength` | *(conditional)* | `1.0` hides fully; lower attenuates. |
+| per-entity `blocks_sight` | `false` | Independent of `blocking` (movement) and `hides_agent` (concealment). |
+
+**Single-channel presence needed no new code** — `visual_vector_size: 1` with zeroed
+`visual_background_properties` already worked via the v3.0 configurable-properties system. What
+v3.2 adds is the sum-vs-clamp choice.
+
+### Occlusion cost, measured properly
+
+First attempt reported the isolated gate at 11.8 µs and a batch sweep put the end-to-end effect
+anywhere from −1% to −11% — **the sweep contained an impossibility** (blur-*on* measuring faster
+than blur-off), which meant min-of-7 across separately-compiled configs could not resolve a 1%
+effect. Re-measured **paired and interleaved**, 40 rounds, same process:
+
+| configuration | median µs/step | IQR | vs occlusion off |
+|---|---|---|---|
+| occlusion off (`visual_sensor_range: 2`) | 80.81 | 1.00 | — |
+| occlusion on, 5° | 84.50 | 0.95 | **+4.57%** |
+| occlusion on, 15° | 84.58 | 0.64 | **+4.67%** |
+
+**+3.7 µs per step, about 4.6%.** The **cone angle does not affect cost** — identical tensor
+shapes either way, only the comparison threshold moves — so the angle is a science knob, not a
+budget one. Note the isolated-gate figure (11.8 µs) *over*-estimated the end-to-end cost, which
+is what you would expect once XLA fuses the gate into surrounding work.
+
+### Why a cone and not a grid line
+
+Measured on the real scene: exact collinearity fires on 2.76% of occluder/target pairs versus
+16.7% for a 15° cone, and it fires almost only along axes and perfect diagonals. Strict occlusion
+would make the sensor blind north-south and clear-sighted obliquely — a worse artefact than the
+thing it models.
+
+### Calibration
+
+This scene holds up to 36 entities on 100 cells, so occlusion bites hard. Share of live entities
+hidden, obstacles-only blocking: **5° → 31%, 10° → 47%, 15° → 59%, 30° → 75%**. Even the
+narrowest sensible setting hides a third of the world.
+
+---
+
 ## Deviations from the plan
 
 - **Tests consolidated into one module**, not the six the plan named; sections map 1:1 onto the plan's

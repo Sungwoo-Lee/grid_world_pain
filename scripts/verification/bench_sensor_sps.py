@@ -61,6 +61,22 @@ CASES = [
     ({'sensory.visual_sensor_range': 2, 'sensory.visual_blur_enabled': True}, 'vision range 2 + blur'),
     ({'sensory.olfactory_grid_range': 1, 'sensory.visual_sensor_range': 2,
       'sensory.visual_blur_enabled': True}, 'BOTH (chosen settings)'),
+    # --- v3.2 options, each measured against 'vision range 2, blur off' ---
+    ({'sensory.visual_sensor_range': 2,
+      'sensory.visual_value_mode': 'clamp'}, 'v3.2 clamp (presence)'),
+    ({'sensory.visual_sensor_range': 2, 'sensory.visual_occlusion_enabled': True,
+      'sensory.visual_occlusion_cone_deg': 5.0,
+      'sensory.visual_occlusion_strength': 1.0}, 'v3.2 occlusion 5 deg'),
+    ({'sensory.visual_sensor_range': 2, 'sensory.visual_occlusion_enabled': True,
+      'sensory.visual_occlusion_cone_deg': 15.0,
+      'sensory.visual_occlusion_strength': 1.0}, 'v3.2 occlusion 15 deg'),
+    ({'sensory.visual_sensor_range': 2, 'sensory.visual_occlusion_enabled': True,
+      'sensory.visual_occlusion_cone_deg': 15.0,
+      'sensory.visual_occlusion_strength': 0.5}, 'v3.2 occlusion 15 deg, atten'),
+    ({'sensory.visual_sensor_range': 2, 'sensory.visual_blur_enabled': True,
+      'sensory.visual_value_mode': 'clamp', 'sensory.visual_occlusion_enabled': True,
+      'sensory.visual_occlusion_cone_deg': 10.0,
+      'sensory.visual_occlusion_strength': 1.0}, 'v3.2 blur + clamp + occlusion'),
 ]
 
 

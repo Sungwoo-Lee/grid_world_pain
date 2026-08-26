@@ -6,7 +6,7 @@
 
 ## Overview — What this doc covers
 
-The agent in GridWorld Pain does not observe the world state directly. Instead, it receives a flat numerical vector assembled from up to ten distinct sensors. Some sensors measure conditions *inside* the agent's body (body temperature, injury, hunger — called **interoceptive**). Others measure conditions *outside* — what is nearby, what is bumping into the agent, what chemical traces are in the air (called **exteroceptive**). Some sensors are optional and can be switched off by a config flag; doing so removes their dimensions from the vector entirely.
+The agent in GridWorld Pain does not observe the world state directly. Instead, it receives a flat numerical vector assembled from up to ten distinct sensors. **Since v3.1 the two exteroceptive senses are also spatial** — see [Directional sensors](#directional-sensors-v31--v32) at the end of this doc. Some sensors measure conditions *inside* the agent's body (body temperature, injury, hunger — called **interoceptive**). Others measure conditions *outside* — what is nearby, what is bumping into the agent, what chemical traces are in the air (called **exteroceptive**). Some sensors are optional and can be switched off by a config flag; doing so removes their dimensions from the vector entirely.
 
 This doc catalogs every sensor in the order they appear in the assembled observation vector: the exact code that produces each value, the formula used, which config flag enables it, and how many numbers it contributes to the vector.
 
@@ -246,7 +246,7 @@ All four keys are **mandatory** (missing → `ValueError`):
 | `sensory.olfactory_enabled` | `olfactory_enabled` | bool (static) | Gates the sensor; if false, zero dims |
 | `sensory.vector_size` | `olfactory_vector_size` | int (static) | Length of each entity's chemical property vector (default 5) |
 | `sensory.sensor_radius` | `sensor_radius` | float | Distance cutoff; entities beyond this emit nothing (default 20, covers full 10×10 grid) |
-| `sensory.decay_power` | `sensor_decay` | float | Exponent in the distance-decay formula (default 2.0 = inverse-square) |
+| `sensory.decay_power` | `sensor_decay` | float | Exponent in the distance-decay formula. **Ships as `1.0`** (gentle, long-range). It was 2.0 until 2026-07-26 — see the change log in [CONFIG_CRITICAL_SETTINGS.md](CONFIG_CRITICAL_SETTINGS.md), and note eleven configs still pin 2.0. |
 
 The olfaction dimension reported by `get_observation_breakdown` is read from `params.res_property.shape[-1]` (`sensor.py:349`), not `olfactory_vector_size` — so the two must match.
 
@@ -270,8 +270,14 @@ When an entity list is empty the loader produces a zero-row array of shape `[0, 
 |---|---|---|
 | Food resource | `[1.0, 0.0, 0.0, 0.0, 0.0]` | Dim 0 = "food odour" |
 | Danger resource | `[0.0, 0.0, 0.0, 0.0, 0.0]` | No chemical signal |
-| Predator | `[0.0, 1.0, 0.0, 0.0, 0.0]` | Dim 1 = "predator odour" |
-| Rabbit (neutral animal) | `[0.0, 0.3, 0.0, 0.0, 0.0]` | Dim 1 partial — weaker, predator-like scent |
+| Predator | `[0.0, 0.7, 0.5, 0.0, 0.0]` ± `[0, 0.4, 0.4, 0, 0]` | Dims 1 and 2, **deliberately overlapping with the rabbit** |
+| Rabbit (neutral animal) | `[0.0, 0.5, 0.7, 0.0, 0.0]` ± `[0, 0.4, 0.4, 0, 0]` | The same two dims with 1 and 2 swapped |
+
+> **These two are engineered to be confusable.** Predator and rabbit differ only by a swap of
+> channels 1 and 2, with σ=0.4 on both, redrawn per episode and clipped to [0,1]. Smell alone
+> cannot cleanly separate threat from harmless. Food, by contrast, owns a noise-free channel.
+> (An earlier revision of this doc listed `[0,1,0,0,0]` / `[0,0.3,0,0,0]` — that has not matched
+> `default.yaml` for some time.)
 | Rock (obstacle) | `[0.0, 0.0, 0.0, 0.0, 0.0]` | No chemical signal |
 | Bush (obstacle) | `[0.0, 0.0, 0.0, 1.0, 0.0]` | Dim 3 = "vegetation odour" |
 | Tree (obstacle) | `[0.0, 0.0, 0.0, 0.0, 1.0]` | Dim 4 = "tree odour" |
@@ -291,7 +297,7 @@ obs_chem    = sense_resource(state.agent_pos, state.obs_pos,    ones(N_obs, bool
 obs_olfactory = res_chem + animal_chem + obs_chem
 ```
 
-Resources are masked by `res_active` (consumed/inactive resources contribute nothing). Animals and obstacles are always considered present (always-ones activity mask).
+**All three pools are masked by their per-episode `*_active` flags** — `res_active`, `animal_active`, `obs_active` — so consumed resources and deactivated animals/obstacles contribute nothing. (An earlier revision of this doc said animals and obstacles used an always-ones mask; that stopped being true with PER_EPISODE_ENV_VARIANCE.)
 
 Per-entity computation inside `sense_resource` (`sensor.py:5–22`):
 
@@ -850,6 +856,84 @@ def get_observation(state: EnvState, params: EnvParams, apply_noise=True):
 This function is **renderer-facing** — it parses the flat observation vector into the structured `sensory_data` list consumed by `renderer.render_jax_state`. It is not part of the training pipeline. Full coverage is in doc 12 (renderer); only the hookup is noted here.
 
 It iterates `get_observation_breakdown(params)` to find each sensor's slice in the flat vector, then packages each slice into a typed dict (`'type': 'intensity'`, `'type': 'diamond'`, `'type': 'visual_grid'`, etc.) that the renderer knows how to draw. The optional `true_obs` argument enables side-by-side noisy vs. clean display.
+
+---
+
+## Directional sensors (v3.1 / v3.2)
+
+Both outward-facing senses gained optional spatial structure. **Everything here defaults off**;
+a config that sets none of these keys produces byte-identical observations to pre-v3.1.
+Config reference: [02_config_schema.md](02_config_schema.md#directional-sensors-v31--v32).
+Rationale and measurements: [[VISUAL_PSF_MECHANISM_STUDY]], [[OLFACTORY_EXPANSION_STUDY]],
+[[ONSOURCE_RULE_STUDY]], [[V31_IMPLEMENTATION_REPORT]].
+
+### Olfaction over a diamond — `sense_olfaction_cells`
+
+`olfactory_grid_range: r` evaluates the *same* field at every cell of a Manhattan diamond
+instead of only at the agent. The per-cell computation is the untouched `sense_resource`, and
+the three pools are still summed in the original order (`res + animal + obs`) per cell — which
+is why the centre cell stays bit-identical to the old single sample **at every range**, not just
+at `r=0`. Out-of-bounds cells read exactly zero, matching the visual sensor. Flattened
+cell-major, contributing `(2r²+2r+1) × vector_size` dims.
+
+`r = 0` takes a static fallback to the original single-point expression, so parity does not
+depend on `vmap`-of-one compiling identically.
+
+> **`olfactory_grid_range` is not `sensor_radius`.** The first is *where the field is sampled*
+> (a property of the sensor); the second is *how far a smell carries* (a property of the field,
+> and at 20 it never binds on a 10×10 grid).
+
+### Anisotropic point-spread on vision — `_psf_weights`
+
+`visual_blur_enabled` replaces the boolean match matrix with gaussian weights, elongated along
+the agent→entity ray:
+
+```
+d      = ||e - agent||
+σ_par  = max(radial_scale · d, sigma_floor)
+σ_perp = max(σ_par / anisotropy, sigma_floor)
+w      = exp(−v∥²/2σ_par² − v⊥²/2σ_perp²) / (2π σ_par σ_perp)
+```
+
+So *where* something is becomes vague while *which way* it lies stays sharp. Mass
+normalisation is what makes distant entities fade — normalising over the visible cells instead
+would cancel the falloff entirely.
+
+Two implementation constraints that are not optional: `v = c − e` is computed **before**
+projecting (the `c·û − e·û` form routes geometry through a matmul, which runs in reduced
+precision on Ampere-class GPUs), and `sigma_floor` is **required**, because an entity on the
+agent's own cell gives `σ_par = 0` and an infinite peak without it.
+
+### Per-entity visibility — `_visual_mask_gate`
+
+`visual_mask: none | far | all`. Gates on the **entity's** Manhattan distance from the agent,
+not the cell's. Under exact matching the two are equivalent; under blur they are not, and
+gating per cell leaves a `far`-masked entity depositing its blur tail in the agent's own cell.
+
+### Presence versus count — `visual_value_mode`
+
+`sum` (default) is a weighted sum, so two rocks in a cell read 2.0. `clamp` caps each channel
+at 1.0, giving presence. Applied to the **entity** contribution only — terrain is ground, not
+an object, and keeps its own value.
+
+### Line-of-sight occlusion — `_occlusion_gate`
+
+An entity is hidden when a nearer entity flagged `blocks_sight` lies inside the shadow cone of
+the ray to it. A **cone**, not a strict grid line: on an integer grid exact collinearity fires
+almost only along axes and perfect diagonals, which would make the sensor blind north-south and
+clear-sighted obliquely. The gate is a per-entity factor, so it composes with the mask and
+activity masks by plain multiplication.
+
+**This scene is dense** — up to 36 entities on 100 cells. Obstacles-only blocking hides 31% of
+live entities at 5° and 59% at 15°. Calibrate before concluding anything from a null result.
+
+### The on-source rule
+
+`sense_resource` returns `1/(0.5^γ)` when a sampling point sits exactly on a source — "standing
+on it means half a cell away", the grid's own resolution limit. At the shipped `decay_power: 1.0`
+this is bit-identical to the literal `2.0` it replaced; at other γ it stays on the curve, where
+the constant did not. The eleven configs pinning `decay_power: 2.0` therefore read 4.0 rather
+than 2.0 on-source.
 
 ---
 
