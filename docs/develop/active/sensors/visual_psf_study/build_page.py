@@ -65,6 +65,13 @@ FIGS = [
      "blur (B) smears them into one another. The anisotropic kernel (C) resolves three separate "
      "directional lobes. D and E are the two alternative architectures, included so you can see what "
      "you would be giving up."),
+    ("fig7_noise.png", "7", "Distance-dependent noise: mostly already there",
+     "Top row: the same object at 1, 3 and 5 cells, before and after adding the σ = 0.2 the project "
+     "already configures for vision. At one cell it survives; by five it is gone. <strong>Nothing "
+     "about the noise changed between those panels</strong> — only the signal, which the "
+     "mass-normalised kernel already shrinks with distance. Bottom left: the signal crosses below "
+     "the noise floor about three cells out. Bottom middle: the three conventional ways to scale σ. "
+     "Bottom right: the two different distances that could drive noise, which are not the same thing."),
     ("fig6_anisotropy_sweep.png", "6", "Choosing the anisotropy knob",
      "ρ = σ<sub>∥</sub>/σ<sub>⊥</sub>, with the radial blur held fixed throughout. ρ=1 is exactly the "
      "isotropic kernel, so this single number gives you an ablation for free. Sharpness keeps rising "
@@ -458,6 +465,94 @@ not how far the agent can see.</p>
 </div>
 
 {figs_html}
+
+<div class="col">
+<h2>Noise, and why the sensor already has it</h2>
+
+<p>A natural next question is whether the blur should be paired with <em>noise</em> that grows with
+distance. It is worth separating two things that sound alike.</p>
+
+<p><strong>Blur and noise are different failures.</strong> Blur is a <em>systematic</em> smearing: the
+same object in the same place always produces the same spread-out reading. Noise is <em>random</em>:
+the same object in the same place produces a slightly different reading every step. Blur makes you
+uncertain about <em>where</em>; noise makes you unsure whether you saw anything at all. A sensor can
+have either, both, or neither.</p>
+
+<p><strong>The conventional model puts them in that order</strong> — the standard forward model in
+imaging, astronomy and microscopy is</p>
+</div>
+
+<div class="formula col plain">
+  <span class="lbl">the standard imaging model</span>
+  <span class="vec">y</span> = <span class="vec">H</span><span class="vec">x</span> + <span class="vec">n</span>
+  <span class="note"><span class="vec">H</span> is the point-spread function — the blur.
+  <span class="vec">n</span> is noise, added to the <em>result</em>. Anisotropic kernels get exactly
+  the same treatment as isotropic ones: <strong>the anisotropy lives in the kernel, not in the
+  noise.</strong> There is no special "anisotropic noise" to reach for. This project's pipeline
+  already has this shape — the sensor applies the kernel, and the perceptual-noise system adds noise
+  to the assembled observation afterwards.</span>
+</div>
+
+<div class="col">
+<h3 class="sub">The part that surprises people</h3>
+
+<p>Because the kernel is <strong>mass-normalised</strong>, a distant object's signal is already small —
+that is the whole point of the normalisation, and it is what Fig 4 measures. So even a <em>constant</em>
+noise level produces a signal-to-noise ratio that collapses with distance, without any distance term
+in the noise at all:</p>
+</div>
+
+<div class="tablewrap col">
+<table>
+<thead><tr><th>object distance</th><th>its brightest cell</th><th>signal ÷ noise, at the configured σ = 0.2</th></tr></thead>
+<tbody>
+<tr><td class="num">1</td><td class="num">0.637</td><td class="num">3.18</td></tr>
+<tr><td class="num">2</td><td class="num">0.318</td><td class="num">1.59</td></tr>
+<tr><td class="num">3</td><td class="num">0.170</td><td class="num">0.85</td></tr>
+<tr><td class="num">4</td><td class="num">0.072</td><td class="num">0.36</td></tr>
+<tr><td class="num">5</td><td class="num">0.037</td><td class="num"><strong>0.19</strong></td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="col">
+<p>By five cells the signal is five times <em>below</em> the noise. So "add distance noise" is
+largely already available: switching on the visual noise this project already configures gives a
+strong distance effect for one line of config, with no new mechanism.</p>
+
+<h3 class="sub">If you did want to shape it, three conventional choices</h3>
+
+<p><strong>1 · Flat σ — read noise.</strong> Signal-independent, constant everywhere. What is
+configured today, and per the table it is already aggressive.</p>
+
+<p><strong>2 · σ ∝ √signal — shot noise.</strong> The physically motivated model for anything that
+accumulates photons: bright things are noisier in absolute terms but <em>more reliable</em> in
+relative terms. It <em>softens</em> the falloff — SNR at five cells goes from 0.19 to 0.96. This is
+the model a reviewer would expect of something described as an abstraction of a retina.</p>
+
+<p><strong>3 · σ grows with cell eccentricity.</strong> The retinal model: peripheral vision is
+noisier, not merely blurrier. The only one of the three that needs new code, and it is cheap —
+cell distances are fixed by the diamond's geometry, so the per-cell σ can be precomputed once.</p>
+
+<p>Real sensors have all three at once.</p>
+
+<div class="callout">
+  <span class="tag">a distinction worth keeping</span>
+  <p>Two different distances could drive noise, and they are not the same. <strong>Entity
+  distance</strong> — how far the <em>thing</em> is — is what drives the blur, and what the table
+  above reflects. <strong>Cell eccentricity</strong> — how far the <em>sampling cell</em> is from the
+  agent — is what option 3 would use. They diverge: a near object can land in a peripheral cell, and
+  a far one can bleed into the centre. Option 3 makes the agent's own cell reliable and its periphery
+  unreliable <em>regardless of what is in them</em>, which is a different claim from "far things are
+  uncertain".</p>
+</div>
+
+<p>One confound to disarm first: the visual noise is currently <strong>injury-modulated</strong>
+(<code>state_dependent</code>, <code>injury_noise_scale: 1.5</code>), so switching it on also couples
+perceptual precision to the agent's damage. Deliberate for the pain research, but it means a
+"distance noise" experiment would also be an "injury changes perception" experiment unless that
+scale is set to zero.</p>
+</div>
 
 <div class="col">
 <h2>Where this leaves the decision</h2>
