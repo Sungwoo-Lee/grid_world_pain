@@ -65,6 +65,17 @@ FIGS = [
      "blur (B) smears them into one another. The anisotropic kernel (C) resolves three separate "
      "directional lobes. D and E are the two alternative architectures, included so you can see what "
      "you would be giving up."),
+    ("fig8_noise_anatomy.png", "8", "Anatomy of noise",
+     "Built the same way as Fig 0, from first principles to real numbers. <strong>Panel 1</strong> — "
+     "noise means the reported value is the true value plus a random draw, so reading the same cell "
+     "twice gives two answers. <strong>Panel 2</strong> — whether that matters depends entirely on the "
+     "signal: at one cell the reading sits well clear of the noise; at five it overlaps zero, so "
+     "\u201cfaint object\u201d and \u201cnothing there\u201d become the same reading. <strong>Panel 3</strong> "
+     "— the distinction that matters most: the blur is identical every step and could in principle be "
+     "learned and undone, while the noise differs every step and cannot. <strong>Panel 4</strong> — only "
+     "\u03c3 changes between the models; the kernel is untouched in all of them. The retinal model is "
+     "deliberately absent from that panel, because it keys on where the <em>cell</em> is rather than on "
+     "signal strength, and sharing an axis would blur the very distinction the callout below keeps sharp."),
     ("fig7_noise.png", "7", "Distance-dependent noise: mostly already there",
      "Top row: the same object at 1, 3 and 5 cells, before and after adding the σ = 0.2 the project "
      "already configures for vision. At one cell it survives; by five it is gone. <strong>Nothing "
@@ -106,12 +117,19 @@ def b64(p):
     return base64.b64encode(pathlib.Path(p).read_bytes()).decode()
 
 
-figs_html = "\n".join(f"""
+def _fig_block(f, n, title, cap):
+    return f"""
     <figure class="fig" id="fig{n}">
       <div class="fig-head"><span class="fig-num">Fig {n}</span><h3>{title}</h3></div>
       <div class="fig-img"><img src="data:image/png;base64,{b64(f)}" alt="{title}"></div>
       <figcaption>{cap}</figcaption>
-    </figure>""" for f, n, title, cap in FIGS)
+    </figure>"""
+
+
+# Figures 7 and 8 are placed inside the noise section rather than the main run,
+# so they are looked up individually and excluded from figs_html below.
+figs = {n: _fig_block(f, n, t, c) for f, n, t, c in FIGS}
+figs_html = "\n".join(figs[n] for _f, n, _t, _c in FIGS if n not in ("7", "8"))
 
 settled_html = "\n".join(f'<div class="led-row"><dt>{k}</dt><dd>{v}</dd></div>' for k, v in SETTLED)
 open_html = "\n".join(f'<div class="led-row"><dt>{k}</dt><dd>{v}</dd></div>' for k, v in OPEN)
@@ -482,6 +500,8 @@ have either, both, or neither.</p>
 imaging, astronomy and microscopy is</p>
 </div>
 
+{figs['8']}
+
 <div class="formula col plain">
   <span class="lbl">the standard imaging model</span>
   <span class="vec">y</span> = <span class="vec">H</span><span class="vec">x</span> + <span class="vec">n</span>
@@ -502,6 +522,8 @@ noise level produces a signal-to-noise ratio that collapses with distance, witho
 in the noise at all:</p>
 </div>
 
+</div>
+
 <div class="tablewrap col">
 <table>
 <thead><tr><th>object distance</th><th>its brightest cell</th><th>signal ÷ noise, at the configured σ = 0.2</th></tr></thead>
@@ -514,6 +536,9 @@ in the noise at all:</p>
 </tbody>
 </table>
 </div>
+
+<div class="col">
+{figs['7']}
 
 <div class="col">
 <p>By five cells the signal is five times <em>below</em> the noise. So "add distance noise" is
