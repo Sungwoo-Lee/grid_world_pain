@@ -30,8 +30,8 @@ environment:
   resources:
   - name: food
     type: food
-    count_low: 2
-    count_high: 6
+    count_low: 1
+    count_high: 4
     spawn_area:
     - [1, 1]
     - [10, 10]
@@ -47,7 +47,7 @@ environment:
   - name: hiding_predator
     type: hiding_predator
     count_low: 2
-    count_high: 4
+    count_high: 12
     spawn_area:
     - [1, 1]
     - [10, 10]
@@ -56,22 +56,23 @@ environment:
     visual_properties: [0, 0, 0, 0, 1, 0, 0, 0]
     visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
     max_consumption: -1
-    damage: [15.0, 45.0]
     regeneration_delay: 20
+    damage: [15.0, 45.0]
     nociception_intensity: 0.9
     blocks_sight: true
   entities:
   - class: predator
     behaviour: hunt
     tag: pred
-    count_low: 1
+    count_low: 0
     count_high: 2
     properties: [0.0, 0.7, 0.5, 0.0, 0.0]
-    properties_std: [0.0, 0.4, 0.4, 0.0, 0.0]
+    properties_std: [0.0, 0.3, 0.3, 0.0, 0.0]
     visual_properties: [0, 0, 0, 0, 0, 1, 0, 0]
     visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
-    move_interval: 1
-    damage: [15.0, 45.0]
+    move_interval: [1, 1]
+    damage: [15.0, 120.0]
+    attack_delay: [1, 3]
     nociception_intensity: 0.9
     spawn_area:
     - [1, 1]
@@ -79,26 +80,27 @@ environment:
     patrol_area:
     - [1, 1]
     - [10, 10]
-    detection_range: 5
-    max_stamina: 30
-    stamina_recovery_rate: 1
-    hunt_stamina_threshold: 0.7
-    lose_interest_multiplier: 1.5
-    attack_delay: 3
+    detection_range: [1, 7]
+    max_stamina: [30, 150]
+    stamina_recovery_rate: [1, 1]
+    hunt_stamina_threshold: [0.7, 0.7]
+    lose_interest_multiplier: [1.5, 1.5]
+    attack_range: [2, 3]
+    attack_success_rate: 0.5
     blocks_sight: true
   - class: neutral
     behaviour: wander
     tag: rabbit
-    count_low: 1
+    count_low: 0
     count_high: 2
     properties: [0.0, 0.5, 0.7, 0.0, 0.0]
-    properties_std: [0.0, 0.4, 0.4, 0.0, 0.0]
+    properties_std: [0.0, 0.3, 0.3, 0.0, 0.0]
     visual_properties: [0, 0, 0, 0, 0, 0, 0, 1]
     visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
-    move_interval: 1
-    nociception_intensity: 0.1
+    move_interval: [1, 1]
     damage: [0.0, 0.0]
-    attack_delay: 0
+    attack_delay: [0, 0]
+    nociception_intensity: 0.1
     spawn_area:
     - [1, 1]
     - [10, 10]
@@ -116,6 +118,21 @@ environment:
     - [0, 0]
     - [0, 0]
   obstacles:
+  - name: bush
+    count_low: 4
+    count_high: 10
+    area:
+    - [1, 1]
+    - [10, 10]
+    blocking: false
+    hides_agent: true
+    damage: [0.0, 0.0]
+    nociception_intensity: 0.0
+    properties: [0.0, 0.0, 0.0, 1.0, 0.0]
+    properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+    visual_properties: [0, 0, 0, 0, 0, 0, 1, 0]
+    visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+    blocks_sight: true
   - name: rock
     count_low: 6
     count_high: 12
@@ -130,42 +147,13 @@ environment:
     visual_properties: [0, 0, 0, 0, 0, 0, 1, 0]
     visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
     blocks_sight: true
-  - name: tree
-    count: 0
-    area:
-    - [5, 15]
-    - [5, 15]
-    blocking: true
-    damage: [0.1, 0.5]
-    nociception_intensity: 0.1
-    properties: [0.0, 0.0, 0.0, 0.0, 1.0]
-    properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
-    visual_properties: [0, 0, 0, 0, 0, 0, 1, 0]
-    visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
-    blocks_sight: true
-  - name: bush
-    count_low: 4
-    count_high: 10
-    area:
-    - [1, 1]
-    - [10, 10]
-    blocking: false
-    damage: [0.0, 0.0]
-    nociception_intensity: 0.0
-    hides_agent: true
-    blocks_animals: false
-    properties: [0.0, 0.0, 0.0, 1.0, 0.0]
-    properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
-    visual_properties: [0, 0, 0, 0, 0, 0, 1, 0]
-    visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
-    blocks_sight: true
 body:
   with_satiation: true
   with_nutrition: true
   with_injury: true
   random_start_satiation: false
-  random_start_nutrition: false
-  random_start_injury: false
+  random_start_nutrition: true
+  random_start_injury: true
   start_nutrition_low: 0
   start_nutrition_high: 100
   start_injury_low: 0

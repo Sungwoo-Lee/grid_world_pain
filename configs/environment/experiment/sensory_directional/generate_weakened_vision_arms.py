@@ -17,6 +17,13 @@ from src.utils.config import dump_config_yaml
 from src.environment.config_loader import load_env_config
 
 OUT = 'configs/environment/experiment/sensory_directional'
+# The BASE TASK, not configs/environment/default.yaml. default.yaml is a base
+# LAYER, not a task: it ships random_start_injury / random_start_nutrition FALSE,
+# no predator jump-attack, fixed rather than distributional detection/stamina, and
+# a different obstacle set. Every real training config in this project starts from
+# a basic/ curriculum stage. Basing the arms on default.yaml gave agents a
+# zero-injury start every episode and a task nobody trains on.
+BASE_TASK = 'configs/environment/experiment/basic/04-jump_attack_10x10.yaml'
 # Which entities occlude. Named per arm so the blocker SET is itself a variable:
 # a bush that conceals the agent from predators is physically opaque and arguably
 # ought to block the agent's own view too, so "does vegetation block sight?" is a
@@ -79,7 +86,7 @@ HEADER = """# ==================================================================
 
 
 def build(sensory_ov, vec, blockers):
-    d = copy.deepcopy(load_env_config('configs/environment/default.yaml').to_dict())
+    d = copy.deepcopy(load_env_config(BASE_TASK).to_dict())
     d.pop('extends', None)
     d['sensory']['visual_sensor_range'] = 2
     d['sensory'].update(sensory_ov)

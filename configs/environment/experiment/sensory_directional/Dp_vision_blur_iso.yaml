@@ -21,7 +21,7 @@
 # Plan: docs/develop/active/sensors/DIRECTIONAL_SENSORS_PLAN.md
 # Report: docs/develop/active/sensors/DIRECTIONAL_SENSORS_REPORT.md
 # ============================================================================
-extends: environment/default
+extends: environment/experiment/basic/04-jump_attack_10x10
 
 sensory:
   visual_value_mode: sum
