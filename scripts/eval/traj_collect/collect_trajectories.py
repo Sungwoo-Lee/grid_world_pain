@@ -307,29 +307,48 @@ def _np_list(x):
 PRE_V31_SENSOR_DEFAULTS = {
     "olfactory_grid_range": 0,        # 0 = the original single-point sample
     "visual_blur_enabled": False,
-    "visual_blur_radial_scale": 0.0,
-    "visual_blur_anisotropy": 0.0,
-    "visual_blur_sigma_floor": 0.0,
+    # These three MUST be the shipped default.yaml values, not zeros. They were
+    # zeros originally on the reasoning that blur sits behind a trace-time static
+    # branch, so the values are behaviourally inert when it is off -- which is
+    # still true. But commit 4a5fcd4 added load-time validation that rejects
+    # anisotropy <= 0 and sigma_floor <= 0 REGARDLESS of whether blur is enabled,
+    # precisely so a config cannot carry a divide-by-zero that only detonates when
+    # someone later flips the flag. Zeros therefore no longer load at all.
+    # Semantically these are also the right values: an old run had no such key, so
+    # the honest reconstruction is whatever the base config would supply.
+    "visual_blur_radial_scale": 0.5,
+    "visual_blur_anisotropy": 3.0,
+    "visual_blur_sigma_floor": 0.5,
+}
+
+# Commit 9771e98 (v3.2, 2026-08-26) added visual value modes and line-of-sight occlusion and made
+# these mandatory.  Runs launched earlier the same day lack them.  Both features sit behind
+# trace-time static branches in sensor.py -- `if params.visual_occlusion_enabled` and
+# `if params.visual_value_mode == 'clamp'` -- so these values leave the original code path
+# untouched rather than approximating it.  Cone and strength are deliberately absent: the loader
+# only demands them when occlusion is on.
+PRE_V32_SENSOR_DEFAULTS = {
+    "visual_value_mode": "sum",          # 'sum' = the original per-cell accumulation
+    "visual_occlusion_enabled": False,
 }
 
 
-def apply_pre_v31_sensor_defaults(cfg: dict, run_dir: Path) -> list[str]:
-    """Inject the five v3.1 sensory keys at their pre-v3.1 values. Returns what was added.
+def apply_sensor_compat(cfg: dict, run_dir: Path, defaults: dict, flag: str,
+                        version: str) -> list[str]:
+    """Inject a version's sensory keys at values that reproduce the earlier behaviour.
 
-    Refuses if the config already carries any of them: a run that set them explicitly is a
-    v3.1-or-later run, and silently overriding a real setting is the failure this flag is
-    meant to avoid.
+    Refuses if the config already carries any of them: a run that set them explicitly is a later
+    run, and silently overwriting a real setting is the failure these flags exist to avoid.
     """
     sens = cfg.setdefault("sensory", {})
-    present = [k for k in PRE_V31_SENSOR_DEFAULTS if k in sens]
+    present = [k for k in defaults if k in sens]
     if present:
         raise ValueError(
-            f"--assume-pre-v31-sensors was passed, but {run_dir.name} already sets "
-            f"{present} in sensory. That makes it a v3.1-or-later run; the flag would "
-            "silently overwrite real settings. Drop the flag.")
-    for k, v in PRE_V31_SENSOR_DEFAULTS.items():
-        sens[k] = v
-    return sorted(PRE_V31_SENSOR_DEFAULTS)
+            f"{flag} was passed, but {run_dir.name} already sets {present} in sensory. That makes "
+            f"it a {version}-or-later run; the flag would silently overwrite real settings. "
+            "Drop the flag.")
+    sens.update(defaults)
+    return sorted(defaults)
 
 
 def build_manifest(*, cfg, params, run_dir: Path, ckpt_dir: Path, ckpt_step: int,
@@ -655,6 +674,11 @@ def parse_args(argv=None):
                    help="downgrade the scene-ambiguity guard to a warning and stamp "
                         "scene_ambiguous:true into the manifest. Use only when you have "
                         "INDEPENDENTLY established which scene the run trained on.")
+    p.add_argument("--assume-pre-v32-sensors", action="store_true",
+                   help="Supply the two sensory keys commit 9771e98 made mandatory "
+                        "(visual_value_mode, visual_occlusion_enabled) at values that leave the "
+                        "pre-v3.2 code path untouched. Needed for runs launched before "
+                        "2026-08-26 16:00. Refuses if the run already sets them.")
     p.add_argument("--assume-pre-v31-sensors", action="store_true",
                    help="Supply the five sensory keys that commit 0e8a4ef made mandatory "
                         "(olfactory_grid_range, visual_blur_*) at the values that "
@@ -689,10 +713,18 @@ def main(argv=None) -> int:
 
     pre_v31_keys = None
     if args.assume_pre_v31_sensors:
-        pre_v31_keys = apply_pre_v31_sensor_defaults(cfg, run_dir)
+        pre_v31_keys = apply_sensor_compat(cfg, run_dir, PRE_V31_SENSOR_DEFAULTS,
+                                           "--assume-pre-v31-sensors", "v3.1")
         if not args.quiet:
             print(f"[collect] --assume-pre-v31-sensors: supplied {pre_v31_keys} "
                   f"at pre-v3.1 values (env fingerprint reflects this)")
+    if args.assume_pre_v32_sensors:
+        k32 = apply_sensor_compat(cfg, run_dir, PRE_V32_SENSOR_DEFAULTS,
+                                  "--assume-pre-v32-sensors", "v3.2")
+        pre_v31_keys = sorted((pre_v31_keys or []) + k32)
+        if not args.quiet:
+            print(f"[collect] --assume-pre-v32-sensors: supplied {k32} "
+                  f"at pre-v3.2 values (env fingerprint reflects this)")
 
     from src.environment.config_loader import load_env_params
     params = load_env_params(Config(cfg))
