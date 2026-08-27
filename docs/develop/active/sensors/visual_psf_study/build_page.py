@@ -522,8 +522,6 @@ noise level produces a signal-to-noise ratio that collapses with distance, witho
 in the noise at all:</p>
 </div>
 
-</div>
-
 <div class="tablewrap col">
 <table>
 <thead><tr><th>object distance</th><th>its brightest cell</th><th>signal ÷ noise, at the configured σ = 0.2</th></tr></thead>
@@ -537,7 +535,6 @@ in the noise at all:</p>
 </table>
 </div>
 
-<div class="col">
 {figs['7']}
 
 <div class="col">

@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse, Circle
 import numpy as np
 
-plt.rcParams.update({'figure.dpi': 130, 'font.size': 9, 'savefig.bbox': 'tight',
+plt.rcParams.update({'figure.dpi': 200, 'font.size': 9, 'savefig.bbox': 'tight',
                      'savefig.facecolor': 'white'})
 ACC, EMB, GREY = '#9c2f6d', '#c85c31', '#6e6579'
 

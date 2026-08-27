@@ -6,7 +6,7 @@ from matplotlib.patches import Rectangle, Wedge, Circle
 import numpy as np
 import psf_lib as P
 
-plt.rcParams.update({'figure.dpi': 130, 'font.size': 9,
+plt.rcParams.update({'figure.dpi': 200, 'font.size': 9,
                      'axes.titlesize': 9.5, 'savefig.bbox': 'tight',
                      'savefig.facecolor': 'white'})
 CMAP = 'magma'

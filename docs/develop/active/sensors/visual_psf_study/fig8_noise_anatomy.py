@@ -13,7 +13,7 @@ from src.utils.config import Config
 from src.environment.config_loader import load_env_config, load_env_params
 from src.environment.sensor import _psf_weights, get_visual_offsets
 
-plt.rcParams.update({'figure.dpi': 130, 'font.size': 9, 'savefig.bbox': 'tight',
+plt.rcParams.update({'figure.dpi': 200, 'font.size': 9, 'savefig.bbox': 'tight',
                      'savefig.facecolor': 'white'})
 PLUM, AMBER, TEAL, GREY = '#7b4b91', '#c9852b', '#1f7a6c', '#6e6579'
 SIG = 0.2
