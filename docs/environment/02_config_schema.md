@@ -17,10 +17,10 @@ Full rationale: [[DIRECTIONAL_SENSORS_PLAN]], [[DIRECTIONAL_SENSORS_REPORT]].
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `olfactory_grid_range` | int, static | `0` | Radius of the diamond of olfactory **sampling cells**. `0` = the single pre-DIRECTIONAL_SENSORS sample at the agent's own cell. Contributes `(2r²+2r+1) × vector_size` dims. **Not to be confused with `sensor_radius`**, which is how far a smell *carries*; this is where it is *measured*. A radius, not a side length: `1` → 5 cells, `2` → 13. Out-of-bounds cells read exactly zero. |
-| `visual_blur_enabled` | bool, static | `false` | Replaces the exact cell match with an anisotropic gaussian point-spread. Needs `visual_sensor_range ≥ 1` to have anywhere to spread. |
-| `visual_blur_radial_scale` | float, traced | `0.5` | `σ_parallel = scale × distance` — how fast distance judgement degrades. |
-| `visual_blur_anisotropy` | float, traced | `3.0` | `ρ = σ_parallel / σ_perp`. `1.0` is exactly an isotropic kernel, which makes an ablation a one-value change. |
-| `visual_blur_sigma_floor` | float, traced | `0.5` | Lower bound on both widths, in cells. **Required, not cosmetic**: mass normalisation divides by `2π σ_par σ_perp`, so an entity on the agent's own cell would otherwise give an infinite peak. Half a cell is the grid's sampling limit. |
+| `visual_blur_enabled` | bool, static | `false` | **Gates the three knobs below** — they are read only when this is true (CONFIG_GUIDE §5 conditional-key pattern), so a config that never blurs need not carry them. Replaces the exact cell match with an anisotropic gaussian point-spread. Needs `visual_sensor_range ≥ 1` to have anywhere to spread. |
+| `visual_blur_radial_scale` | float, traced | *(conditional)* | `σ_parallel = scale × distance` — how fast distance judgement degrades. |
+| `visual_blur_anisotropy` | float, traced | *(conditional)* | `ρ = σ_parallel / σ_perp`. `1.0` is exactly an isotropic kernel, which makes an ablation a one-value change. |
+| `visual_blur_sigma_floor` | float, traced | *(conditional)* | Lower bound on both widths, in cells. **Required, not cosmetic**: mass normalisation divides by `2π σ_par σ_perp`, so an entity on the agent's own cell would otherwise give an infinite peak. Half a cell is the grid's sampling limit. |
 | `visual_value_mode` | enum, static | `sum` | How per-cell entity contributions combine. `sum` = weighted sum (two rocks read 2.0); `clamp` = per-channel presence capped at 1.0. Applies to the **entity** contribution only — terrain keeps its own value. |
 | `visual_occlusion_enabled` | bool, static | `false` | Line-of-sight occlusion. An entity is hidden when a nearer `blocks_sight` entity lies inside the shadow cone of the ray to it. |
 | `visual_occlusion_cone_deg` | float | *(conditional)* | Half-angle of the shadow cone, in `(0, 90)`. **Read only when occlusion is enabled** (CONFIG_GUIDE §5 conditional-key pattern). |

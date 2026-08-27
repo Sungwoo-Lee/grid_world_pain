@@ -307,18 +307,9 @@ def _np_list(x):
 PRE_V31_SENSOR_DEFAULTS = {
     "olfactory_grid_range": 0,        # 0 = the original single-point sample
     "visual_blur_enabled": False,
-    # These three MUST be the shipped default.yaml values, not zeros. They were
-    # zeros originally on the reasoning that blur sits behind a trace-time static
-    # branch, so the values are behaviourally inert when it is off -- which is
-    # still true. But commit 4a5fcd4 added load-time validation that rejects
-    # anisotropy <= 0 and sigma_floor <= 0 REGARDLESS of whether blur is enabled,
-    # precisely so a config cannot carry a divide-by-zero that only detonates when
-    # someone later flips the flag. Zeros therefore no longer load at all.
-    # Semantically these are also the right values: an old run had no such key, so
-    # the honest reconstruction is whatever the base config would supply.
-    "visual_blur_radial_scale": 0.5,
-    "visual_blur_anisotropy": 3.0,
-    "visual_blur_sigma_floor": 0.5,
+    # The three blur knobs used to be listed here. They are no longer needed:
+    # commit below made them CONDITIONAL-MANDATORY, read only when
+    # visual_blur_enabled is true. With blur off there is nothing to supply.
 }
 
 # Commit 9771e98 (v3.2, 2026-08-26) added visual value modes and line-of-sight occlusion and made

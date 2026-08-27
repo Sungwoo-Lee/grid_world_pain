@@ -233,6 +233,37 @@ def test_clamp_caps_a_cell_at_one_per_channel():
     assert outs['clamp'] == pytest.approx(1.0)
 
 
+def test_blur_knobs_are_conditional_on_the_enabling_flag():
+    """Read only when blur is on, so a historical run snapshot that predates them
+    still loads. But loud the moment blur is actually enabled without them."""
+    import copy
+    from src.environment.config_loader import load_env_config
+    from src.utils.config import Config
+    KNOBS = ('visual_blur_radial_scale', 'visual_blur_anisotropy', 'visual_blur_sigma_floor')
+    base = load_env_config(DEFAULT).to_dict()
+
+    d = copy.deepcopy(base)
+    for k in KNOBS:
+        d['sensory'].pop(k, None)
+    load_env_params(Config(d))                      # blur off, knobs absent -> fine
+
+    d = copy.deepcopy(base)
+    for k in KNOBS:
+        d['sensory'].pop(k, None)
+    d['sensory']['visual_blur_enabled'] = True
+    with pytest.raises(ValueError, match='visual_blur'):
+        load_env_params(Config(d))                  # blur on, knobs absent -> raises
+
+
+@pytest.mark.parametrize('knob,bad', [('visual_blur_anisotropy', 0.0),
+                                      ('visual_blur_sigma_floor', 0.0),
+                                      ('visual_blur_radial_scale', -1.0)])
+def test_blur_knobs_still_validated_when_blur_is_on(knob, bad):
+    """The NaN trap must stay closed now that the checks are conditional."""
+    with pytest.raises(ValueError, match=knob):
+        params(**{'sensory.visual_blur_enabled': True, f'sensory.{knob}': bad})
+
+
 def test_occlusion_defaults_off_and_validates_its_subkeys():
     p = params()
     assert p.visual_occlusion_enabled is False

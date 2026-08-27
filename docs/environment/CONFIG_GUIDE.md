@@ -212,9 +212,18 @@ Three things that bite:
   change the cost — the tensor shapes are identical either way, only the threshold moves. So
   sweep the angle freely; it is a science knob, not a budget one.
 
-`visual_occlusion_cone_deg` and `visual_occlusion_strength` are **conditional-mandatory**
-(§5 pattern): read only when `visual_occlusion_enabled` is true, so configs that leave
-occlusion off never carry them.
+Two groups of keys are **conditional-mandatory** (§5 pattern), read only when their
+enabling flag is true, so a config that never uses a feature need not carry its settings:
+
+| enabling flag | keys it gates |
+|---|---|
+| `visual_blur_enabled` | `visual_blur_radial_scale`, `visual_blur_anisotropy`, `visual_blur_sigma_floor` |
+| `visual_occlusion_enabled` | `visual_occlusion_cone_deg`, `visual_occlusion_strength` |
+
+This matters beyond tidiness: every training run freezes its own config at launch, and a
+run from before a key existed can never gain it. Every key made unconditionally mandatory
+is a key that some historical run snapshot will fail to load without. Keep the mandatory
+surface as small as the feature allows.
 
 ---
 
