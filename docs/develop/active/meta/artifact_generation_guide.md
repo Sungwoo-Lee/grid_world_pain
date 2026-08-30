@@ -3,7 +3,7 @@ title: Artifact generation guide — what went wrong and what to do instead
 topic: meta
 status: active
 created: 2026-08-26
-last_updated: 2026-08-26
+last_updated: 2026-08-30
 ---
 
 # Artifact generation guide
@@ -291,3 +291,57 @@ figure whose units are only in its caption fails that test, and several here did
 - [ ] Findings box present: the opening questions, answered together
 - [ ] Each figure read once with the prose covered — do its own labels carry it?
 - [ ] No retracted values left in the shipped data
+
+---
+
+## 10. Issues found in the sensor-ladder artifact (2026-08-30)
+
+A second full artifact, fifteen figures over fourteen agents, reviewed by a fresh-reader agent and
+an adversarial analysis reviewer. The presentation lessons from §1&ndash;§9 mostly held; these are
+the ones that were new, plus three **analysis** errors that no amount of figure polish would have
+caught. That is the headline lesson of this round: the reviewers who found the worst problems were
+not looking at the figures at all.
+
+### 10a. Analysis traps that produce a plausible wrong number
+
+| # | What happened | The general rule |
+|---|---|---|
+| 30 | A third of episodes contained no predator. `numpy.digitize` files every `NaN` into the **top** bin and `numpy.clip` files every `inf` into the **farthest** bin, so those episodes silently became the comparison group and manufactured a large fake effect | **Any bin edge is also a silent dumping ground for missing values.** After binning, print the count per bin and ask whether the extremes are suspiciously fat. A bin holding 3&times; its neighbours is the tell |
+| 31 | "Each row is a change of exactly one setting" was true of eleven rows and false of one, inflating a headline number fourfold. The doc even claimed the pairing was "checked against the configs" — no such check existed | **A claim about the data that is stated in prose but not asserted in code will eventually stop being true.** If a figure's caption makes a structural promise, write the assertion that enforces it and let the figure refuse to draw |
+| 32 | Two settings became "different" only because one was inert — turning blur off leaves its scale in the config, reading as an extra difference | **Collapse conditional settings before diffing them.** A key that only has meaning when a flag is on is not an independent axis |
+| 33 | A sign reversal was explained by a mechanism that, worked through, predicts the opposite sign. It sounded plausible and survived a first draft | **Check that your stated mechanism predicts the sign you observed.** Write the causal chain out and follow the arrows; "dilution" and "weighting" arguments are especially easy to get backwards |
+| 34 | The effect changed sign with the measurement window, which looked like window-shopping. It was not — the cause itself decays — but the report had no way to show that | **When the cause is transient, measure and plot its lifetime.** An effect that tracks its cause through time turns the fragility objection into a dose-response confirmation. Sweep the window and show the curve rather than defending one number |
+| 35 | "Thirteen of fourteen arms agree" was written as if fourteen independent trials. They shared a seed, shared bit-identical evaluation worlds, and one subgroup shared an observation width | **Count of agreeing conditions is not a count of independent confirmations.** Say what the units actually share. Never multiply them together as if they were coin flips |
+| 36 | A grouping rule that separated the arms perfectly was written after seeing which arms separated | **Say when a rule is post-hoc.** It costs one clause and it is the difference between a description and a claim |
+| 37 | The "control" channel in a comparison was itself suppressed by a known property of how the variable was defined, inflating the contrast it was meant to anchor | **Interrogate the control as hard as the treatment.** A control that is not neutral is worse than none, because it looks like rigour |
+
+### 10b. Presentation issues that were new this round
+
+| # | What happened | The general rule |
+|---|---|---|
+| 38 | Seven figures carried a y-axis label saying "poorest senses at the bottom" while plotting the poorest at the top — `np.arange(n)[::-1]` reverses the axis, not the meaning | **Read every axis label against the rendered image, not against the intent.** Orientation claims are the easiest thing to get backwards and the hardest to notice |
+| 39 | Red and blue carried five different meanings across the set, twice within a single image | **Fix the colour&rarr;meaning map once, in the shared style module, with a comment saying why.** A reader who learns a colour on figure 3 must not be punished for carrying it to figure 8 |
+| 40 | Three multi-panel figures gave each panel its own scale. In the worst case the panel showing the *wrong* answer looked as strong as the right one — in a figure whose whole point was that they differ | **Panels a reader is asked to compare must share a scale.** If one then looks flat, that is the finding, not a rendering problem |
+| 41 | Two figures drew 14 and 28 lines in one continuous colour ramp; adjacent arms in the ramp were exactly the arms the text asked the reader to tell apart | **More than about six series needs a grouping, not more colours.** Colour by the distinction the argument turns on, draw the rest thin, and name the ones the prose discusses directly on the line |
+| 42 | An axis label was clipped mid-word in the source PNG and shipped | **Open the rendered file, at full size, every time.** Matplotlib clips silently |
+| 43 | Figure numbers ran 1,2,3,4,5,12,13,6,7… because two figures were introduced out of order | **Name the script for its figure number and keep them in reading order.** Renumbering is a scripted rename; a reader following numbers that jump is lost |
+| 44 | The colour bar was the only place a normalisation was stated, in rotated 7pt text on the right edge | **A units statement that exists only inside a figure has not been made** |
+| 45 | A correlation across 14 arm-level points sat next to a caption saying "over that arm's 300,000 episodes" | **Say what n is for every statistic, in the caption.** Especially when a big number is nearby for a different reason |
+| 46 | Not every analysis used all the episodes — one used 11% — and no figure said so | **State the denominator per analysis, once, in a table.** Exclusions are not footnotes |
+
+### 10c. What worked, and is worth repeating
+
+- **Generate every table and number; transcribe none.** `make_report_tables.py` emits the report's
+  tables, `build_artifact.py` substitutes them into the page, and a token naming a missing figure or
+  table is a hard error. No blank panel could ship this time, which was issue #9 last round.
+- **One script per figure, named for its figure number**, each stating its own question, method and
+  known limitations in its docstring. When a number moved, exactly one file had to change.
+- **A verification pass that checks the prose against the data.** Every quoted number was re-derived
+  and compared to what the document says. It found nothing this round only because the tables were
+  generated — which is the point.
+- **Two reviewers with different objects.** The fresh reader found the jargon, the overlaps and the
+  misleading scales; the adversarial reviewer found the confounded pairing and the backwards
+  mechanism. Neither would have found the other's list. Budget for both.
+- **Write the corrections into the artifact.** Each of the three analysis errors is now a short note
+  in the report saying what the wrong number was and why. A reader who reproduces the old result
+  learns why it differs instead of doubting the new one.
