@@ -1,6 +1,6 @@
-"""FIGURE 8 - Where hypervigilance DOES show up: the smell of a harmless animal.
+"""FIGURE 11 - Where hypervigilance DOES show up: the smell of a harmless animal.
 
-QUESTION. Figure 7 looked for hypervigilance on the proximity channel and did not find it: a wound
+QUESTION. Figure 10 looked for hypervigilance on the proximity channel and did not find it: a wound
 raised the agent's response to a nearby predator more than to a nearby rabbit, which is heightened
 caution, not a change in what counts as evidence of danger. But proximity is not the only cue the
 agent has, and it is not the ambiguous one. Smell is. Each animal's odour is drawn fresh and at
@@ -46,18 +46,16 @@ p_lo = np.array([slope(a, "pred", 0) for a in arms])
 p_hi = np.array([slope(a, "pred", 3) for a in arms])
 d_r, d_p = r_hi - r_lo, p_hi - p_lo
 
-def resolves_identity(a):
-    s = D[a]["sensory"]
-    return s["visual_sensor_range"] >= 2 and s["visual_vector_size"] > 1
+resolves_identity = lambda a: L.resolves_identity(D[a]["sensory"])
 grp = np.array([resolves_identity(a) for a in arms])
-CY, CN = "#2f6f9f", "#b3322b"
+CY, CN = PL.GROUP_YES, PL.GROUP_NO
 
 fig, ax = plt.subplots(1, 2, figsize=(13.6, 5.9), sharey=True,
                        gridspec_kw={"width_ratios": [1.2, 1]})
-y = np.arange(len(arms))[::-1]; h = 0.36
-ax[0].barh(y + h/2, r_lo, height=h, color=PL.LOWINJ, edgecolor="none",
+y = np.arange(len(arms)); h = 0.36
+ax[0].barh(y + h/2, r_lo, height=h, color=PL.WOUND_LO, edgecolor="none",
            label="episodes that began nearly unhurt  (start wound 0-25)")
-ax[0].barh(y - h/2, r_hi, height=h, color=PL.HIGHINJ, edgecolor="none",
+ax[0].barh(y - h/2, r_hi, height=h, color=PL.WOUND_HI, edgecolor="none",
            label="episodes that began badly wounded  (start wound 75-100)")
 ax[0].axvline(0, color=PL.INK, lw=1)
 ax[0].set_yticks(y); ax[0].set_yticklabels(PL.arm_ylabels(arms), fontsize=8)
@@ -83,7 +81,7 @@ hh = [plt.Rectangle((0, 0), 1, 1, color=CY, label="RABBIT smell - arm whose sigh
       plt.Rectangle((0, 0), 1, 1, color=CN, label="RABBIT smell - arm whose sight does not"),
       plt.Rectangle((0, 0), 1, 1, color=PL.GRID, label="PREDATOR smell (control, all arms)")]
 ax[1].legend(handles=hh, loc="lower center", bbox_to_anchor=(0.5, 1.01), ncol=1, fontsize=8)
-PL.finish(fig, f"{L.FIG_ROOT}/lad08_hypervigilance_odour.png")
+PL.finish(fig, f"{L.FIG_ROOT}/lad11_hypervigilance_odour.png")
 print(f"{'arm':22}{'rab unhurt':>12}{'rab wounded':>13}{'amplified':>11}   "
       f"{'pred amplified':>15}   resolves identity")
 for i, a in enumerate(arms):

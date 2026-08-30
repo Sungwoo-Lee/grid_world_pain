@@ -18,6 +18,11 @@ import numpy as np, matplotlib.pyplot as plt
 import _ladder as L, _plot as PL
 
 D = L.load_all()
+# Assert the claim this figure makes. `R1_range1` was once paired against `V4_blur05`, which
+# differs from it in TWO settings (visual range AND blur off), so the -33.5 steps this figure
+# attributed to visual range was range plus blur. It is now paired against `V5_sharp`, which
+# also has blur off, and the honest cost of halving the visual range is -7.9 steps.
+L.check_single_variable_pairs({a: L.arm_config(r) for a, r in L.arm_runs().items()})
 pairs = [(a, r) for a, r in L.ARM_REFERENCE.items()]
 pairs.sort(key=lambda p: L.ARM_ORDER.index(p[0]))
 lab = [f"{L.ARM_LABEL[a][1]}\n(vs {r})" for a, r in pairs]
@@ -25,7 +30,7 @@ d_surv = [D[a]["mean_survival"] - D[r]["mean_survival"] for a, r in pairs]
 d_dwell = [D[a]["bush_dwell_pct"] - D[r]["bush_dwell_pct"] for a, r in pairs]
 
 fig, ax = plt.subplots(1, 2, figsize=(12.5, 6.0), sharey=True)
-y = np.arange(len(pairs))[::-1]
+y = np.arange(len(pairs))
 for k, (vals, xl, ttl) in enumerate([
         (d_surv, "change in mean survival  (steps, vs the reference arm)\n"
                   "left of zero = the change SHORTENED life",
@@ -33,8 +38,9 @@ for k, (vals, xl, ttl) in enumerate([
         (d_dwell, "change in bush dwell  (percentage points, vs the reference arm)\n"
                   "left of zero = the change REDUCED hiding",
          "Effect of the change on how much it hides")]):
-    c = [PL.THREAT if v < 0 else PL.HARMLESS for v in vals]
-    ax[k].barh(y, vals, color=c, height=0.7, edgecolor="none")
+    # one neutral colour: red/blue here would read as "bad/good" in the survival panel
+    # and as bare sign in the dwell panel, where hiding less is not a bad thing.
+    ax[k].barh(y, vals, color=PL.NEUTRAL, height=0.7, edgecolor="none")
     ax[k].axvline(0, color=PL.INK, lw=1)
     ax[k].set_xlabel(xl); ax[k].set_title(ttl, fontsize=9, color=PL.MUTED, loc="left", pad=8)
     ax[k].grid(axis="y", visible=False)

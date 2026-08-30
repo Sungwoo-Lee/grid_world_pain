@@ -1,4 +1,4 @@
-"""FIGURE 12 - Which features of the world drive hiding, and does that change with the senses?
+"""FIGURE 6 - Which features of the world drive hiding, and does that change with the senses?
 
 QUESTION. Figures 1-9 each isolate one thing. This one steps back: across every feature of the
 world that is randomised before the agent acts, which ones move bush dwell, and by how much - in
@@ -73,7 +73,7 @@ cb.set_label("effect on bush dwell of moving this feature by one standard deviat
 ax.set_title("Adjusted for all the other features in the same regression. The number printed in "
              "each cell is the exact value,\nso rows that saturate the colour scale can still be "
              "read and compared.", fontsize=9, color=PL.MUTED, loc="left", pad=10)
-PL.finish(fig, f"{L.FIG_ROOT}/lad12_world_factor_map.png")
+PL.finish(fig, f"{L.FIG_ROOT}/lad06_world_factor_map.png")
 print(f"{'feature':32}" + "".join(f"{a[:9]:>10}" for a in arms))
 for i, t in enumerate(terms):
     print(f"{PRETTY[t]:32}" + "".join(f"{x:>+10.2f}" for x in M[i]))

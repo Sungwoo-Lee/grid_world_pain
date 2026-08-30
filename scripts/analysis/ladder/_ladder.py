@@ -62,7 +62,7 @@ ARM_LABEL = {
 
 # What each arm is a single-variable step away from. None = it is a root of the ladder.
 ARM_REFERENCE = {
-    "B_olf_only": "A_baseline", "R1_range1": "V4_blur05",
+    "B_olf_only": "A_baseline", "R1_range1": "V5_sharp",
     "V1_blur40": "V4_blur05", "V2_blur20": "V4_blur05", "V3_blur10": "V4_blur05",
     "V5_sharp": "V4_blur05", "P1_blur05_iso": "V4_blur05",
     "Q1_presence_sum": "V4_blur05", "Q2_presence_binary": "Q1_presence_sum",
@@ -185,6 +185,54 @@ def dist_curve(bush, tot, inj_bins=None):
     return np.where(tt >= 1000, 100.0 * bb / np.maximum(tt, 1), np.nan)
 
 
+def settings(cfg) -> dict:
+    """The sensory knobs, collapsed so that each key is one thing a person could decide to change.
+
+    Written because a bug hid here. `ARM_REFERENCE` claimed every pair differs in exactly one
+    setting, and `R1_range1` was paired against `V4_blur05` when it differs in TWO - it drops the
+    visual range from 2 to 1 AND has blur switched off - so the survival difference attributed to
+    "visual range" was actually range plus blur. Comparing raw config keys does not catch that
+    cleanly either, because turning blur off leaves `visual_blur_radial_scale` in the file as an
+    inert value that reads as a third difference. So the two conditional groups are collapsed:
+
+      blur      -> "off", or the (radial scale, anisotropy) pair that is live when it is on
+      occlusion -> "off", or the set of things configured to block sight when it is on
+
+    With that, `setting_diff` returns exactly the changes a reader would name out loud, and
+    `check_single_variable_pairs` can assert the claim the figures make.
+    """
+    v = cfg["sensory"]
+    return {
+        "olfactory_grid_range": v["olfactory_grid_range"],
+        "visual_sensor_range": v["visual_sensor_range"],
+        "visual_vector_size": v["visual_vector_size"],
+        "visual_value_mode": v["visual_value_mode"],
+        "blur": ((v["visual_blur_radial_scale"], v["visual_blur_anisotropy"])
+                 if v["visual_blur_enabled"] else "off"),
+        "occlusion": (tuple(blocks_sight(cfg)) if v["visual_occlusion_enabled"] else "off"),
+    }
+
+
+def setting_diff(cfg_a, cfg_b) -> list[str]:
+    a, b = settings(cfg_a), settings(cfg_b)
+    return [k for k in a if a[k] != b[k]]
+
+
+def check_single_variable_pairs(configs: dict):
+    """Assert that every (arm, reference) pair really does differ in exactly one setting.
+
+    Called by the figure that plots those differences. A pair that drifts to two settings makes
+    that figure attribute a survival change to the wrong cause, silently.
+    """
+    bad = {a: setting_diff(configs[a], configs[r])
+           for a, r in ARM_REFERENCE.items()
+           if len(setting_diff(configs[a], configs[r])) != 1}
+    if bad:
+        raise SystemExit("ARM_REFERENCE pairs that are not single-variable:\n  " +
+                         "\n  ".join(f"{a} vs {ARM_REFERENCE[a]}: differs in {d}"
+                                     for a, d in bad.items()))
+
+
 def blocks_sight(cfg) -> list[str]:
     """Which kinds of object were configured to block the agent's line of sight.
 
@@ -199,3 +247,23 @@ def blocks_sight(cfg) -> list[str]:
             if o.get("blocks_sight"):
                 out.append(o.get("name") or o.get("class") or f"<unnamed {section[:-1]}>")
     return out
+
+
+def resolves_identity(sensory: dict) -> bool:
+    """Can this arm's sight tell a predator from a rabbit at a distance?
+
+    Two conditions: a visual field bigger than the agent's own cell and its immediate ring
+    (range >= 2, i.e. thirteen cells), AND more than one appearance channel, so the field carries
+    WHAT is in a cell rather than only THAT something is. Stated here once because three figures
+    group the arms by it and they must group them identically.
+
+    This rule is POST-HOC - it was written after seeing which arms separated, not before - so it is
+    a description of the split rather than a prediction of it. The ladder also contains no arm that
+    varies range and channel count independently at range 1, so the two conditions are not fully
+    disentangled by this data.
+    """
+    return sensory["visual_sensor_range"] >= 2 and sensory["visual_vector_size"] > 1
+
+
+GROUP_LABEL = {True: "sight resolves WHAT it sees  (range 2, 8 appearance channels)",
+               False: "sight cannot resolve WHAT it sees  (range < 2, or 1 channel)"}

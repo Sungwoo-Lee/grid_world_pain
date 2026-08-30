@@ -1,6 +1,6 @@
-"""FIGURE 13 - The false alarm, with everything else held fixed.
+"""FIGURE 7 - The false alarm, with everything else held fixed.
 
-QUESTION. Figure 9 showed bush dwell rising with the strength of a rabbit's smell. That is already
+QUESTION. Figure 5 showed the agent hiding more when a rabbit is near, in some arms. That is already
 causal, because the smell is drawn at random. But it is a raw contrast: a world with strong-smelling
 rabbits might differ in other ways too. This figure repeats the test inside a regression that
 adjusts for the number of bushes, the number of food patches, how far the agent spawned from cover,
@@ -36,7 +36,7 @@ P = np.array([get(a)[0][0] for a in arms]); Pp = np.array([get(a)[0][1] for a in
 R = np.array([get(a)[1][0] for a in arms]); Rp = np.array([get(a)[1][1] for a in arms])
 
 fig, ax = plt.subplots(figsize=(11.2, 0.40 * len(arms) + 2.9))
-y = np.arange(len(arms))[::-1]; h = 0.36
+y = np.arange(len(arms)); h = 0.36
 ax.barh(y + h/2, P, height=h, color=PL.THREAT, edgecolor="none",
         label="stronger PREDATOR smell  (a real cue - hiding is correct)")
 ax.barh(y - h/2, R, height=h, color=PL.HARMLESS, edgecolor="none",
@@ -59,7 +59,7 @@ ax.set_xlim(lo - 0.35 - abs(lo) * 0.5, hi * 1.42 + 0.35)
 ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=1, fontsize=8.5)
 fig.text(0.5, -0.08, "'(n.s.)' marks an effect that is not distinguishable from zero at p < 0.001 "
          "after scaling for overdispersion", ha="center", fontsize=7.6, color=PL.MUTED)
-PL.finish(fig, f"{L.FIG_ROOT}/lad13_odour_regression.png")
+PL.finish(fig, f"{L.FIG_ROOT}/lad07_odour_regression.png")
 print(f"{'arm':22}{'predator smell':>16}{'rabbit smell':>15}")
 for i, a in enumerate(arms):
     print(f"{a:22}{P[i]:>+16.3f}{R[i]:>+15.3f}")

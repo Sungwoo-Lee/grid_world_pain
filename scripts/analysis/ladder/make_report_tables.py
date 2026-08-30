@@ -47,7 +47,7 @@ for a, r in pairs:
 
 w("\n### TABLE 4 - the rabbit false alarm, four independent measures\n")
 w("| arm | sight resolves identity | proximity to a rabbit (pp) | rabbit odour slope (pp) | "
-  "rabbit odour, adjusted (pp) | one more rabbit in the world (pp) |")
+  "rabbit odour, adjusted (pp) | one SD more rabbits (pp) |")
 w("|---|---|---|---|---|---|")
 import csv
 def glm(a, model, term):
@@ -67,7 +67,29 @@ for a in arms:
       f"{glm(a,'M3 + rabbit smell, 1 predator + 1 rabbit','rab_olf_intensity'):+.2f} | "
       f"{glm(a,'M1 exogenous, all episodes','n_rabbits'):+.2f} |")
 
-w("\n### TABLE 5 - what a randomised starting wound does\n")
+w("\n### TABLE 5 - does the split actually separate the two groups, or do they overlap?\n")
+w("| measure | largest value among the nine that resolve identity | smallest among the five that "
+  "do not | separation | closest of the nine |")
+w("|---|---|---|---|---|")
+def _slope(a):
+    o = D[a]["odour"]; b = np.asarray(o["rab_bush"], float).sum(1); t = np.asarray(o["rab_tot"], float).sum(1)
+    c = 100 * b / t; return c[3] - c[0]
+MEAS = {"how much it hides when a rabbit is near":
+            lambda a: L.proximity_effect(D[a]["grids"]["rd_bush"], D[a]["grids"]["rd_tot"]),
+        "response to a strong rabbit smell": _slope,
+        "rabbit smell, adjusted for the world":
+            lambda a: glm(a, "M3 + rabbit smell, 1 predator + 1 rabbit", "rab_olf_intensity"),
+        "one SD more rabbits in the world":
+            lambda a: glm(a, "M1 exogenous, all episodes", "n_rabbits")}
+def _ident(a):
+    s2 = D[a]["sensory"]; return s2["visual_sensor_range"] >= 2 and s2["visual_vector_size"] > 1
+for nm, f in MEAS.items():
+    yes = {a: f(a) for a in arms if _ident(a)}; no = {a: f(a) for a in arms if not _ident(a)}
+    my, mn = max(yes.values()), min(no.values())
+    who = [a for a, v in yes.items() if v == my][0]
+    w(f"| {nm} | {my:+.2f} | {mn:+.2f} | {mn-my:+.2f} | `{who}` |")
+
+w("\n### TABLE 6 - what a randomised starting wound does\n")
 w("| arm | bush dwell, first 25 steps (pp per full wound range) | "
   "shift in rabbit proximity (pp) | shift in predator proximity (pp) | "
   "wound amplifies rabbit odour (pp) | wound amplifies predator odour (pp) |")
@@ -85,7 +107,7 @@ for a in arms:
     w(f"| `{a}` | {e[3]-e[0]:+.2f} | {dr:+.2f} | {dp:+.2f} | "
       f"{sl(a,'rab',3)-sl(a,'rab',0):+.2f} | {sl(a,'pred',3)-sl(a,'pred',0):+.2f} |")
 
-w("\n### TABLE 6 - the two internal drives, first 25 steps\n")
+w("\n### TABLE 9 - the two internal drives, first 25 steps\n")
 w("| arm | hunger: bush dwell span (pp) | wound: bush dwell span (pp) | ratio |")
 w("|---|---|---|---|")
 for a in arms:
@@ -99,5 +121,42 @@ for a in arms:
     r = sp["nut0"] / sp["inj0"] if sp["inj0"] > 0 else float("nan")
     w(f"| `{a}` | {sp['nut0']:+.2f} | {sp['inj0']:+.2f} | "
       f"{('%.1fx' % r) if np.isfinite(r) else 'wound effect is negative'} |")
+
+w("\n### TABLE 7 - the three readings of the injury question (Figure 14)\n")
+w("| arm | A: assigned wound, first 25 steps (pp) | B: assigned wound, whole episode (pp) | "
+  "C: carried wound, whole episode (pp) |")
+w("|---|---|---|---|")
+for a in arms:
+    z = np.load(f"{L.OUT_ROOT}/{a}_episodes.npz")
+    ib = np.digitize(z["inj0"], L.INJ_EDGES)
+    e = np.array([100 * z["bush_early"][ib == k].sum() / z["steps_early"][ib == k].sum() for k in range(4)])
+    h = np.array([100 * z["bush_steps"][ib == k].sum() / z["n_steps"][ib == k].sum() for k in range(4)])
+    c = L.rate(D[a]["grids"]["dw_carried"], D[a]["grids"]["dwt_carried"])
+    w(f"| `{a}` | {e[3]-e[0]:+.2f} | {h[3]-h[0]:+.2f} | {c[3]-c[0]:+.2f} |")
+
+w("\n### TABLE 8 - how long an episode lasts, by the wound the agent woke up with\n")
+w("| arm | started 0-25 | started 25-50 | started 50-75 | started 75-100 | difference |")
+w("|---|---|---|---|---|---|")
+for a in arms:
+    z = np.load(f"{L.OUT_ROOT}/{a}_episodes.npz")
+    ib = np.digitize(z["inj0"], L.INJ_EDGES)
+    m = [z["length"][ib == k].mean() for k in range(4)]
+    w(f"| `{a}` | {m[0]:.1f} | {m[1]:.1f} | {m[2]:.1f} | {m[3]:.1f} | {m[3]-m[0]:+.1f} |")
+
+w("\n### TABLE 10 - the wound's effect through time (Figure 9)\n")
+import json as _json, os as _os
+_tc = f"{L.OUT_ROOT}/time_course.json"
+if _os.path.exists(_tc):
+    TC = _json.load(open(_tc))
+    w("| arm | peak extra hiding (pp) | at step | extra hiding by step 60 (pp) | "
+      "worst nutrition gap |")
+    w("|---|---|---|---|---|")
+    for a in arms:
+        if a not in TC: continue
+        b = 100 * (np.asarray(TC[a]["bush"], float)[3, :100] - np.asarray(TC[a]["bush"], float)[0, :100])
+        n = np.asarray(TC[a]["nutrition"], float)[3, :100] - np.asarray(TC[a]["nutrition"], float)[0, :100]
+        w(f"| `{a}` | {b.max():+.2f} | {int(np.argmax(b))} | {b[60]:+.2f} | {n.min():+.1f} |")
+else:
+    w("_(run build_time_course.py to generate this table)_")
 
 print("\n".join(out))

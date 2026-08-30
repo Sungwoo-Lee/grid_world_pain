@@ -29,16 +29,14 @@ P = np.array([L.proximity_effect(D[a]["grids"]["pd_bush"], D[a]["grids"]["pd_tot
 R = np.array([L.proximity_effect(D[a]["grids"]["rd_bush"], D[a]["grids"]["rd_tot"]) for a in arms])
 
 # Does the arm's visual field carry enough channels to tell a predator from a rabbit at range?
-def resolves_identity(a):
-    s = D[a]["sensory"]
-    return s["visual_sensor_range"] >= 2 and s["visual_vector_size"] > 1
+resolves_identity = lambda a: L.resolves_identity(D[a]["sensory"])
 
 grp = np.array([resolves_identity(a) for a in arms])
-CY, CN = "#2f6f9f", "#b3322b"
+CY, CN = PL.GROUP_YES, PL.GROUP_NO
 
 fig, ax = plt.subplots(1, 2, figsize=(13.4, 6.0), sharey=True,
                        gridspec_kw={"width_ratios": [1.25, 1]})
-y = np.arange(len(arms))[::-1]
+y = np.arange(len(arms))
 ax[0].hlines(y, R, P, color=PL.GRID, lw=2.4, zorder=1)
 ax[0].scatter(R, y, s=54, color=PL.HARMLESS, zorder=3, label="nearest animal is a RABBIT (harmless)")
 ax[0].scatter(P, y, s=54, color=PL.THREAT, zorder=3, label="nearest animal is a PREDATOR (a real threat)")

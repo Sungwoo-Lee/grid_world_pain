@@ -20,7 +20,7 @@ cols = {"killed by predator": PL.THREAT, "starved": "#c9a227",
 M = np.array([[D[a]["term_pct"].get(k, 0.0) for k in order] for a in arms])
 
 fig, ax = plt.subplots(figsize=(10.2, 5.6))
-y = np.arange(len(arms))[::-1]
+y = np.arange(len(arms))
 left = np.zeros(len(arms))
 for j, k in enumerate(order):
     ax.barh(y, M[:, j], left=left, color=cols[k], height=0.72, edgecolor="white",

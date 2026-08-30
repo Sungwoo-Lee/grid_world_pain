@@ -1,4 +1,4 @@
-"""FIGURE 10 - Two competing internal drives: a wound says hide, hunger says forage.
+"""FIGURE 13 - Two competing internal drives: a wound says hide, hunger says forage.
 
 QUESTION. The agent carries two internal states that pull in opposite directions. A wound argues
 for staying in cover; an empty stomach argues for leaving it, because a bush contains no food.
@@ -7,15 +7,16 @@ Both are handed to the agent at random at the start of every episode (`random_st
 Which of the two actually steers the behaviour, and does the answer depend on what the agent can
 sense?
 
-WHY BOTH PANELS USE THE FIRST 25 STEPS. Figure 8 shows that averaging over the whole episode
+WHY BOTH PANELS USE THE FIRST 25 STEPS. Figure 14 shows that averaging over the whole episode
 reverses the sign of the injury effect, because a lightly-wounded agent goes on to have a longer
 episode and its average is diluted by late, low-hiding steps. That artefact would hit the hunger
 panel too. Restricting both panels to the window in which the assigned dose is still largely intact
-is what makes them comparable to each other AND to Figure 6.
+is what makes them comparable to each other AND to Figure 8.
 
-Note the two panels do not share a y-range: the hunger effect is several times the size of the
-wound effect, and forcing one scale would flatten the wound panel into a line. Compare the spans
-printed in the table, not the visual steepness.
+The two panels DO share a y-range. An earlier draft gave each its own, which made the wound
+panel's slopes look as steep as the hunger panel's - the exact opposite of the finding. On one
+scale the comparison is read directly: hunger moves bush dwell several times as far as the wound
+does, in every arm.
 
 HOW IT IS COMPUTED. Episodes are split into four equal quarters of the assigned value (0-25, 25-50,
 50-75, 75-100). Within each quarter, bush dwell is (bush steps) / (steps) pooled over the first 25
@@ -34,7 +35,7 @@ for a in arms:
         b = np.digitize(z[key], L.INJ_EDGES)
         dst[a] = np.array([100 * be[b == k].sum() / se[b == k].sum() for k in range(4)])
 
-fig, ax = plt.subplots(1, 2, figsize=(12.6, 5.4))
+fig, ax = plt.subplots(1, 2, figsize=(12.6, 5.4), sharey=True)
 for j, (dat, ttl, xl) in enumerate([
         (nut, "HUNGER - assigned at random at the start of the episode",
          "how well fed the agent woke up  (nutrition, 0-100)\nleft = woke up starving"),
@@ -49,7 +50,7 @@ for j, (dat, ttl, xl) in enumerate([
     ax[j].set_title(ttl, fontsize=9.5, loc="left", pad=8)
 ax[1].legend(loc="center left", bbox_to_anchor=(1.02, 0.5), fontsize=7.4,
              title="sensor-ladder arm", title_fontsize=8)
-PL.finish(fig, f"{L.FIG_ROOT}/lad10_two_internal_drives.png")
+PL.finish(fig, f"{L.FIG_ROOT}/lad13_two_internal_drives.png")
 print(f"{'arm':22}{'hunger span':>13}{'wound span':>13}   (percentage points, quarter 4 - quarter 1)")
 for a in arms:
     print(f"{a:22}{nut[a][3]-nut[a][0]:>+13.2f}{inj[a][3]-inj[a][0]:>+13.2f}")

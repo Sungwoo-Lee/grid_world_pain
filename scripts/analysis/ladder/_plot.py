@@ -20,8 +20,14 @@ DPI = 200
 INK, MUTED, GRID = "#1c1c1e", "#6b6b70", "#dcdce0"
 # poorest senses -> richest, so colour carries the ladder itself
 LADDER_CMAP = plt.get_cmap("viridis")
-THREAT, HARMLESS = "#b3322b", "#2f6f9f"          # predator vs rabbit, used consistently
-LOWINJ, HIGHINJ = "#8fb8d8", "#7a2438"           # light wound vs heavy wound
+# ONE MEANING PER COLOUR, ACROSS EVERY FIGURE. An earlier draft used red and blue for five
+# different things - sign of a change, predator, "cannot resolve identity", heavy wound, and cause
+# of death - twice within a single image. A reader who learns a colour on one figure must not be
+# punished for carrying it to the next, so the mapping is fixed here and nowhere else:
+THREAT, HARMLESS = "#b3322b", "#2f6f9f"          # predator (red) vs rabbit (blue). ALWAYS.
+WOUND_LO, WOUND_HI = "#c3b3d4", "#54346e"        # wound level: light purple -> deep purple
+GROUP_YES, GROUP_NO = "#2d6a4f", "#c9762e"       # sight resolves identity (green) or not (orange)
+NEUTRAL = "#6d8595"                              # a bar whose colour carries nothing but its sign
 
 plt.rcParams.update({
     "figure.dpi": DPI, "savefig.dpi": DPI, "font.size": 9,
@@ -57,7 +63,7 @@ def finish(fig, path, tight=True):
 
 def hbar_axis(ax, arms, values, colors, xlabel, note=None):
     """Horizontal bars with the arm names spelled out - the layout that cannot overlap."""
-    y = np.arange(len(arms))[::-1]
+    y = np.arange(len(arms))
     ax.barh(y, values, color=[colors[a] for a in arms], height=0.72, edgecolor="none")
     ax.set_yticks(y); ax.set_yticklabels(arm_ylabels(arms), fontsize=8)
     ax.set_ylabel("sensor-ladder arm  (poorest senses at the bottom)")

@@ -1,4 +1,4 @@
-"""FIGURE 11 - Two different ways to get the injury result wrong.
+"""FIGURE 14 - Two different ways to get the injury result wrong.
 
 QUESTION. "Does injury make the agent hide?" has three plausible-looking answers in this data, and
 two of them are wrong. This figure puts all three side by side, because a reader who saw only one
@@ -22,6 +22,10 @@ mid-episode. This is the number that comes for free from any trajectory log, and
 misleading of the three, because a mid-episode wound is a CONSEQUENCE of behaviour. The agent is
 carrying a big wound precisely because it was out in the open near a predator - which is also where
 the bushes are not. This panel measures where the agent WAS and reports it as what the agent DECIDED.
+
+ALL THREE PANELS SHARE ONE Y-SCALE. They did not in an earlier draft, and the effect was to make
+panel B's reversal - which is worth well under one percentage point - look as large as panel A's
+real effect, in a figure whose whole purpose is to show that the three answers are not equally good.
 
 TAKE-AWAY. Panel A is the number this report uses. B and C are shown so that the choice is visible
 rather than asserted, and so that a future reader who reproduces one of them knows why it differs.
@@ -53,7 +57,7 @@ for a in arms:
     if not np.allclose(g, early[a], atol=1e-6):
         raise SystemExit(f"{a}: the per-episode and per-step early windows disagree")
 
-fig, ax = plt.subplots(1, 3, figsize=(15.6, 5.6))
+fig, ax = plt.subplots(1, 3, figsize=(15.6, 5.6), sharey=True)
 panels = [
     (early, "A.  ASSIGNED wound, first 25 steps\nthe honest measurement",
      "wound the environment handed it at t=0  (0-100)"),
@@ -71,7 +75,7 @@ for j, (dat, ttl, xl) in enumerate(panels):
     ax[j].set_title(ttl, fontsize=9.3, loc="left", pad=8)
 ax[2].legend(loc="center left", bbox_to_anchor=(1.02, 0.5), fontsize=7.4,
              title="sensor-ladder arm", title_fontsize=8)
-PL.finish(fig, f"{L.FIG_ROOT}/lad11_window_and_variable.png")
+PL.finish(fig, f"{L.FIG_ROOT}/lad14_window_and_variable.png")
 print(f"{'arm':22}{'A assigned/early':>18}{'B assigned/whole':>18}{'C carried/whole':>18}"
       "   (quarter 4 minus quarter 1, percentage points)")
 for a in arms:

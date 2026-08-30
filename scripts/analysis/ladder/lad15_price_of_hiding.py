@@ -1,4 +1,4 @@
-"""FIGURE 14 - What hiding costs, and why more of it is not better.
+"""FIGURE 15 - What hiding costs, and why more of it is not better.
 
 QUESTION. Hiding is not free. A bush has no food in it, so every step spent in cover is a step not
 spent eating - and starvation kills roughly a third of all episodes in every arm. This figure puts
@@ -48,7 +48,7 @@ for j, (yv, yl, ttl) in enumerate([
     ax[j].set_ylabel(yl)
     ax[j].set_title(f"{ttl}\n(across the 14 arms: r = {r:+.2f}, dashed line is the fit)",
                     fontsize=9.3, loc="left", pad=8)
-PL.finish(fig, f"{L.FIG_ROOT}/lad14_price_of_hiding.png")
+PL.finish(fig, f"{L.FIG_ROOT}/lad15_price_of_hiding.png")
 print(f"{'arm':22}{'bush dwell':>12}{'survival':>11}{'eat/100 steps':>15}")
 for a, d, s, e in zip(arms, dwell, surv, eat):
     print(f"{a:22}{d:>11.1f}%{s:>11.1f}{e:>15.2f}")

@@ -1,7 +1,7 @@
-"""FIGURE 7 - Hypervigilance: does a wound make the agent treat HARMLESS cues as threats?
+"""FIGURE 10 - Hypervigilance: does a wound make the agent treat HARMLESS cues as threats?
 
 QUESTION. This is the measure the ladder was built for, and it is a sharper question than "does a
-wounded agent hide more". Figure 6 already shows that it does. Hiding more is ordinary caution. The
+wounded agent hide more". Figure 8 already shows that it does. Hiding more is ordinary caution. The
 claim that would earn the word hypervigilance is a shift in what the agent treats as evidence of
 danger - that when wounded, an AMBIGUOUS and harmless cue starts driving the same defence a real
 threat does. So: when the agent wakes up badly wounded, does a nearby RABBIT push it into cover
@@ -32,23 +32,27 @@ rab_lo = np.array([eff(a, "rd", LOW) for a in arms]); rab_hi = np.array([eff(a, 
 pre_lo = np.array([eff(a, "pd", LOW) for a in arms]); pre_hi = np.array([eff(a, "pd", HIGH) for a in arms])
 d_rab, d_pre = rab_hi - rab_lo, pre_hi - pre_lo
 
-fig, ax = plt.subplots(1, 3, figsize=(16.2, 6.2), sharey=True,
+fig, ax = plt.subplots(1, 3, figsize=(14.6, 6.2), sharey=True,
                        gridspec_kw={"width_ratios": [1, 1, 1.05]})
-y = np.arange(len(arms))[::-1]; h = 0.36
+y = np.arange(len(arms)); h = 0.36
+for a_ in ax:
+    a_.set_yticks(np.arange(len(arms)) + 0.5, minor=True)
 for j, (lo, hi, ttl, unit) in enumerate([
-        (rab_lo, rab_hi, "A.  RABBIT nearby - harmless, so any response is wasted", "rabbit"),
-        (pre_lo, pre_hi, "B.  PREDATOR nearby - a real threat (control)", "predator")]):
-    ax[j].barh(y + h/2, lo, height=h, color=PL.LOWINJ, edgecolor="none",
+        (rab_lo, rab_hi, "A.  RABBIT nearby - harmless, so any response is wasted\n(same scale as panel B)", "rabbit"),
+        (pre_lo, pre_hi, "B.  PREDATOR nearby - a real threat (control)\n(same scale as panel A)", "predator")]):
+    ax[j].barh(y + h/2, lo, height=h, color=PL.WOUND_LO, edgecolor="none",
                label="woke up nearly unhurt  (start wound 0-25)")
-    ax[j].barh(y - h/2, hi, height=h, color=PL.HIGHINJ, edgecolor="none",
+    ax[j].barh(y - h/2, hi, height=h, color=PL.WOUND_HI, edgecolor="none",
                label="woke up badly wounded  (start wound 75-100)")
     ax[j].axvline(0, color=PL.INK, lw=1)
     ax[j].set_title(ttl, fontsize=9.5, loc="left", pad=8)
     ax[j].set_xlabel(f"hiding triggered by a nearby {unit}  (percentage points)\n"
                      "bush dwell at 1-2 cells minus at 6+ cells")
     ax[j].grid(axis="y", visible=False)
-    span = max(np.max(np.abs(np.r_[lo, hi])), 1e-6)
-    ax[j].set_xlim(min(0, np.min(np.r_[lo, hi])) - span * 0.30, np.max(np.r_[lo, hi]) + span * 0.30)
+    # A and B SHARE a scale. Drawing the rabbit panel on its own tighter axis made a response
+    # of a few points look like the predator panel's forty, which is the opposite of the finding.
+    allv = np.r_[rab_lo, rab_hi, pre_lo, pre_hi]
+    ax[j].set_xlim(min(0, allv.min()) - 2.5, allv.max() * 1.06)
 
 ax[2].barh(y + h/2, d_rab, height=h, color=PL.HARMLESS, edgecolor="none",
            label="shift in the RABBIT response")
@@ -60,7 +64,7 @@ ax[2].set_title("C.  THE TEST: how much the wound moved each response\n"
                 fontsize=9.5, loc="left", pad=8)
 ax[2].set_xlabel("shift caused by waking up badly wounded  (percentage points)\n"
                  "response at start wound 75-100 minus at 0-25")
-ax[2].grid(axis="y", visible=False)
+ax[2].grid(axis="y", visible=True, color=PL.GRID, lw=0.5)
 m2 = max(np.max(np.abs(np.r_[d_rab, d_pre])), 1e-6)
 ax[2].set_xlim(min(0, np.min(np.r_[d_rab, d_pre])) - m2 * 0.45, m2 * 1.45)
 for i in range(len(arms)):
@@ -70,7 +74,7 @@ ax[0].set_yticks(y); ax[0].set_yticklabels(PL.arm_ylabels(arms), fontsize=8)
 ax[0].set_ylabel("sensor-ladder arm  (poorest senses at the bottom)")
 ax[0].legend(loc="lower center", bbox_to_anchor=(1.03, 1.14), ncol=2, fontsize=8.5)
 ax[2].legend(loc="lower center", bbox_to_anchor=(0.5, 1.14), ncol=1, fontsize=8.5)
-PL.finish(fig, f"{L.FIG_ROOT}/lad07_hypervigilance_proximity.png")
+PL.finish(fig, f"{L.FIG_ROOT}/lad10_hypervigilance_proximity.png")
 print(f"{'arm':22}{'rab lo':>9}{'rab hi':>9}{'shift':>8}  |{'pred lo':>9}{'pred hi':>9}{'shift':>8}")
 for i, a in enumerate(arms):
     print(f"{a:22}{rab_lo[i]:>9.1f}{rab_hi[i]:>9.1f}{d_rab[i]:>+8.1f}  |"

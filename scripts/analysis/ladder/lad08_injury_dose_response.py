@@ -1,4 +1,4 @@
-"""FIGURE 6 - Does waking up wounded make the agent hide? (the causal test)
+"""FIGURE 8 - Does waking up wounded make the agent hide? (the causal test)
 
 QUESTION. Everywhere else in this report, a wounded agent is a suspicious comparison: it got hurt
 by doing something, so its later behaviour is contaminated by whatever it was doing. This
@@ -39,20 +39,21 @@ ax[0].set_title("Response to a wound the agent did not earn", fontsize=9.5, loc=
 ax[0].legend(loc="center left", bbox_to_anchor=(1.02, 0.5), fontsize=7.4,
              title="sensor-ladder arm", title_fontsize=8)
 
-y = np.arange(len(arms))[::-1]
+y = np.arange(len(arms))
 v = np.array([slope[a] for a in arms])
 ax[1].barh(y, v, color=[col[a] for a in arms], height=0.72, edgecolor="none")
 ax[1].axvline(0, color=PL.INK, lw=1)
 ax[1].set_yticks(y); ax[1].set_yticklabels(PL.arm_ylabels(arms), fontsize=8)
 ax[1].set_ylabel("sensor-ladder arm  (poorest senses at the bottom)")
-ax[1].set_xlabel("wound sensitivity  (percentage points)\nbush dwell, heaviest wound quarter minus lightest")
+ax[1].set_xlabel("wound sensitivity  (percentage points)\n"
+                 "heaviest wound quarter minus lightest")
 ax[1].grid(axis="y", visible=False)
 for i, q in enumerate(v):
     ax[1].text(q + np.sign(q) * 0.06, y[i], f"{q:+.2f}", va="center",
                ha="left" if q >= 0 else "right", fontsize=7.6, color=PL.INK)
-m = max(abs(v)) * 1.4
+m = max(abs(v)) * 1.55
 ax[1].set_xlim(-m, m)
-PL.finish(fig, f"{L.FIG_ROOT}/lad06_injury_dose_response.png")
+PL.finish(fig, f"{L.FIG_ROOT}/lad08_injury_dose_response.png")
 print(f"{'arm':22}" + "".join(f"{n:>10}" for n in L.INJ_NAMES) + f"{'slope':>10}")
 for a in arms:
     print(f"{a:22}" + "".join(f"{q:>10.2f}" for q in curves[a]) + f"{slope[a]:>+10.2f}")

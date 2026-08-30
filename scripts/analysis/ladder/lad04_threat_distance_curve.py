@@ -14,36 +14,44 @@ gap rather than drawn as a noisy point.
 
 WHAT IT CANNOT SHOW. Predator distance is not randomised - a predator is close partly because of
 where the agent went. This curve is therefore descriptive. The causal claims in this report come
-from the randomised starting wound (Figures 6-8) and the randomised odour draw (Figure 9).
+from the randomised starting wound (Figures 8-11) and the randomised odour draw (Figure 12).
 """
 import sys, os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import numpy as np, matplotlib.pyplot as plt
 import _ladder as L, _plot as PL
 
-D = L.load_all(); arms = L.ARM_ORDER; col = PL.arm_colors()
+D = L.load_all(); arms = L.ARM_ORDER
 x = np.arange(1, L.DIST_MAX + 1)
+GRP = {a: L.resolves_identity(D[a]["sensory"]) for a in arms}
+# The four the prose names. Everything else is background, drawn thin so the shape of the two
+# families is still visible without fourteen near-identical colours competing for attention.
+SPOT = {"A_baseline": "smell, no direction", "B_olf_only": "smell with direction",
+        "V4_blur05": "reference agent", "V5_sharp": "sharp sight"}
 
-fig, ax = plt.subplots(1, 2, figsize=(12.4, 5.4), sharex=True)
-for j, (key, ttl, c0) in enumerate([
-        ("pd", "Nearest PREDATOR - a real threat", PL.THREAT),
-        ("rd", "Nearest RABBIT - harmless by construction", PL.HARMLESS)]):
+fig, ax = plt.subplots(1, 2, figsize=(12.8, 5.6), sharey=True)
+for j, (key, ttl) in enumerate([("pd", "Nearest PREDATOR - a real threat"),
+                                ("rd", "Nearest RABBIT - harmless by construction")]):
     for a in arms:
         g = D[a]["grids"]
         y = L.dist_curve(g[f"{key}_bush"], g[f"{key}_tot"])
-        ax[j].plot(x, y, marker="o", ms=3.2, lw=1.6, color=col[a],
-                   label=f"{a} - {L.ARM_LABEL[a][0]}")
+        c = PL.GROUP_YES if GRP[a] else PL.GROUP_NO
+        if a in SPOT:
+            ax[j].plot(x, y, lw=2.4, color=c, marker="o", ms=4.2, zorder=3)
+            ax[j].annotate(f" {a}", (x[-1], y[-1]), fontsize=7.4, color=c, va="center",
+                           xytext=(4, 0), textcoords="offset points", zorder=4)
+        else:
+            ax[j].plot(x, y, lw=1.0, color=c, alpha=0.34, zorder=2)
     ax[j].set_title(ttl, fontsize=10, color=PL.INK, loc="left", pad=8)
     ax[j].set_xlabel("distance from agent to the nearest animal when it decided\n"
-                     "(chebyshev steps; 8 = eight or more)")
+                     "(chebyshev steps - the moves a chess king would need; 8 = eight or more)")
     ax[j].set_xticks(x); ax[j].set_xticklabels(L.DIST_NAMES)
+    ax[j].set_xlim(0.7, L.DIST_MAX + 1.15)
 ax[0].set_ylabel("bush dwell  (% of those steps spent in a bush)")
-ax[1].legend(loc="center left", bbox_to_anchor=(1.02, 0.5), fontsize=7.4,
-             title="sensor-ladder arm", title_fontsize=8)
-lo = min(np.nanmin(L.dist_curve(D[a]["grids"][f"{k}_bush"], D[a]["grids"][f"{k}_tot"]))
-         for a in arms for k in ("pd", "rd"))
-hi = max(np.nanmax(L.dist_curve(D[a]["grids"][f"{k}_bush"], D[a]["grids"][f"{k}_tot"]))
-         for a in arms for k in ("pd", "rd"))
-for a_ in ax: a_.set_ylim(max(0, lo - 3), hi + 3)
+h = [plt.Line2D([], [], color=PL.GROUP_YES, lw=2.2, label=L.GROUP_LABEL[True] + "  (9 arms)"),
+     plt.Line2D([], [], color=PL.GROUP_NO, lw=2.2, label=L.GROUP_LABEL[False] + "  (5 arms)"),
+     plt.Line2D([], [], color=PL.MUTED, lw=2.4, marker="o", ms=4,
+                label="thick + named = an arm the text discusses; thin = the other ten")]
+ax[0].legend(handles=h, loc="lower center", bbox_to_anchor=(1.03, 1.10), ncol=1, fontsize=8.3)
 PL.finish(fig, f"{L.FIG_ROOT}/lad04_threat_distance_curve.png")
 print(f"{'arm':22}" + "".join(f"{d:>7}" for d in L.DIST_NAMES) + "   (predator, % in bush)")
 for a in arms:
