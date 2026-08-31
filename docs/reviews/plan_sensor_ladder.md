@@ -3,7 +3,7 @@ title: Adversarial review of the sensor-ladder analysis verdict
 topic: sensor_ladder
 status: active
 created: 2026-08-30
-last_updated: 2026-08-30
+last_updated: 2026-09-01
 ---
 
 # Review: does the sensor-ladder report's evidence support its conclusions?
@@ -139,5 +139,105 @@ R1 row (C1) would put a 4×-inflated causal number into any downstream citation;
 transient, window-specific injury effect into a general "wounds cause hiding / hypervigilance"
 claim in a paper. A two-to-three-seed replication of the ladder is the only thing that can convert
 the pattern findings from exploratory to confirmatory.
+
+Reviewed by: plan-reviewer
+
+---
+
+## Follow-up review, 2026-09-01 — negative percentages, and the perceived-nociception correction
+
+Two questions were re-examined adversarially, from the code and the stores, after the main review
+above. Severity legend as above.
+
+**Verdicts.** (1) The negative numbers on the figures: **SOUND — no arithmetic defect.** No figure
+plots a negative bush-dwell *rate*; every negative value is a difference of two rates, is labelled
+as one on the axis itself, and none exceeds 38.3 pp in magnitude (bound for a difference of rates
+is 100). (2) The perceived-nociception reading: **CONFIRMED — Critical (C4) against the report's
+current §5 narrative.** The agent cannot sense its injury level; what it receives is a lagged,
+reset-zeroed trace, and the report's timing story is written as if behaviour follows the wound when
+the data show it follows the trace.
+
+### Question 1 — negative percentages (cleared)
+
+- Every accumulator in `build_arm_data.py` and `build_time_course.py` adds `agent_in_bush` ∈ {0,1}
+  to the numerator and 1.0 to the denominator at identical index sets, so 0 ≤ rate ≤ 100 always;
+  verified empirically over all arms: no raw rate below 0 or above 100 anywhere in the JSONs.
+- `L.rate` / `L.dist_curve` NaN out cells with < 1000 steps of support; `L.proximity_effect` pools
+  counts (not rates) over distance bins 1–2 vs 6+ and over the chosen wound quarters before the
+  single division, and requires ≥ 1000 steps on *each* side. All as documented.
+- Figures plotting differences: 2, 5, 8 (right panel only), 9 (panels B/D), 10, 11, and the Fig 14
+  annotations. **Figure 12 plots raw rates only** and carries no negative numbers — the inventory
+  that listed it among the difference figures is wrong on that one point. Fig 8's *left* panel is
+  raw rates.
+- Reader-confusion audit: every difference axis prints "a DIFFERENCE, in percentage points" plus
+  the explicit minuend/subtrahend. Weakest labels: old lad09 panel B ("extra bush dwell") lacks the
+  "below zero = hides less" gloss the other figures carry, and Table 9's column header "wound: bush
+  dwell span (pp)" says *span* (reads as a magnitude) for a signed difference that is −2.34 in
+  `A_baseline`. 🟢 Both worth one-line fixes; neither is an error.
+
+### Question 2 — the agent cannot sense its injury level (confirmed, 🔴 C4 for the report text)
+
+Verified from source and from ground truth the system produced:
+
+- **Buffer/kernel semantics as claimed.** `core.py:1112` zeroes the buffer at reset — the reset
+  row's injury is *never* written into it; `core.py:115` rolls and writes the post-step injury at
+  slot 0; kernel slot 0 is exactly zero. The strict `src > estart` guard in
+  `build_time_course.perceived_nociception` is therefore correct, not conservative.
+- **Reconstruction is exact.** The trajectory stores record the observation vector (`obs_true`);
+  perceptual noise is disabled, so channel 1 *is* the policy input. Over 1,358,558 rows of a real
+  `V4_blur05` shard, max |reconstruction − recorded obs| = 2.2 × 10⁻⁷ (float32 rounding). This is
+  a non-circular check: the comparison target was produced by the environment at collection time.
+- **Time course as claimed.** Cumulative kernel weight: **0 at t=0 and also t=1**, 9.0% at t=2,
+  35.7% at t=4, 100% only at t=12. An agent that wakes with injury ~95 feels 0.000 for two steps,
+  0.085 at t=2, peaks at 0.927 at t=12 — while the physical wound is already healing.
+- **Behaviour tracks the trace, not the wound.** In all five regenerated arms the perceived-signal
+  gap (Q4−Q1) peaks at **t=12** and extra hiding peaks at **t=14–16** (2–4 steps behind the
+  feeling); the injury gap peaks at **t=0**, where extra hiding is ≈ 0 — the physical-wound reading
+  cannot explain a zero response to a maximal wound, the perceived reading predicts it exactly.
+  (`A_baseline`, whose whole effect is +1.05 pp, is the noise-level exception.)
+
+**What C4 kills or qualifies in the current report** (`sensor_ladder.md` §5, Figure 9, finding 5):
+the panel title "The response follows it — extra hiding fades as the wound does", the reading
+"falls away on roughly the wound's own schedule … an effect that tracks its cause through time",
+finding 5's "lasts about as long as the wound does", and "25 steps … is approximately the lifetime
+of the dose" (it is the lifetime of the *felt* dose — the perceived gap is still ~30 injury-units
+at t=24 when the physical gap is 15). The **causal claims survive**: the perceived signal is a
+deterministic function of the assigned wound, so binning by the randomised `inj0` remains a valid
+causal contrast; what was wrong is the mechanistic timing narrative. The rewritten
+`lad09_injury_time_course.py` (four panels, body-vs-feeling) states this correctly.
+
+### Other places an unsensed quantity is used
+
+- 🟡 **Nutrition is also unobservable** (`nutrition_observable: false`) — the sensed channel is
+  satiation, S = maxS·(N/maxN)^k, an *instantaneous monotone* transform, so binning by nutrition is
+  perceptually valid (no analogue of the injury lag). But the report makes the unobservability
+  point only for injury; finding 7's "hunger outweighs the wound by 1.6–4.5×" compares a zero-lag
+  percept against a lagged, attenuated one over a 25-step window, so part of that ratio is sensor
+  dynamics, not drive weighting. Qualify, don't retract.
+- 🟢 Carried injury (Fig 14 C, Table 7) is unsensed directly but is already framed as the mistake
+  exhibit, not a percept. Note for the rewrite: a *mid-episode* wound arrives with a phasic
+  extero-nociception contact signal, whereas the reset wound arrives with none — one more reason
+  panel C differs, and the reason "the interoceptive channel is the only route" is exactly true
+  for the assigned wound.
+- ❓ Reward used the **true** injury during training (drive term (inj/100)²), so the agent had a
+  gradient incentive to infer its wound faster than the percept allows; empirically it did not.
+- ❓ Figure 9 comparisons at t ≳ 40 condition on survival, and Table 8 shows the heavy-wound
+  quarter dies sooner — the late-time convergence is measured on differently-selected populations.
+
+### Process finding
+
+- 🟡 `_ladder.load_time_course`'s docstring claims it "asserts that every arm's file was produced
+  by the SAME episode population as the aggregates" — the code only checks the file *exists*. At
+  review time 9 of 14 time-course files lack the new `noci` key (regeneration in flight), which the
+  advertised assertion would have surfaced. Implement the check (episode totals in the file vs the
+  arm JSON) or delete the claim.
+
+### Cost of being wrong (this follow-up)
+
+The negative-percentage worry costs nothing — the arithmetic is right. C4 is publication-grade: the
+uncorrected §5 narrative would put "behaviour tracks the wound's time course" into a paper when the
+data show behaviour tracking a perceptual trace the wound merely drives — the exact distinction an
+interoception paper exists to make. Owner: `experiment-analyzer` (report rewrite);
+`developer` if the `load_time_course` guard is to be implemented.
 
 Reviewed by: plan-reviewer
