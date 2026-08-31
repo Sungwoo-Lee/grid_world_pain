@@ -90,11 +90,11 @@ hr.col{margin-top:70px;margin-bottom:70px}
 
 /* ---------- findings ---------- */
 .findings{list-style:none;padding:0;margin:34px 0 0;counter-reset:f}
-.findings li{counter-increment:f;display:grid;grid-template-columns:34px 1fr;gap:16px;
-  padding:20px 0;border-top:1px solid var(--rule);margin:0}
+.findings li{counter-increment:f;position:relative;padding:20px 0 20px 50px;
+  border-top:1px solid var(--rule);margin:0}
 .findings li:last-child{border-bottom:1px solid var(--rule)}
-.findings li::before{content:counter(f);font-family:var(--mono);font-size:13px;color:var(--accent);
-  padding-top:3px}
+.findings li::before{content:counter(f);position:absolute;left:0;top:23px;
+  font-family:var(--mono);font-size:13px;color:var(--accent)}
 .f-claim{margin:0 0 7px;font-size:17px}
 .badge{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.07em;
   text-transform:uppercase;padding:2.5px 8px;border-radius:20px;vertical-align:1.5px}
@@ -132,7 +132,10 @@ figcaption b{color:var(--ink);font-weight:640}
 /* ---------- tables ---------- */
 .tbl{width:fit-content;max-width:100%;margin:34px auto}
 .scroll{overflow-x:auto;border:1px solid var(--rule);border-radius:4px;background:var(--card)}
-table{border-collapse:collapse;width:100%;font-size:13.5px;
+/* width:max-content, not 100%: inside the .scroll box a 100% table SQUEEZES its columns on a
+   narrow screen instead of scrolling, crushing 50-character headers into 100px. It now keeps its
+   natural width (at least filling the box) and the container scrolls, which is what it is for. */
+table{border-collapse:collapse;width:max-content;min-width:100%;font-size:13.5px;
   font-variant-numeric:tabular-nums;font-family:var(--sans)}
 .tbl figcaption{text-align:left;padding:13px 16px 12px;font-size:13.5px;color:var(--muted);
   border:1px solid var(--rule);border-bottom:0;border-radius:4px 4px 0 0;background:var(--card);
@@ -171,10 +174,10 @@ td code{background:none;padding:0;font-size:12.5px;color:var(--ink)}
 .glossary dd{margin:2px 0 0;font-size:15px;color:var(--ink-2);line-height:1.55}
 .glossary{margin:26px 0 0}
 .stage{counter-reset:st;list-style:none;padding:0;margin:26px 0}
-.stage li{counter-increment:st;display:grid;grid-template-columns:30px 1fr;gap:14px;
-  padding:16px 0;border-top:1px solid var(--rule-2)}
-.stage li::before{content:counter(st);font-family:var(--mono);font-size:12px;color:var(--accent);
-  padding-top:3px}
+.stage li{counter-increment:st;position:relative;padding:16px 0 16px 44px;
+  border-top:1px solid var(--rule-2)}
+.stage li::before{content:counter(st);position:absolute;left:0;top:19px;
+  font-family:var(--mono);font-size:12px;color:var(--accent)}
 .stage p{margin:0;font-size:15.5px;line-height:1.58}
 .correction{border:1px solid var(--rule);border-left:3px solid var(--threat);
   background:var(--threat-soft);border-radius:4px;padding:20px 24px;margin:30px 0}
@@ -183,10 +186,10 @@ td code{background:none;padding:0;font-size:12.5px;color:var(--ink)}
 .correction p{margin:0;font-size:15px;line-height:1.57}
 .correction{--rule-2:color-mix(in srgb, var(--threat) 16%, transparent)}
 .caveats{margin:26px 0;padding:0;list-style:none;counter-reset:cv}
-.caveats li{counter-increment:cv;display:grid;grid-template-columns:26px 1fr;gap:12px;
-  padding:13px 0;border-top:1px solid var(--rule-2);font-size:15.5px;line-height:1.56}
-.caveats li::before{content:counter(cv);font-family:var(--mono);font-size:11.5px;color:var(--amber);
-  padding-top:3px}
+.caveats li{counter-increment:cv;position:relative;padding:13px 0 13px 38px;
+  border-top:1px solid var(--rule-2);font-size:15.5px;line-height:1.56}
+.caveats li::before{content:counter(cv);position:absolute;left:0;top:16px;
+  font-family:var(--mono);font-size:11.5px;color:var(--amber)}
 pre{background:var(--card);border:1px solid var(--rule);border-radius:4px;padding:16px 18px;
   overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.6;margin:24px 0}
 pre code{background:none;padding:0;font-size:inherit}
