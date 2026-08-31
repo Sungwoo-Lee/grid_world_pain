@@ -3,7 +3,7 @@ title: "FiLM-style modulation in RL — discussion log toward a context-dependen
 topic: modulation_in_rl
 status: active
 created: 2026-08-05
-last_updated: 2026-08-05
+last_updated: 2026-08-31
 related:
   - ../references/modulation_in_rl/modulation_in_rl_lit_review.md
   - ../references/FiLM/film_rl_recent_variants_survey.md
@@ -300,13 +300,45 @@ forward pass. Encoders are **not** modulated.
 3. **A pre-check to run before building anything.** They verified that the
    **critic-value histogram separates by phase** *before* defending the design.
 
-### 6.2 ⚠️ The caveat that bears directly on our plan
+### 6.2 The criterion, and how our project stands against it
 
 > **PAPL's rule is: modulate the critic when the reward itself is conditioned on
-> the modulating variable. This is a necessary condition our project does not
-> currently meet** — our reward is not a function of injury level.
+> the modulating variable.**
 
-Also, PAPL's conditioner is an **open-loop clock**: perfectly predictable, so
+**CORRECTION (2026-08-31, verified in `src/environment/core.py`).** An earlier
+version of this section claimed our project does not meet this condition. That
+was wrong, and the error propagated into the site-refactor plan before being
+caught. **Our reward IS a function of injury.** The live configs
+(`basic/04`, `sensory_directional/A_baseline`) set `use_homeostatic_reward: True`,
+and the reward is the reduction in homeostatic drive:
+
+$$
+r_t = D(s_{t-1}) - D(s_t),
+\qquad
+D = \bigl\lVert (\mathrm{satiation},\ \mathrm{injury}) - (\mathrm{setpoint},\ 0) \bigr\rVert_2
+$$
+
+so healing lowers D and is rewarded directly. The condition is met more strongly
+than a merely additive injury term would give, because the marginal value of
+healing depends on the whole body state:
+
+$$
+\frac{\partial D}{\partial\, \mathrm{injury}} = \frac{\mathrm{injury}}{D}
+$$
+
+Healing is worth more when injury is high, **and** its worth depends on how hungry
+the agent is, since satiation enters through D. Hunger and injury are coupled in
+the value function rather than separable — the "managing conflicting needs" case.
+**Critic modulation is therefore licensed on PAPL's own criterion.**
+
+A caution for anyone reading the reward code: two different "drive" quantities
+live in the same function. `calculate_drive` (the unnormalised L2 norm above) is
+what feeds the reward; `drive_hunger` + `drive_injury` (normalised, sum of
+squares) are computed for logging only, and the inline comment describing them
+sits directly above the reward computation.
+
+The **remaining** disanalogy is different: PAPL's conditioner is an
+**open-loop clock**: perfectly predictable, so
 the modulator has a trivially learnable signal. Injury level is sensed and
 changes contingently. That is a real disanalogy.
 
