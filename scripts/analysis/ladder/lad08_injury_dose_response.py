@@ -46,8 +46,8 @@ ax[1].barh(y, v, color=[col[a] for a in arms], height=0.72, edgecolor="none")
 ax[1].axvline(0, color=PL.INK, lw=1)
 ax[1].set_yticks(y); ax[1].set_yticklabels(PL.arm_ylabels(arms), fontsize=8)
 ax[1].set_ylabel("sensor-ladder arm  (poorest senses at the bottom)")
-ax[1].set_xlabel("wound sensitivity  (percentage points)\n"
-                 "heaviest wound quarter minus lightest")
+ax[1].set_xlabel("wound sensitivity  -  a DIFFERENCE, in percentage points\n"
+                 "bush dwell in the heaviest wound quarter MINUS the lightest")
 ax[1].grid(axis="y", visible=False)
 for i, q in enumerate(v):
     ax[1].text(q + np.sign(q) * 0.06, y[i], f"{q:+.2f}", va="center",

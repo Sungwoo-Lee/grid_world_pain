@@ -60,8 +60,8 @@ ax[0].barh(y - h/2, r_hi, height=h, color=PL.WOUND_HI, edgecolor="none",
 ax[0].axvline(0, color=PL.INK, lw=1)
 ax[0].set_yticks(y); ax[0].set_yticklabels(PL.arm_ylabels(arms), fontsize=8)
 ax[0].set_ylabel("sensor-ladder arm  (poorest senses at the bottom)")
-ax[0].set_xlabel("response to a strong RABBIT smell  (percentage points)\n"
-                 "bush dwell in the strongest-smelling quarter minus the weakest")
+ax[0].set_xlabel("response to a strong RABBIT smell  -  a DIFFERENCE, in percentage points\n"
+                 "bush dwell in the strongest-smelling quarter MINUS the weakest")
 ax[0].grid(axis="y", visible=False)
 ax[0].legend(loc="lower center", bbox_to_anchor=(0.5, 1.01), ncol=1, fontsize=8.5)
 ax[0].set_xlim(min(0, r_lo.min(), r_hi.min()) - 0.6, max(r_lo.max(), r_hi.max()) * 1.16)
@@ -69,8 +69,8 @@ ax[0].set_xlim(min(0, r_lo.min(), r_hi.min()) - 0.6, max(r_lo.max(), r_hi.max())
 ax[1].barh(y + h/2, d_r, height=h, color=[CY if g else CN for g in grp], edgecolor="none")
 ax[1].barh(y - h/2, d_p, height=h, color=PL.GRID, edgecolor="none")
 ax[1].axvline(0, color=PL.INK, lw=1)
-ax[1].set_xlabel("how much the wound AMPLIFIED that response  (percentage points)\n"
-                 "wounded slope minus unhurt slope")
+ax[1].set_xlabel("how much the wound AMPLIFIED that response  -  a DIFFERENCE of two differences\n"
+                 "the response above when wounded MINUS when unhurt, in percentage points")
 ax[1].grid(axis="y", visible=False)
 m = max(np.max(np.abs(np.r_[d_r, d_p])), 1e-6)
 ax[1].set_xlim(min(0, np.min(np.r_[d_r, d_p])) - m * 0.45, m * 1.5)

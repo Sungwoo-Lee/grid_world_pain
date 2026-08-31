@@ -302,17 +302,39 @@ GROUP_LABEL = {True: "sight resolves WHAT it sees  (range 2, 8 appearance channe
                False: "sight cannot resolve WHAT it sees  (range < 2, or 1 channel)"}
 
 
-def load_time_course() -> dict:
+def load_time_course(require=("injury", "noci", "bush", "nutrition", "ate", "n")) -> dict:
     """The per-arm step-by-step sweeps written by build_time_course.py.
 
-    Asserts that every arm's file was produced by the SAME episode population as the aggregates -
-    a stale file left over from a smaller collection is exactly the failure this layout replaced.
+    This docstring used to CLAIM it checked the files were built from the same episode population
+    and from the same schema, while the code only checked they existed. A reviewer caught the gap
+    while nine of the fourteen files were mid-regeneration and missing the `noci` key - exactly the
+    half-regenerated state the claim was supposed to catch. The checks are now real:
+
+      * every arm has a file
+      * every file carries every key the caller needs (so a figure cannot read a field written by
+        an older version of the sweep)
+      * every file was built from the same number of episodes, and that number matches the per-arm
+        aggregates, so a leftover file from a smaller collection cannot be silently mixed in
     """
     import json
-    out = {}
+    out, sizes = {}, {}
     for arm in ARM_ORDER:
         p = f"{OUT_ROOT}/time_course_{arm}.json"
         if not os.path.exists(p):
             raise SystemExit(f"{p} missing - run scripts/analysis/ladder/build_time_course.py")
-        out[arm] = json.load(open(p))
+        d = json.load(open(p))
+        missing = [k for k in require if k not in d]
+        if missing:
+            raise SystemExit(f"{p} was written by an older sweep - missing {missing}. "
+                             f"Re-run build_time_course.py for every arm, not just the new ones.")
+        out[arm] = d
+        sizes[arm] = int(np.asarray(d["n"], float)[:, 0].sum())
+    if len(set(sizes.values())) != 1:
+        raise SystemExit("time-course files disagree on the episode population:\n  " +
+                         "\n  ".join(f"{a}: {n:,}" for a, n in sorted(sizes.items())))
+    for arm in ARM_ORDER:                       # and it must match the aggregates
+        agg = load_arm(arm)["n_episodes"]
+        if sizes[arm] != agg:
+            raise SystemExit(f"{arm}: time course holds {sizes[arm]:,} episodes but the aggregate "
+                             f"holds {agg:,} - one of the two is stale")
     return out

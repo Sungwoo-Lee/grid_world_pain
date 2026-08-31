@@ -46,8 +46,8 @@ for j, (lo, hi, ttl, unit) in enumerate([
                label="woke up badly wounded  (start wound 75-100)")
     ax[j].axvline(0, color=PL.INK, lw=1)
     ax[j].set_title(ttl, fontsize=9.5, loc="left", pad=8)
-    ax[j].set_xlabel(f"hiding triggered by a nearby {unit}  (percentage points)\n"
-                     "bush dwell at 1-2 cells minus at 6+ cells")
+    ax[j].set_xlabel(f"hiding triggered by a nearby {unit}  -  a DIFFERENCE, in percentage points\n"
+                     "bush dwell at 1-2 cells MINUS at 6+ cells;  below zero = hides less")
     ax[j].grid(axis="y", visible=False)
     # A and B SHARE a scale. Drawing the rabbit panel on its own tighter axis made a response
     # of a few points look like the predator panel's forty, which is the opposite of the finding.
@@ -62,8 +62,8 @@ ax[2].axvline(0, color=PL.INK, lw=1)
 ax[2].set_title("C.  THE TEST: how much the wound moved each response\n"
                 "(both on one scale - a longer blue bar than red would be hypervigilance)",
                 fontsize=9.5, loc="left", pad=8)
-ax[2].set_xlabel("shift caused by waking up badly wounded  (percentage points)\n"
-                 "response at start wound 75-100 minus at 0-25")
+ax[2].set_xlabel("shift caused by waking up badly wounded  -  a DIFFERENCE of two differences\n"
+                 "the response above, at start wound 75-100 MINUS at 0-25, in percentage points")
 ax[2].grid(axis="y", visible=True, color=PL.GRID, lw=0.5)
 m2 = max(np.max(np.abs(np.r_[d_rab, d_pre])), 1e-6)
 ax[2].set_xlim(min(0, np.min(np.r_[d_rab, d_pre])) - m2 * 0.45, m2 * 1.45)

@@ -43,8 +43,9 @@ ax[0].scatter(P, y, s=54, color=PL.THREAT, zorder=3, label="nearest animal is a 
 ax[0].axvline(0, color=PL.INK, lw=1)
 ax[0].set_yticks(y); ax[0].set_yticklabels(PL.arm_ylabels(arms), fontsize=8)
 ax[0].set_ylabel("sensor-ladder arm  (poorest senses at the bottom)")
-ax[0].set_xlabel("hiding triggered by a nearby animal  (percentage points)\n"
-                 "bush dwell at 1-2 cells minus at 6+ cells")
+ax[0].set_xlabel("hiding triggered by a nearby animal  -  a DIFFERENCE, in percentage points\n"
+                 "bush dwell at 1-2 cells MINUS bush dwell at 6+ cells;  "
+                 "below zero = hides LESS when one is near")
 ax[0].grid(axis="y", visible=False)
 ax[0].legend(loc="lower center", bbox_to_anchor=(0.5, 1.01), ncol=1, fontsize=8.5)
 for i in range(len(arms)):
@@ -54,7 +55,8 @@ ax[0].set_xlim(min(R.min(), 0) - 4, P.max() + 9)
 ax[1].barh(y, R, color=[CY if g else CN for g in grp], height=0.72, edgecolor="none")
 ax[1].axvline(0, color=PL.INK, lw=1)
 ax[1].set_xlabel("FALSE ALARM: hiding triggered by a nearby rabbit\n"
-                 "(percentage points; above zero = wasted hiding)")
+                 "a DIFFERENCE in percentage points;  right of zero = wasted hiding, "
+                 "left = hides less")
 ax[1].grid(axis="y", visible=False)
 m = max(abs(R)) * 1.55
 ax[1].set_xlim(-m, m)

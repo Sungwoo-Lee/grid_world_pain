@@ -58,13 +58,16 @@ Each is tagged with how much weight it can bear, for the reason given in the cav
    whose sight cannot resolve identity hide *more* when a harmless rabbit is near; all nine that can
    resolve it hide *less*. Four independent measures separate the two groups with no overlap.
    *(pattern across all 14 arms)*
-5. **Waking up wounded causes a burst of hiding that lasts about as long as the wound does, and is
-   then paid back in food.** Extra hiding peaks at **+7.1 to +13.5 percentage points** around step
-   14&ndash;16 in thirteen of the fourteen arms, fades as the wound heals (half healed by step 17,
-   90% by step 28), and then goes *negative* &mdash; the agent forages to make up the 14&ndash;20
-   nutrition points its early caution cost it. Section 5 shows all three stages.
-   *(pattern across 13 of 14 arms; the effect is transient by construction, so any single number
-   depends on the window it is measured over)*
+5. **The agent responds to what it FEELS, not to the wound it has.** It has no sensor for its own
+   injury. It gets one delayed, smoothed trace of it from an interoceptive nociceptor, and that
+   trace is **exactly zero for the first two steps** however badly hurt the agent woke up. The
+   wound's own gap between the heaviest and lightest quarters is **largest at step 0** &mdash; where
+   the behavioural response is nil, which the physical reading cannot explain and the perceptual one
+   requires. The *perceived* gap peaks at **step 12** in all fourteen arms; extra hiding peaks at
+   **step 14&ndash;16** in thirteen of them, two to four steps behind the feeling. The burst then
+   reverses while the agent repays the 13&ndash;20 nutrition points its caution cost.
+   *(all 14 arms agree on the timing; 13 of 14 on the response. An earlier version of this report
+   told this story against the injury level, which the agent cannot sense &mdash; see Section 5.)*
 6. **Hypervigilance shows up on the ambiguous channel &mdash; but weakly, and less uniformly than a
    smaller sample suggested.** A wound does *not* make the agent treat a nearby rabbit more like a
    nearby predator. It *does* amplify the response to a harmless animal's **smell** more than to a
@@ -75,7 +78,9 @@ Each is tagged with how much weight it can bear, for the reason given in the cav
    contaminated &mdash; the weakest finding here)*
 7. **Hunger outweighs the wound &mdash; by 1.6&times; to 4.5&times; depending on the arm &mdash; and
    hiding is a cost, not a good.** Across the fourteen arms, more bush dwell goes with shorter life
-   and less eating. *(pattern across arms; see the caveat in Section 8 about n = 14)*
+   and less eating. *(pattern across arms; see the caveat in Section 8 about n = 14. Part of that
+   ratio is sensor dynamics rather than drive strength: hunger reaches the agent instantly through
+   satiation, while injury arrives through a twelve-step delay, so a 25-step window flatters hunger.)*
 
 ### The one caveat that colours everything below
 
@@ -121,6 +126,9 @@ An independent adversarial review of this analysis, including findings not yet a
 | **ladder** | the set of fourteen, arranged so that most sit one single setting away from another |
 | **bush dwell** | the share of an episode's steps the agent spent standing inside a bush. A bush hides it from predators and contains no food |
 | **percentage point** (pp) | the arithmetic difference between two percentages. Going from 14% to 18% is +4 pp, not +29% |
+| **a rate vs a difference** | a *rate* ("bush dwell, % of steps") is a share of something and can never be negative. A *difference* ("+4 pp") is one rate minus another and obviously can be. Several figures here plot differences, and each such axis says so; a negative value there means the agent hid **less** in one condition than the other, never that a percentage went below zero |
+| **injury level** | the wound in the agent's body, 0-100. The agent has **no sensor for it** |
+| **perceived nociception** | the one number the agent actually receives about its own injury: the last twelve injury levels convolved with an alpha kernel, the current step weighted zero, the buffer zeroed at reset. It lags the injury by several steps and is exactly zero for the first two steps of every episode |
 | **appearance channel** | one of the numbers in the vector describing how a thing looks. With eight channels, food, rock, predator and rabbit each occupy a different one, so the agent can tell them apart. With one channel, everything it sees adds to the same number, so it registers *that* something is there and not *what* |
 | **value mode** `sum` / `clamp` | how several objects in one cell combine. `sum` adds them, so two rocks read 2.0; `clamp` saturates at 1.0, so the agent sees presence but not count |
 | **occlusion** | whether objects block the line of sight to things behind them. Which objects block is set per object type by a `blocks_sight` flag |
@@ -510,17 +518,36 @@ distinguishable from zero.
 
 ## 5. What a wound does
 
-### It causes a burst of hiding, on a timetable
+### First: what the agent can actually feel
 
-**Motivation.** Everywhere else, a wounded agent is a suspicious comparison: it got hurt by doing
-something, so its later behaviour is contaminated by whatever it was doing. This environment removes
-that problem. The agent begins every episode with a wound drawn uniformly from 0 to 100 that it did
+Everywhere else, a wounded agent is a suspicious comparison &mdash; it got hurt by doing something,
+so its later behaviour is contaminated by whatever it was doing. This environment removes that
+problem: the agent begins every episode with a wound drawn uniformly from 0 to 100 that it did
 nothing to earn, so behaviour that tracks *that* number is caused by it.
 
-This matters for the sensor ladder because the agent has **no sensor that reads its own injury**.
-The only route from an injury level to behaviour is the interoceptive nociceptor. So this asks
-whether that internal channel changes behaviour at all, and whether the answer depends on what the
-agent can sense of the outside world.
+But there is a second thing to get right, and an earlier version of this report got it wrong. **The
+agent has no sensor for its injury level** &mdash; `injury_observable` is false in all fourteen arms.
+What it receives is a single scalar from the interoceptive nociceptor: the last twelve injury levels
+convolved with a normalised alpha kernel (tau = 3), with the current step's slot weighted **zero** so
+nothing leaks in instantaneously, and with the whole buffer **zeroed at reset**.
+
+That is not a technicality. An agent handed an injury of 100 feels:
+
+| step | 0 | 1 | 2 | 4 | 6 | 8 | 12 |
+|---|---|---|---|---|---|---|---|
+| what it feels, as a share of the real wound | 0% | 0% | 9% | 36% | 61% | 79% | 100% |
+
+It feels **nothing at all for two steps**, and does not feel the whole wound until step 12 &mdash; by
+which time the wound itself has begun to heal. So "the wound" and "what the agent feels" are two
+different signals with two different time courses, and an analysis that bins behaviour by the injury
+level bins it by a quantity the agent cannot sense. That is what the earlier version did, and it is
+why the timing claims in this section have been rewritten.
+
+The perceived signal is reconstructed from each episode's recorded injury sequence exactly as the
+environment builds it. The reconstruction was checked against the observation vector the environment
+itself wrote &mdash; perceptual noise is disabled in this configuration, so the recorded channel *is*
+the policy's input &mdash; and the worst disagreement over 1.36 million rows was **2.2 &times;
+10⁻⁷**, which is float32 rounding.
 
 ![Bush dwell against the randomised starting wound](figures/lad08_injury_dose_response.png)
 
@@ -535,41 +562,70 @@ choose otherwise.
 percentage points across the full range. The exception is `A_baseline` at &minus;2.3, the one agent
 with neither directional smell nor useful sight.
 
-### How long it lasts, and what it costs
+### The timing: behaviour follows the feeling, not the wound
 
-![The wound's effect through time](figures/lad09_injury_time_course.png)
+![What the agent feels, and what it costs](figures/lad09_injury_time_course.png)
 
-**Figure 9.** Left: the assigned wound healing. Middle: the extra hiding it causes. Right: the food
-the agent did not eat while hiding. Faint lines are individual arms; bold lines are the two groups.
+**Figure 9.** A: the injury level and the perceived signal, for the agents that woke in the lightest
+and heaviest quarters. B: the three quantities as fractions of their own peak, so their timing can be
+compared. C: bush dwell against how hurt the agent is feeling *right now*. D: the food the caution
+cost. Faint lines are individual arms; bold lines are the two groups.
 
 **Motivation.** Figure 8 measures over 25 steps. Why 25? Widen the window and the effect shrinks: in
-the reference agent it runs +4.0 percentage points at 25 steps, +0.7 at 50, and &minus;0.4
-over the whole episode. Taken at face value that looks like a result reported at a flattering
-window, which is a fair thing for a reader to suspect. This figure is the answer.
+the reference agent it runs +4.0 percentage points at 25 steps, +0.7 at 50, and &minus;0.4 over the
+whole episode. Taken at face value that looks like a result reported at a flattering window, which is
+a fair thing to suspect. The answer is that the window is not tracking the wound &mdash; it is
+tracking how long the agent can *feel* the wound.
 
-**Method.** A separate step-by-step sweep records, for each arm and each quarter of the assigned
-starting wound, the mean injury still carried, bush dwell, and nutrition at every step up to 120.
-The middle and right panels plot the heaviest quarter minus the lightest.
+**Method.** A step-by-step sweep records, for each arm and each quarter of the assigned starting
+wound, the injury still carried, the reconstructed perceived signal, bush dwell, and nutrition at
+every step to 120. Panels A, B and D are keyed to the **randomised** starting wound and are therefore
+causal &mdash; the perceived signal is a deterministic function of that assigned wound, so keying to
+one or the other does not change what is being manipulated, only what is being described. Panel C is
+keyed to the **contemporaneous** perceived signal and is therefore associational: an agent feels hurt
+because it got hurt, which depends on what it was doing. It is marked as such on the figure.
 
-**Reading.** Three stages, in order.
+**Reading.** The timing settles it.
 
-1. **The dose disappears.** The 75-point injury gap the environment assigns at reset is **half gone
-   by step 17 and 90% gone by step 28.** The cause is essentially over before step 30.
-2. **The response follows it.** Extra hiding climbs to a peak of **+7.1 to +13.5 percentage points
-   around step 14&ndash;16** in thirteen of the fourteen arms &mdash; two to three times the size of
-   the 25-step average in Figure 8 &mdash; and then falls away on roughly the wound's own schedule.
-   An effect that tracks its cause through time is evidence *for* the causal reading, not against
-   it, and it means 25 steps was not a lucky pick: it is approximately the lifetime of the dose.
-3. **Then the bill arrives.** The hiding is paid for in food. An agent handed a heavy wound eats 4.4
-   food items in its first 25 steps against 8.0 for one handed almost none, and runs 14&ndash;20
-   nutrition points behind by around step 25. Once the wound has healed it hides **less** than the
-   unhurt agent &mdash; &minus;0.9 to &minus;4.7 points at step 60 &mdash; while it makes up the
-   shortfall, and the two converge by about step 100.
+| quantity | peaks at | in how many arms |
+|---|---|---|
+| the injury gap &mdash; what the body is | **step 0** | 14 of 14 |
+| the perceived gap &mdash; what the agent feels | **step 12** | 14 of 14 |
+| extra hiding &mdash; what the agent does | **step 14&ndash;16** | 13 of 14 |
 
-So the honest statement of finding 5 is not "a wound makes the agent hide more" but **"a wound causes
-a transient burst of hiding that lasts about as long as the wound does, followed by a compensatory
-decrease while the agent makes up the food it missed."** The whole-episode number is slightly
-negative, and Figure 6's near-zero wound row is that same dilution.
+At step 0 the wound is at its most extreme &mdash; a 75-point gap between the quarters &mdash; and
+the behavioural response is **nil**. Under the physical reading that is inexplicable. Under the
+perceptual one it is required: the buffer is empty, so there is nothing to respond to. The response
+then rises with the feeling and peaks two to four steps behind it. Across the arms, extra hiding
+correlates with the perceived gap at r = +0.50 to +0.90 and with the injury gap at r = +0.72 to
++0.80; the correlations are close, but the *peak alignment* is not, and it is the peak alignment that
+distinguishes the two accounts.
+
+The exception is `A_baseline`, whose response is at noise level throughout (+1.05 pp peak, at step 4).
+It is the one arm with neither directional smell nor useful sight.
+
+**The size of the effect was also understated.** Binning by the assigned wound averages over the
+whole ramp-up window in which the agent feels almost nothing, which is why Figure 8's numbers are
+small. Binned by what the agent is actually feeling (panel C), bush dwell runs from **12.6&ndash;17.8%
+at the lowest quarter of felt nociception to 31.3&ndash;49.6% at the highest** &mdash; a spread three
+to five times larger than anything in Figure 8. That panel is associational, so it is not a
+substitute for the causal contrast; but it is the right scale for the perceptual effect.
+
+**And then the bill.** The hiding is paid for in food. An agent handed a heavy wound eats 4.4 food
+items in its first 25 steps against 8.0 for one handed almost none, and runs 13&ndash;20 nutrition
+points behind by around step 25. Once the feeling fades it hides **less** than the unhurt agent
+&mdash; &minus;0.9 to &minus;4.7 points at step 60 &mdash; while it makes up the shortfall, and the
+two converge by about step 100. Note that comparisons beyond roughly step 40 condition on survival,
+and Table 8 shows the heavy-wound quarter dying sooner, so the late convergence is measured on
+differently-selected survivors.
+
+> **Correction.** An earlier version of this section said the extra hiding "falls away on roughly the
+> wound's own schedule" and that 25 steps "is approximately the lifetime of the dose". Both were
+> wrong, because both described the injury level rather than the perceived signal. The wound's gap is
+> maximal at step 0 and half gone by step 17; the *felt* gap peaks at step 12 and is still around 30
+> points at step 24. Twenty-five steps is roughly the lifetime of the **felt** dose, not the physical
+> one. The causal claims are unaffected &mdash; they are keyed to the randomised starting wound
+> either way &mdash; but the mechanism they were attached to was the wrong one.
 
 **Table 10.** the wound's effect through time (Figure 9)
 
@@ -731,7 +787,7 @@ hiding that leaves it out is describing a small part of the behaviour.
 
 **Table 9.** the two internal drives, first 25 steps
 
-| arm | hunger: bush dwell span (pp) | wound: bush dwell span (pp) | ratio |
+| arm | hunger: change in bush dwell (pp, signed) | wound: change in bush dwell (pp, signed) | ratio |
 |---|---|---|---|
 | `A_baseline` | +9.16 | -2.34 | wound effect is negative |
 | `B_olf_only` | +15.12 | +3.38 | 4.5x |
@@ -922,6 +978,19 @@ into circulation:
    Section 5.
 6. **Hypervigilance was tested on two channels, not all of them.** The agent also has collision,
    proprioceptive and visual channels that were not tested for a criterion shift.
+7. **The hunger-versus-wound comparison is partly a comparison of sensors.** Nutrition is not
+   directly observable either, but the channel that carries it &mdash; satiation &mdash; is an
+   instantaneous monotone transform of it, with no delay. Injury reaches the agent through a
+   twelve-step convolution. Over a 25-step window that difference alone favours hunger, so the
+   1.6&ndash;4.5&times; ratio in Section 6 mixes drive strength with sensor dynamics and should not
+   be read as the former alone.
+8. **The agent had an incentive to infer its wound faster than it can feel it.** The training reward
+   uses the *true* injury level, so a policy that inferred its condition from context could in
+   principle have beaten the nociceptor's delay. Empirically it did not &mdash; the response tracks
+   the delayed percept, not the wound &mdash; but that is an observation, not a constraint.
+9. **Late-time comparisons condition on survival.** Beyond roughly step 40, Figure 9 compares
+   whichever episodes are still alive, and Table 8 shows the heavy-wound quarter dying sooner. The
+   convergence after step 60 is therefore measured on differently-selected survivors.
 
 ## Reproducing this
 

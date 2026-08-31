@@ -108,7 +108,7 @@ for a in arms:
       f"{sl(a,'rab',3)-sl(a,'rab',0):+.2f} | {sl(a,'pred',3)-sl(a,'pred',0):+.2f} |")
 
 w("\n### TABLE 9 - the two internal drives, first 25 steps\n")
-w("| arm | hunger: bush dwell span (pp) | wound: bush dwell span (pp) | ratio |")
+w("| arm | hunger: change in bush dwell (pp, signed) | wound: change in bush dwell (pp, signed) | ratio |")
 w("|---|---|---|---|")
 for a in arms:
     z = np.load(f"{L.OUT_ROOT}/{a}_episodes.npz")

@@ -28,6 +28,7 @@ THREAT, HARMLESS = "#b3322b", "#2f6f9f"          # predator (red) vs rabbit (blu
 WOUND_LO, WOUND_HI = "#c3b3d4", "#54346e"        # wound level: light purple -> deep purple
 GROUP_YES, GROUP_NO = "#2d6a4f", "#c9762e"       # sight resolves identity (green) or not (orange)
 NEUTRAL = "#6d8595"                              # a bar whose colour carries nothing but its sign
+ACCENT = GROUP_YES                               # alias: the page accent is the same green
 
 plt.rcParams.update({
     "figure.dpi": DPI, "savefig.dpi": DPI, "font.size": 9,
