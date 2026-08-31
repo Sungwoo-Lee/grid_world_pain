@@ -64,14 +64,18 @@ def build(arm: str, run: str, verbose=True) -> dict:
     P, R = lay["pred"], lay["neutral"]
     na = len(P) + len(R)
     ch1, ch2 = smell_channels(cfg)
-    store = L.arm_store(arm)
+    stores = L.arm_stores(arm)
 
-    ep = pq.read_table(sorted(glob.glob(store + "episodes_*.parquet")), columns=EP_COLS)
+    ep = pq.read_table(L.store_files(stores, "episodes"), columns=EP_COLS)
     o = np.argsort(ep.column("episode_seed").to_numpy())
     seed = ep.column("episode_seed").to_numpy()[o]
     seed0, nep = int(seed[0]), len(seed)
-    if seed.max() - seed0 + 1 != nep:
-        raise SystemExit(f"{arm}: episode seeds are not contiguous")
+    # Contiguity is asserted over the UNION of the collection passes, not per store: the point of
+    # the second pass is that its seeds continue the first pass's without gap or overlap.
+    if seed.max() - seed0 + 1 != nep or len(np.unique(seed)) != nep:
+        raise SystemExit(f"{arm}: the {len(stores)} collection passes do not form one contiguous "
+                         f"seed range - got {nep:,} episodes spanning "
+                         f"{seed.min():,}..{seed.max():,}")
     length = ep.column("length").to_numpy()[o].astype(np.float64)
     term = ep.column("termination_reason").to_numpy(zero_copy_only=False)[o].astype(int)
     act = listcol(ep.column("animal_active"), na)[o]
@@ -113,7 +117,7 @@ def build(arm: str, run: str, verbose=True) -> dict:
            "pred_bush": z2(4, 4), "pred_tot": z2(4, 4)}
 
     ib_ep = np.digitize(np.zeros(nep), L.INJ_EDGES)   # filled after the first shard sets inj0
-    files = sorted(glob.glob(store + "steps_*.parquet"))
+    files = L.store_files(stores, "steps")
     t0 = time.time()
     for fi, f in enumerate(files):
         tb = pq.read_table(f, columns=STEP_COLS)
@@ -202,7 +206,8 @@ def build(arm: str, run: str, verbose=True) -> dict:
                         n_pred=n_pred, n_rab=n_rab,
                         pred_olf=pred_olf, rab_olf=rab_olf)
 
-    out = {"arm": arm, "run": run, "store": store, "n_episodes": int(nep),
+    out = {"arm": arm, "run": run, "stores": stores, "n_episodes": int(nep),
+           "seed_range": [int(seed.min()), int(seed.max())],
            "sensory": L.sensory_summary(cfg),
            "mean_survival": float(length.mean()),
            "bush_dwell_pct": float(100 * E["bush_steps"].sum() / E["n_steps"].sum()),

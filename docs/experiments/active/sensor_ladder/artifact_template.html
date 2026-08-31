@@ -1,12 +1,13 @@
 <title>The Sensor Ladder</title>
 <style>
 :root{
+  color-scheme:light dark;
   --paper:#faf9f7; --card:#ffffff; --ink:#1b1b1d; --ink-2:#3d3c3a; --muted:#6f6d69;
   --rule:#e4e1db; --rule-2:#eeece8;
   --accent:#2d6a4f; --accent-soft:#e8f0ea;
   --threat:#b3322b; --threat-soft:#f7e9e8;
-  --harmless:#2f6f9f; --harmless-soft:#e7eff5;
   --amber:#8a6d1f; --amber-soft:#f6f0dd;
+  --fig-plate:#ffffff;
   --shadow:0 1px 2px rgba(28,28,30,.05), 0 8px 24px rgba(28,28,30,.05);
   --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
@@ -18,35 +19,39 @@
     --rule:#2c2c31; --rule-2:#232327;
     --accent:#6fbf95; --accent-soft:#1a2a22;
     --threat:#e0736a; --threat-soft:#2c1d1c;
-    --harmless:#79b2d8; --harmless-soft:#18242c;
     --amber:#d9b64e; --amber-soft:#2a2517;
+    --fig-plate:#f2f1ee;
     --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
   }
 }
 :root[data-theme="dark"]{
+  color-scheme:dark;
   --paper:#131315; --card:#1a1a1d; --ink:#e9e6e1; --ink-2:#c9c5be; --muted:#918d86;
   --rule:#2c2c31; --rule-2:#232327;
   --accent:#6fbf95; --accent-soft:#1a2a22;
   --threat:#e0736a; --threat-soft:#2c1d1c;
-  --harmless:#79b2d8; --harmless-soft:#18242c;
   --amber:#d9b64e; --amber-soft:#2a2517;
+  --fig-plate:#f2f1ee;
   --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
 }
 :root[data-theme="light"]{
+  color-scheme:light;
   --paper:#faf9f7; --card:#ffffff; --ink:#1b1b1d; --ink-2:#3d3c3a; --muted:#6f6d69;
   --rule:#e4e1db; --rule-2:#eeece8;
   --accent:#2d6a4f; --accent-soft:#e8f0ea;
   --threat:#b3322b; --threat-soft:#f7e9e8;
-  --harmless:#2f6f9f; --harmless-soft:#e7eff5;
   --amber:#8a6d1f; --amber-soft:#f6f0dd;
+  --fig-plate:#ffffff;
+  --shadow:0 1px 2px rgba(28,28,30,.05), 0 8px 24px rgba(28,28,30,.05);
 }
 
 body{background:var(--paper);color:var(--ink);font-family:var(--sans);
   font-size:16.5px;line-height:1.62;-webkit-font-smoothing:antialiased}
 .wrap{max-width:1360px;margin:0 auto;padding:0 28px 120px;
   display:grid;grid-template-columns:1fr;gap:0}
-.col{max-width:730px;margin:0 auto;width:100%}
-.wide{max-width:1120px;margin:0 auto;width:100%}
+main,.mast,.toc{min-width:0}   /* grid items must not float their content minimum */
+.col{max-width:730px;width:100%;margin-left:auto;margin-right:auto}
+.wide{max-width:1120px;width:100%;margin-left:auto;margin-right:auto}
 
 /* ---------- masthead ---------- */
 .mast{padding:74px 0 40px;border-bottom:1px solid var(--rule);margin-bottom:52px}
@@ -56,8 +61,9 @@ h1{font-family:var(--serif);font-weight:600;font-size:clamp(38px,6.2vw,62px);lin
   letter-spacing:-.022em;margin:0 0 22px;text-wrap:balance}
 .standfirst{font-family:var(--serif);font-size:clamp(19px,2.3vw,23px);line-height:1.46;
   color:var(--ink-2);margin:0 0 34px;text-wrap:pretty}
-.meta{display:flex;flex-wrap:wrap;gap:0;border-top:1px solid var(--rule);padding-top:22px}
-.meta div{flex:1 1 148px;padding-right:20px}
+.meta{display:flex;flex-wrap:wrap;gap:0;border-top:1px solid var(--rule);padding-top:22px;margin:0}
+.meta div{flex:1 1 132px;padding-right:20px;box-sizing:border-box;min-width:0}
+.meta div:last-child{padding-right:0}
 .meta dt{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
   color:var(--muted);margin:0 0 5px}
 .meta dd{margin:0;font-size:20px;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
@@ -65,7 +71,8 @@ h1{font-family:var(--serif);font-weight:600;font-size:clamp(38px,6.2vw,62px);lin
 
 /* ---------- text ---------- */
 h2{font-family:var(--serif);font-weight:600;font-size:clamp(27px,3.4vw,34px);line-height:1.14;
-  letter-spacing:-.016em;margin:82px 0 8px;text-wrap:balance;scroll-margin-top:24px}
+  letter-spacing:-.016em;margin:82px 0 8px;text-wrap:balance}
+section[id]{scroll-margin-top:28px}
 h2 .n{font-family:var(--mono);font-size:13px;color:var(--accent);letter-spacing:.06em;
   display:block;margin-bottom:9px;font-weight:400}
 h3{font-family:var(--serif);font-weight:600;font-size:22px;line-height:1.24;
@@ -74,11 +81,12 @@ p{margin:0 0 18px}
 .lede{font-size:18px;color:var(--ink-2)}
 a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:2px}
 code{font-family:var(--mono);font-size:.855em;background:var(--rule-2);
-  padding:1px 5px;border-radius:4px;color:var(--ink)}
+  padding:1px 5px;border-radius:4px;color:var(--ink);overflow-wrap:anywhere}
 strong{font-weight:640}
 ul,ol{margin:0 0 18px;padding-left:22px}
 li{margin-bottom:9px}
 hr{border:0;border-top:1px solid var(--rule);margin:70px 0}
+hr.col{margin-top:70px;margin-bottom:70px}
 
 /* ---------- findings ---------- */
 .findings{list-style:none;padding:0;margin:34px 0 0;counter-reset:f}
@@ -106,26 +114,33 @@ hr{border:0;border-top:1px solid var(--rule);margin:70px 0}
 
 /* ---------- figures ---------- */
 figure{margin:44px 0}
+figure.wide{margin-top:44px;margin-bottom:44px}
 figure img{width:100%;height:auto;display:block;border:1px solid var(--rule);border-radius:4px;
-  background:#fff}
+  background:var(--fig-plate);cursor:zoom-in}
+figure img:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.zoomhint{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);margin:9px 0 0;text-align:right;max-width:1120px}
 figcaption{margin-top:14px;font-size:14.5px;color:var(--muted);line-height:1.55;
   max-width:730px;margin-left:auto;margin-right:auto}
 figcaption b{color:var(--ink);font-weight:640}
 .fig-blocks{max-width:730px;margin:22px auto 0;display:grid;gap:16px}
-.fig-blocks section{border-top:1px solid var(--rule-2);padding-top:13px}
+.fig-blocks>div{border-top:1px solid var(--rule-2);padding-top:13px}
 .fig-blocks h5{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
   color:var(--accent);margin:0 0 6px;font-weight:400}
 .fig-blocks p{margin:0;font-size:15px;line-height:1.56;color:var(--ink-2)}
 
 /* ---------- tables ---------- */
-.tbl{margin:34px auto}
+.tbl{width:fit-content;max-width:100%;margin:34px auto}
 .scroll{overflow-x:auto;border:1px solid var(--rule);border-radius:4px;background:var(--card)}
 table{border-collapse:collapse;width:100%;font-size:13.5px;
   font-variant-numeric:tabular-nums;font-family:var(--sans)}
-caption{caption-side:top;text-align:left;padding:14px 16px 12px;font-size:13.5px;color:var(--muted);
-  border-bottom:1px solid var(--rule)}
+.tbl figcaption{text-align:left;padding:13px 16px 12px;font-size:13.5px;color:var(--muted);
+  border:1px solid var(--rule);border-bottom:0;border-radius:4px 4px 0 0;background:var(--card);
+  margin:0;max-width:none}
+.tbl .scroll{border-radius:0 0 4px 4px}
 th,td{padding:8px 13px;text-align:right;border-bottom:1px solid var(--rule-2);white-space:nowrap}
 th:first-child,td:first-child{text-align:left}
+th.txt,td.txt{text-align:left;white-space:normal;min-width:150px}
 thead th{font-family:var(--sans);font-weight:600;font-size:12px;color:var(--muted);
   white-space:normal;min-width:74px;vertical-align:bottom;line-height:1.3;
   border-bottom:1px solid var(--rule)}
@@ -137,14 +152,14 @@ td code{background:none;padding:0;font-size:12.5px;color:var(--ink)}
 .toc{display:none}
 @media (min-width:1300px){
   .wrap{grid-template-columns:190px 1fr;gap:44px;max-width:1420px}
-  .toc{display:block;position:sticky;top:34px;align-self:start;padding-top:96px;
+  .toc{display:block;position:sticky;top:-48px;align-self:start;padding-top:82px;
     font-size:13px;line-height:1.4}
   .toc div{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
     color:var(--muted);margin-bottom:12px}
   .toc a{display:block;padding:5px 0;color:var(--ink-2);text-decoration:none;
     border-left:2px solid var(--rule);padding-left:12px;margin-left:-2px}
   .toc a:hover{color:var(--accent);border-left-color:var(--accent)}
-  .mast{grid-column:1/-1}
+  .mast{grid-column:2}
 }
 .foot{margin-top:90px;padding-top:26px;border-top:1px solid var(--rule);
   font-size:13.5px;color:var(--muted)}
@@ -166,13 +181,35 @@ td code{background:none;padding:0;font-size:12.5px;color:var(--ink)}
 .correction h4{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;
   margin:0 0 10px;color:var(--threat)}
 .correction p{margin:0;font-size:15px;line-height:1.57}
+.correction{--rule-2:color-mix(in srgb, var(--threat) 16%, transparent)}
 .caveats{margin:26px 0;padding:0;list-style:none;counter-reset:cv}
 .caveats li{counter-increment:cv;display:grid;grid-template-columns:26px 1fr;gap:12px;
   padding:13px 0;border-top:1px solid var(--rule-2);font-size:15.5px;line-height:1.56}
-.caveats li::before{content:counter(cv);font-family:var(--mono);font-size:11.5px;color:var(--amber)}
+.caveats li::before{content:counter(cv);font-family:var(--mono);font-size:11.5px;color:var(--amber);
+  padding-top:3px}
 pre{background:var(--card);border:1px solid var(--rule);border-radius:4px;padding:16px 18px;
   overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.6;margin:24px 0}
 pre code{background:none;padding:0;font-size:inherit}
+/* ---------- full-size figure viewer ---------- */
+.lb{position:fixed;inset:0;z-index:99;background:rgba(12,12,14,.93);
+  display:flex;flex-direction:column}
+.lb-bar{display:flex;align-items:center;gap:16px;padding:12px 18px;flex:0 0 auto;
+  border-bottom:1px solid rgba(255,255,255,.13);color:#e9e6e1;font-size:13.5px}
+.lb-bar .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-family:var(--sans)}
+.lb-bar .px{font-family:var(--mono);font-size:11.5px;color:#9b968e;flex:0 0 auto}
+.lb-bar button{font:inherit;font-size:12.5px;background:rgba(255,255,255,.1);color:#e9e6e1;
+  border:1px solid rgba(255,255,255,.2);border-radius:4px;padding:5px 12px;cursor:pointer;
+  flex:0 0 auto}
+.lb-bar button:hover{background:rgba(255,255,255,.18)}
+.lb-bar button:focus-visible{outline:2px solid #7fd0a5;outline-offset:2px}
+.lb-scroll{flex:1 1 auto;overflow:auto;display:grid;place-items:center;padding:18px}
+.lb-scroll img{display:block;background:#fff;border-radius:3px}
+.lb.fit .lb-scroll img{max-width:100%;max-height:100%;width:auto;height:auto;cursor:zoom-in}
+.lb.actual .lb-scroll{place-items:start}
+.lb.actual .lb-scroll img{max-width:none;max-height:none;cursor:zoom-out}
+@media (prefers-reduced-motion:no-preference){.lb{animation:lbin .14s ease-out}}
+@keyframes lbin{from{opacity:0}to{opacity:1}}
 </style>
 
 <div class="wrap">
@@ -404,16 +441,16 @@ third no rabbit, so the distance and odour analyses use about 200,000; the odour
   <figcaption><b>Figure 1.</b> Left: mean survival. Right: bush dwell. Both pooled over each arm's
   300,000 episodes.</figcaption>
   <div class="fig-blocks">
-    <section><h5>Why look</h5><p>The most basic question about a sense is whether having it helps. If
-    it does, the agents that have it should live longer.</p></section>
-    <section><h5>How it is computed</h5><p>Survival is the mean episode length. Bush dwell is
+    <div><h5>Why look</h5><p>The most basic question about a sense is whether having it helps. If
+    it does, the agents that have it should live longer.</p></div>
+    <div><h5>How it is computed</h5><p>Survival is the mean episode length. Bush dwell is
     (bush steps) &divide; (steps), pooled over every episode. The <code>t=0</code> row is the world as
     handed to the agent, not a step it took, so it is excluded from both numerator and
-    denominator.</p></section>
-    <section><h5>What it shows</h5><p>Survival runs 166 to 264 steps &mdash; the best arm lives about
+    denominator.</p></div>
+    <div><h5>What it shows</h5><p>Survival runs 166 to 264 steps &mdash; the best arm lives about
     1.6 times as long as the worst, produced entirely by sensory settings. Bush dwell moves far less,
     14.0% to 20.3%. The two are <em>anti</em>-correlated: the agents that hide most die soonest. First
-    hint that hiding is not the thing the senses buy.</p></section>
+    hint that hiding is not the thing the senses buy.</p></div>
   </div>
 </figure>
 <div class="wide">{{TABLE:2}}</div>
@@ -429,19 +466,19 @@ reference, and those pairs are what Figure 2 shows.</p></div>
   <figcaption><b>Figure 2.</b> Each row is one arm minus its reference arm &mdash; a change of exactly
   one setting.</figcaption>
   <div class="fig-blocks">
-    <section><h5>How it is computed</h5><p>The difference of the two arms' pooled values from Figure 1.
+    <div><h5>How it is computed</h5><p>The difference of the two arms' pooled values from Figure 1.
     Both members of a pair were handed the same 300,000 worlds, so they met identical predators, food
     and starting wounds. The claim that each pair differs in exactly one setting is
     <strong>asserted in code</strong>, not merely intended &mdash; see the correction
-    below.</p></section>
-    <section><h5>What it shows</h5><p><strong>Direction beats acuity.</strong> Giving smell a direction
+    below.</p></div>
+    <div><h5>What it shows</h5><p><strong>Direction beats acuity.</strong> Giving smell a direction
     is worth +45.1 steps, the biggest single win, even though the agent still has no useful sight.
     <strong>Identity beats sharpness.</strong> Collapsing eight appearance channels to one costs
     &minus;46.8 steps; blurring the picture eightfold costs &minus;23.3. <strong>Sharp is worse than
     slightly blurred</strong> &mdash; &minus;25.5, explained in Section 3. Halving the visual range
-    costs only &minus;7.9.</p></section>
-    <section><h5>What it cannot show</h5><p>These are single pairwise contrasts and so the findings
-    most exposed to the one-seed caveat. Sections 4 and 5 do not have that weakness.</p></section>
+    costs only &minus;7.9.</p></div>
+    <div><h5>What it cannot show</h5><p>These are single pairwise contrasts and so the findings
+    most exposed to the one-seed caveat. Sections 4 and 5 do not have that weakness.</p></div>
   </div>
 </figure>
 <div class="col">
@@ -471,13 +508,13 @@ sensory setting buys down, and which it buys up, is more informative than the ne
   <figcaption><b>Figure 3.</b> Every arm's 300,000 episodes split into the three ways an episode can
   end.</figcaption>
   <div class="fig-blocks">
-    <section><h5>What it shows</h5><p>Predation is where the senses pay: 46&ndash;47% in the two arms
+    <div><h5>What it shows</h5><p>Predation is where the senses pay: 46&ndash;47% in the two arms
     with no useful sight, down to 26% in the reference agent. Starvation moves the <em>other</em> way,
     24% up to 37% &mdash; the better-sighted agents trade some starvation risk for a much larger
     reduction in predation, and come out ahead. <code>Q1_presence_sum</code> and
     <code>Q2_presence_binary</code> are the tell: a full thirteen-cell visual field, still eaten at
     45% and 41% &mdash; essentially the rate of an agent that cannot see at all. A visual field that
-    cannot say <em>what</em> it contains does not protect against being eaten.</p></section>
+    cannot say <em>what</em> it contains does not protect against being eaten.</p></div>
   </div>
 </figure>
 </section>
@@ -520,17 +557,17 @@ scale goes 4.0 &rarr; 2.0 &rarr; 1.0 &rarr; 0.5 &rarr; off. There is an optimum 
   was when the agent chose its move. Colour is the grouping of Section 4; the four arms the text
   discusses are thick and named.</figcaption>
   <div class="fig-blocks">
-    <section><h5>How it is computed</h5><p>Distance to the nearest <em>active</em> predator in
+    <div><h5>How it is computed</h5><p>Distance to the nearest <em>active</em> predator in
     chebyshev steps. The action producing step <code>t</code> was chosen while looking at step
     <code>t&minus;1</code>, so distance is read off the previous row and bush occupancy off the current
     one. Distances of 8 or more are pooled. Episodes containing no predator are excluded from the
-    predator panel.</p></section>
-    <section><h5>What it shows</h5><p>Every arm hides far more with a predator close. The rise is not
+    predator panel.</p></div>
+    <div><h5>What it shows</h5><p>Every arm hides far more with a predator close. The rise is not
     perfectly monotone at the very closest bin &mdash; in six arms bush dwell is <em>higher</em> at
     distance 2 than at distance 1. That is expected rather than puzzling: at distance 1 the agent is
     often already caught in the open with a predator adjacent, a different situation from spotting one
     approaching. The rabbit curves separate into two families, which is the next
-    section.</p></section>
+    section.</p></div>
   </div>
 </figure>
 </section>
@@ -548,17 +585,17 @@ remove it tells us what discrimination actually requires.</p></div>
   joined by a line whose length is that arm's discrimination. Right: the rabbit response alone,
   coloured by whether the arm's sight can resolve identity.</figcaption>
   <div class="fig-blocks">
-    <section><h5>How it is computed</h5><p>For each arm and animal class, the <em>proximity effect</em>
+    <div><h5>How it is computed</h5><p>For each arm and animal class, the <em>proximity effect</em>
     is the probability of being in a bush when the nearest animal is 1&ndash;2 cells away, minus that
     probability when it is 6 or more cells away, in percentage points. Counts are pooled before the
-    ratio is taken, so a distance bin holding more steps carries more weight.</p></section>
-    <section><h5>What it shows</h5><p>The fourteen split cleanly, and the split is <strong>not</strong>
+    ratio is taken, so a distance bin holding more steps carries more weight.</p></div>
+    <div><h5>What it shows</h5><p>The fourteen split cleanly, and the split is <strong>not</strong>
     sight against no sight. Nine arms whose sight resolves identity have a <em>negative</em> rabbit
     response (&minus;1.0 to &minus;3.5) &mdash; they hide slightly <em>less</em> when a rabbit is near.
     Five whose sight cannot are all <em>positive</em> (+2.7 to +7.6). <code>Q1_presence_sum</code> and
     <code>Q2_presence_binary</code> are the interesting cases: a full thirteen-cell field at the
     reference blur, lacking only the ability to say what is in it, and they fall straight back into the
-    false alarm.</p></section>
+    false alarm.</p></div>
   </div>
 </figure>
 <div class="wide">{{TABLE:4}}</div>
@@ -593,19 +630,19 @@ which says range matters too.</li>
   <figcaption><b>Figure 6.</b> Every feature of the world randomised before the agent acts, against
   every arm. Red means the agent hides more; blue, less.</figcaption>
   <div class="fig-blocks">
-    <section><h5>How it is computed</h5><p>A quasi-binomial regression per arm on the episode-level
+    <div><h5>How it is computed</h5><p>A quasi-binomial regression per arm on the episode-level
     bush-dwell rate, with all nine exogenous features entered together so each is adjusted for the
     others. Standard errors are scaled by the Pearson overdispersion. Plotted is the effect of moving a
     feature by one standard deviation of its own spread &mdash; <strong>not</strong> one more predator
     or rabbit. One standard deviation of the rabbit count is 0.82 rabbits, so a per-rabbit effect would
-    be about 22% larger than shown.</p></section>
-    <section><h5>What it shows</h5><p>The <em>number of rabbits</em> row reproduces the Figure 5 split:
+    be about 22% larger than shown.</p></div>
+    <div><h5>What it shows</h5><p>The <em>number of rabbits</em> row reproduces the Figure 5 split:
     +3.6, +3.7 and +2.5 for the three arms without identity-resolving sight, +3.1 and +3.1 for the two
     presence-only arms, against &minus;0.0 to +1.1 for the nine that resolve identity.
     <em>Number of predators</em> is the largest driver in every arm. It is lower in the
     identity-resolving arms (+9.3 to +12.4) than in those without (+13.1 to +15.8), but not
     monotonically down the ladder &mdash; <code>B_olf_only</code> at +15.8 is the highest of all. The
-    row tracks identity-resolution, not "senses improving in general".</p></section>
+    row tracks identity-resolution, not "senses improving in general".</p></div>
   </div>
 </figure>
 <div class="col">
@@ -628,14 +665,14 @@ exactly how much the choice of window changes the answer.</p>
   <figcaption><b>Figure 7.</b> The effect of a predator's and a rabbit's odour strength on bush dwell,
   with the rest of the world held fixed.</figcaption>
   <div class="fig-blocks">
-    <section><h5>How it is computed</h5><p>Restricted to the &asymp;33,500 episodes per arm with exactly
+    <div><h5>How it is computed</h5><p>Restricted to the &asymp;33,500 episodes per arm with exactly
     one predator and one rabbit, so each smell is one number rather than an average. Adjusted for the
     number of bushes, rocks, food patches and ambush predators, the distance the agent spawned from
     cover, the predator's detection range, attack delay, attack range and stamina, the predator's own
-    smell, and the agent's starting wound and hunger.</p></section>
-    <section><h5>What it shows</h5><p>The same split, on a different cue and with the world held fixed.
+    smell, and the agent's starting wound and hunger.</p></div>
+    <div><h5>What it shows</h5><p>The same split, on a different cue and with the world held fixed.
     <code>A_baseline</code> hides +3.97 points harder for a strong-smelling rabbit; the reference agent
-    is at &minus;0.01 and not distinguishable from zero.</p></section>
+    is at &minus;0.01 and not distinguishable from zero.</p></div>
   </div>
 </figure>
 </section>
@@ -656,13 +693,13 @@ injury</strong>. The only route from an injury level to behaviour is the interoc
   <figcaption><b>Figure 8.</b> Bush dwell over each episode's first 25 steps, against the injury level
   the environment handed the agent at <code>t=0</code>.</figcaption>
   <div class="fig-blocks">
-    <section><h5>How it is computed</h5><p>Episodes split into four equal quarters of the starting
+    <div><h5>How it is computed</h5><p>Episodes split into four equal quarters of the starting
     wound; bush dwell pooled over the <strong>first 25 steps only</strong>. Figure 9 explains why 25,
-    and Figure 14 shows what happens if you choose otherwise.</p></section>
-    <section><h5>What it shows</h5><p>Thirteen of the fourteen arms hide more when handed a bigger
+    and Figure 14 shows what happens if you choose otherwise.</p></div>
+    <div><h5>What it shows</h5><p>Thirteen of the fourteen arms hide more when handed a bigger
     wound, by +2.8 to +6.8 percentage points across the full range. The exception is
     <code>A_baseline</code> at &minus;2.3, the one agent with neither directional smell nor useful
-    sight.</p></section>
+    sight.</p></div>
   </div>
 </figure>
 </section>
@@ -679,10 +716,10 @@ thing for a reader to suspect. This is the answer.</p></div>
   Right: the food the agent did not eat while hiding. Faint lines are individual arms; bold lines are
   the two groups.</figcaption>
   <div class="fig-blocks">
-    <section><h5>How it is computed</h5><p>A separate step-by-step sweep records, for each arm and each
+    <div><h5>How it is computed</h5><p>A separate step-by-step sweep records, for each arm and each
     quarter of the assigned starting wound, the mean injury still carried, bush dwell, and nutrition at
     every step up to 120. The middle and right panels plot the heaviest quarter minus the
-    lightest.</p></section>
+    lightest.</p></div>
   </div>
 </figure>
 <div class="col">
@@ -723,13 +760,13 @@ become more defensive across the board &mdash; a gain change, not a criterion ch
   <figcaption><b>Figure 10.</b> Panels A and B: response to a nearby rabbit and to a nearby predator, at
   the lightest and heaviest starting wound, <b>on one shared scale</b>. Panel C: the two shifts.</figcaption>
   <div class="fig-blocks">
-    <section><h5>How it is computed</h5><p>Within each starting-wound quarter separately, the same
-    proximity effect as Figure 5. The shift is the heaviest quarter minus the lightest.</p></section>
-    <section><h5>What it shows</h5><p><strong>No criterion shift on this channel.</strong> The rabbit
+    <div><h5>How it is computed</h5><p>Within each starting-wound quarter separately, the same
+    proximity effect as Figure 5. The shift is the heaviest quarter minus the lightest.</p></div>
+    <div><h5>What it shows</h5><p><strong>No criterion shift on this channel.</strong> The rabbit
     shift is between +0.0 and +0.7 percentage points in every arm; the predator shift is larger in most,
     up to +3.1. A wounded agent becomes more responsive to the animal that can actually kill it &mdash;
     the opposite of what hypervigilance predicts. Panels A and B share a scale so the rabbit response can
-    be seen for what it is: small.</p></section>
+    be seen for what it is: small.</p></div>
   </div>
 </figure>
 </section>
@@ -746,17 +783,17 @@ the channel where it should show.</p></div>
   begun the episode nearly unhurt or badly wounded. Right: the difference, with the predator smell as a
   control.</figcaption>
   <div class="fig-blocks">
-    <section><h5>How it is computed</h5><p>Episodes split into quartiles of the odour intensity drawn
+    <div><h5>How it is computed</h5><p>Episodes split into quartiles of the odour intensity drawn
     for their rabbits. The <em>slope</em> is bush dwell in the strongest-smelling quarter minus the
     weakest, over the first 25 steps, computed once over episodes that began nearly unhurt and once over
     those that began badly wounded. The bar is the difference. Episodes containing no rabbit are
-    excluded.</p></section>
-    <section><h5>What it shows</h5><p>In <strong>all fourteen arms</strong> the wound amplifies the
+    excluded.</p></div>
+    <div><h5>What it shows</h5><p>In <strong>all fourteen arms</strong> the wound amplifies the
     rabbit-smell response more than the predator-smell response; the gap runs +0.03 to +2.58 points. In
     absolute terms the rabbit-smell response <em>grows</em> by +0.18 to +2.00 points in the nine arms
     that resolve identity, while in the five that do not it is between &minus;1.07 and +0.26 &mdash;
     flat, or falling. Those five were already responding to rabbit odour at close to full strength
-    whether wounded or not, so there was no headroom.</p></section>
+    whether wounded or not, so there was no headroom.</p></div>
   </div>
 </figure>
 <div class="col">
@@ -786,14 +823,14 @@ arms" holds for one of the two measures and not the other.</p>
   predators (right) happened to smell. Bold lines pool the counts within each group; faint lines are the
   fourteen individual arms.</figcaption>
   <div class="fig-blocks">
-    <section><h5>Why the predator panel dips at the loudest quartile</h5><p>That dip is real behaviour,
+    <div><h5>Why the predator panel dips at the loudest quartile</h5><p>That dip is real behaviour,
     not an artefact. Intensity is the <strong>sum</strong> of the two odour channels while what marks an
     animal out as a predator is their <strong>difference</strong>, so an episode whose predators smell
     very loudly has both channels near their ceiling and the difference squeezed toward zero. On the
     reference run, mean predator-ness is 0.12 in the loudest quartile against 0.18&ndash;0.22 in the
     other three. The loudest predators are the least distinguishable ones &mdash; which also means a
     loud rabbit is genuinely harder to rule out, so part of the "false" alarm is
-    rational.</p></section>
+    rational.</p></div>
   </div>
 </figure>
 <div class="wide">{{TABLE:6}}</div>
@@ -811,14 +848,14 @@ reset, so both can be tested causally and on the same footing.</p></div>
   <figcaption><b>Figure 13.</b> Bush dwell over the first 25 steps against the two internal states the
   environment assigns at random, on a shared y-scale.</figcaption>
   <div class="fig-blocks">
-    <section><h5>Read the hunger axis carefully</h5><p>It plots <em>nutrition</em>, so the left end is an
+    <div><h5>Read the hunger axis carefully</h5><p>It plots <em>nutrition</em>, so the left end is an
     agent that woke up starving and the right end one that woke up well fed. The slope is positive,
     meaning a <strong>well-fed</strong> agent hides more &mdash; equivalently, a hungry one hides less,
-    because it has to go and eat.</p></section>
-    <section><h5>What it shows</h5><p>Nutrition moves bush dwell by +6.4 to +19.0 percentage points
+    because it has to go and eat.</p></div>
+    <div><h5>What it shows</h5><p>Nutrition moves bush dwell by +6.4 to +19.0 percentage points
     across its range; the wound moves it by &minus;2.3 to +6.8. The ratio runs 1.5&times; to 4.4&times;
     depending on the arm. The metabolic drive is the larger of the two in every arm, and any account of
-    this agent's hiding that leaves it out is describing a small part of the behaviour.</p></section>
+    this agent's hiding that leaves it out is describing a small part of the behaviour.</p></div>
   </div>
 </figure>
 <div class="wide">{{TABLE:9}}</div>
@@ -837,19 +874,19 @@ to conflate, and because a reader who reproduced either one deserves to know why
   use identical bins and the identical outcome; they differ only in which injury number a step is filed
   under, and over which steps the average is taken.</figcaption>
   <div class="fig-blocks">
-    <section><h5>A &mdash; the honest measurement</h5><p>The randomised wound, measured while the
-    assigned dose is still largely present. Positive in thirteen of fourteen arms.</p></section>
-    <section><h5>B &mdash; same cause, wrong window</h5><p>The same randomised wound averaged over the
+    <div><h5>A &mdash; the honest measurement</h5><p>The randomised wound, measured while the
+    assigned dose is still largely present. Positive in thirteen of fourteen arms.</p></div>
+    <div><h5>B &mdash; same cause, wrong window</h5><p>The same randomised wound averaged over the
     whole episode, and the answer collapses to between &minus;0.0 and &minus;0.7. The wound heals by step
     28, so an average over 250 steps is mostly measuring an agent with no wound, plus the compensatory
     foraging that follows. On the shared scale the panel looks nearly flat, which is the correct
-    impression.</p></section>
-    <section><h5>C &mdash; wrong variable entirely</h5><p>The wound the agent was carrying mid-episode
+    impression.</p></div>
+    <div><h5>C &mdash; wrong variable entirely</h5><p>The wound the agent was carrying mid-episode
     &mdash; what falls out of any trajectory log for free &mdash; reports <strong>+9 to +28
     points</strong>. This is the most misleading of the three, because a mid-episode wound is a
     <em>consequence</em> of behaviour: the agent carries a big wound precisely because it was out in the
     open near a predator, which is also where the bushes are not. Panel C measures where the agent
-    <em>was</em> and reports it as what the agent <em>decided</em>.</p></section>
+    <em>was</em> and reports it as what the agent <em>decided</em>.</p></div>
   </div>
 </figure>
 <div class="col"><p>The spread between panel A and panel C &mdash; +4.2 against +18.7 in the reference
@@ -870,16 +907,16 @@ that directly is the cleanest way to say what the senses are actually for.</p></
   least-squares fit across the fourteen <b>arm-level</b> points, and <code>r</code> is the correlation
   across those fourteen points &mdash; not across 300,000 episodes.</figcaption>
   <div class="fig-blocks">
-    <section><h5>What it shows</h5><p>More hiding goes with <strong>shorter</strong> life
-    (r = &minus;0.62) and <strong>less</strong> eating (r = &minus;0.70).</p></section>
-    <section><h5>How much weight that correlation can bear: not much on its own</h5><p>It is computed on
+    <div><h5>What it shows</h5><p>More hiding goes with <strong>shorter</strong> life
+    (r = &minus;0.62) and <strong>less</strong> eating (r = &minus;0.70).</p></div>
+    <div><h5>How much weight that correlation can bear: not much on its own</h5><p>It is computed on
     n = 14 points that are not independent, no confidence interval is given, and it is visibly driven by
     <code>A_baseline</code> and <code>B_olf_only</code>, which sit detached in the lower right of both
     panels. Cover those two and the remaining twelve show a much weaker relationship. What the figure
     establishes is the <em>direction</em> &mdash; corroborated independently by Figure 3, where predation
     and starvation move in opposite directions across the ladder, and by Figure 9, where extra hiding is
     followed by a measured food debt in every arm. The claim rests on those, with this figure as the
-    summary picture rather than the evidence.</p></section>
+    summary picture rather than the evidence.</p></div>
   </div>
 </figure>
 <div class="col"><p>The through-line of the whole page is there: the senses do not make the agent hide
@@ -977,3 +1014,84 @@ is recorded alongside the report in the repository at
 
 </main>
 </div>
+
+<div class="lb fit" id="lb" hidden role="dialog" aria-modal="true" aria-label="Full-size figure">
+  <div class="lb-bar">
+    <span class="t" id="lb-t"></span>
+    <span class="px" id="lb-px"></span>
+    <button type="button" id="lb-zoom">Actual size</button>
+    <button type="button" id="lb-x">Close &nbsp;Esc</button>
+  </div>
+  <div class="lb-scroll" id="lb-s"><img id="lb-img" alt=""></div>
+</div>
+
+<script>
+(function () {
+  // Every figure on this page is rendered well above its display width, so the detail is
+  // genuinely there to be seen - the page just cannot show it in a 1120px column. Clicking a
+  // figure opens it fitted to the window; clicking again shows it at its true pixel size with
+  // the surrounding box scrollable, which is the only way to read the smaller axis annotations.
+  var lb = document.getElementById('lb'), img = document.getElementById('lb-img'),
+      ttl = document.getElementById('lb-t'), px = document.getElementById('lb-px'),
+      zoom = document.getElementById('lb-zoom'), shut = document.getElementById('lb-x'),
+      scroll = document.getElementById('lb-s'), opener = null;
+
+  function setMode(actual) {
+    lb.classList.toggle('actual', actual);
+    lb.classList.toggle('fit', !actual);
+    zoom.textContent = actual ? 'Fit to window' : 'Actual size';
+    if (actual) { scroll.scrollLeft = (scroll.scrollWidth - scroll.clientWidth) / 2; }
+  }
+  function open(src, caption, el) {
+    opener = el;
+    img.src = src;
+    img.alt = el.alt || '';
+    ttl.textContent = caption;
+    px.textContent = el.naturalWidth ? el.naturalWidth + ' x ' + el.naturalHeight + ' px' : '';
+    setMode(false);
+    lb.hidden = false;
+    document.body.style.overflow = 'hidden';
+    shut.focus();
+  }
+  function close() {
+    lb.hidden = true;
+    img.removeAttribute('src');
+    document.body.style.overflow = '';
+    if (opener) { opener.focus(); opener = null; }
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('figure img'), function (el) {
+    var fig = el.closest('figure');
+    var cap = fig ? fig.querySelector('figcaption') : null;
+    var label = cap ? cap.textContent.trim().replace(/\s+/g, ' ') : 'Figure';
+    el.tabIndex = 0;
+    el.setAttribute('role', 'button');
+    el.setAttribute('aria-label', 'Open full size: ' + label.slice(0, 90));
+    el.addEventListener('click', function () { open(el.src, label, el); });
+    el.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(el.src, label, el); }
+    });
+    if (cap && fig.classList.contains('wide')) {
+      var hint = document.createElement('p');
+      hint.className = 'zoomhint';
+      hint.textContent = 'Click the figure to view it full size';
+      fig.insertBefore(hint, cap);
+    }
+  });
+
+  zoom.addEventListener('click', function () { setMode(!lb.classList.contains('actual')); });
+  img.addEventListener('click', function () { setMode(!lb.classList.contains('actual')); });
+  shut.addEventListener('click', close);
+  lb.addEventListener('click', function (e) { if (e.target === lb || e.target === scroll) close(); });
+  document.addEventListener('keydown', function (e) {
+    if (lb.hidden) return;
+    if (e.key === 'Escape') close();
+    // keep tab focus inside the dialog
+    if (e.key === 'Tab') {
+      var f = [zoom, shut], i = f.indexOf(document.activeElement);
+      e.preventDefault();
+      f[(i + (e.shiftKey ? f.length - 1 : 1)) % f.length].focus();
+    }
+  });
+})();
+</script>

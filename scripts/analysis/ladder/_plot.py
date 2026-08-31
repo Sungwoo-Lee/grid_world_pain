@@ -16,7 +16,7 @@ import numpy as np
 
 import _ladder as L
 
-DPI = 200
+DPI = 260
 INK, MUTED, GRID = "#1c1c1e", "#6b6b70", "#dcdce0"
 # poorest senses -> richest, so colour carries the ladder itself
 LADDER_CMAP = plt.get_cmap("viridis")

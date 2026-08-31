@@ -77,16 +77,39 @@ def smell_channels(cfg: dict) -> tuple[int, int]:
     return a, b
 
 
-def find_store(run: str, checkpoint: str | None, root: str = "results/trajectories") -> str:
+def find_stores(run: str, checkpoint: str | None, roots) -> list[str]:
+    """Every store holding part of this run's episode population, one per collection pass.
+
+    A run's evaluation episodes may be split across several store roots, because a store's
+    `n_episodes` is a guarded manifest field: once collected for N episodes a store cannot be
+    reopened and extended, so a later top-up has to go to a fresh root with a continuing seed
+    base. Callers treat the result as ONE population and assert contiguity over the union.
+    """
+    roots = [roots] if isinstance(roots, str) else list(roots)
     tag = os.path.basename(run.rstrip("/"))
-    pat = f"{root}/{tag}/{checkpoint or '*'}/*/"
-    hits = sorted(glob.glob(pat))
-    if not hits:
-        raise SystemExit(f"no trajectory store matches {pat}")
-    if len(hits) > 1 and checkpoint is None:
-        raise SystemExit("multiple checkpoints found; pass --checkpoint:\n  " +
-                         "\n  ".join(hits))
-    return hits[0]
+    out = []
+    for root in roots:
+        pat = f"{root}/{tag}/{checkpoint or '*'}/*/"
+        hits = sorted(glob.glob(pat))
+        if len(hits) > 1 and checkpoint is None:
+            raise SystemExit("multiple checkpoints found; pass --checkpoint:\n  " +
+                             "\n  ".join(hits))
+        out.extend(hits)
+    if not out:
+        raise SystemExit(f"no trajectory store for {tag} under {roots}")
+    return out
+
+
+def shard_files(stores, kind: str) -> list[str]:
+    """Episode or step shards across all passes, each store's own shards kept in order.
+
+    NOT globally sorted: shard names restart at 00000 in every store, so a global sort would
+    interleave the passes and break the one-t=0-row-per-episode ordering the sweep relies on.
+    """
+    out = []
+    for st in stores:
+        out.extend(sorted(glob.glob(st + f"{kind}_*.parquet")))
+    return out
 
 
 def listcol(col, width):
@@ -97,10 +120,11 @@ def listcol(col, width):
 
 
 # -------------------------------------------------------------- aggregate ----
-def aggregate(store: str, lay: dict, chans: tuple[int, int], verbose=True) -> dict:
+def aggregate(stores, lay: dict, chans: tuple[int, int], verbose=True) -> dict:
     """One sweep of the step table -> per-episode arrays. Assumes (and asserts) that
     episodes are shard-aligned, seeds contiguous, and rows sorted by seed."""
-    epf = sorted(glob.glob(store + "episodes_*.parquet"))
+    stores = [stores] if isinstance(stores, str) else list(stores)
+    epf = shard_files(stores, "episodes")
     ep = pq.read_table(epf, columns=["episode_seed", "length", "termination_reason",
                                      "animal_active", "obs_active", "res_allocated",
                                      "animal_detect_sampled", "animal_attack_delay_sampled",
@@ -155,7 +179,7 @@ def aggregate(store: str, lay: dict, chans: tuple[int, int], verbose=True) -> di
             "ate_food", "rested", "agent_row", "agent_col", "obs_row", "obs_col",
             "animal_row", "animal_col"]
     nobs = oa.shape[1]
-    files = sorted(glob.glob(store + "steps_*.parquet"))
+    files = shard_files(stores, "steps")
     t0 = time.time()
     for fi, f in enumerate(files):
         tb = pq.read_table(f, columns=cols)
@@ -310,8 +334,10 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--run", required=True, help="results/<ALGO>/<RUN_DIR>")
     ap.add_argument("--checkpoint", default=None, help="checkpoint step (default: the only one)")
-    ap.add_argument("--store-root", default="results/trajectories",
-                    help="root the trajectory store lives under (e.g. results/trajectories_nmn)")
+    ap.add_argument("--store-root", nargs="+", default=["results/trajectories"],
+                    help="root(s) the trajectory store lives under. Several may be given when a "
+                         "run's episodes were collected in more than one pass; they are read as "
+                         "one population (e.g. results/trajectories_lad results/trajectories_lad2)")
     ap.add_argument("--out", default=None, help="output dir (default results/analysis/hiding_drivers/<tag>)")
     ap.add_argument("--cache", default=None, help="npz cache path for the aggregation pass")
     ap.add_argument("--stage", choices=["aggregate", "fit", "all"], default="all")
@@ -320,18 +346,18 @@ def main():
     cfg = yaml.safe_load(open(f"{a.run}/models/config.yaml"))
     lay = slot_layout(cfg)
     chans = smell_channels(cfg)
-    store = find_store(a.run, a.checkpoint, a.store_root)
+    stores = find_stores(a.run, a.checkpoint, a.store_root)
     tag = os.path.basename(a.run.rstrip("/"))
     out = a.out or f"results/analysis/hiding_drivers/{tag}"
     cache = a.cache or f"{out}/aggregate.npz"
-    print(f"run   {a.run}\nstore {store}\nout   {out}")
+    print(f"run   {a.run}\nstore " + "\n      ".join(stores) + f"\nout   {out}")
     print(f"slots predators={lay['pred']} neutrals={lay['neutral']} "
           f"bushes={len(lay['bush'])} rocks={len(lay['rock'])} "
           f"food={len(lay['food'])} ambush={len(lay['ambush'])}")
     print(f"scent  predator-likeness = channel {chans[0]} minus channel {chans[1]}")
 
     if a.stage in ("aggregate", "all") and not os.path.exists(cache):
-        D = aggregate(store, lay, chans)
+        D = aggregate(stores, lay, chans)
         os.makedirs(out, exist_ok=True)
         np.savez_compressed(cache, **D)
         print(f"cached -> {cache}")

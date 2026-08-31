@@ -21,7 +21,13 @@ import numpy as np
 import yaml
 
 RUN_ROOT   = "results/JAX_RecurrentPPO"
-STORE_ROOT = "results/trajectories_lad"
+# The evaluation population was collected in TWO passes and lives in two store roots. This is not
+# untidiness: `n_episodes` is a guarded field of a store's manifest, so a store collected for
+# 300,000 episodes cannot be reopened and extended to 1,000,000 - the collector hard-fails, by
+# design, because a past incident contaminated a store that way. The second pass therefore used a
+# fresh seed base. Together they cover seeds 1,000,000 .. 1,999,999 with no gap and no overlap,
+# identically for all fourteen arms, so the paired design is exactly preserved.
+STORE_ROOTS = ["results/trajectories_lad", "results/trajectories_lad2"]
 OUT_ROOT   = "results/analysis/ladder"
 FIG_ROOT   = "docs/experiments/active/sensor_ladder/figures"
 
@@ -88,11 +94,38 @@ def arm_runs() -> dict[str, str]:
     return out
 
 
+def arm_stores(arm: str) -> list[str]:
+    """Every collected store for this arm, in seed order.
+
+    Returns one path per collection pass. Callers must treat them as ONE episode population:
+    concatenate, sort by seed, and assert contiguity over the union rather than per store.
+    """
+    out = []
+    for root in STORE_ROOTS:
+        hits = sorted(glob.glob(f"{root}/*_lad_{arm}_*/*/*/"))
+        if len(hits) > 1:
+            raise SystemExit(f"{arm}: {root} holds {len(hits)} stores, expected at most one")
+        out.extend(hits)
+    if not out:
+        raise SystemExit(f"no collected store for {arm} under {STORE_ROOTS}")
+    return out
+
+
+def store_files(stores: list[str], kind: str) -> list[str]:
+    """All episode or step shards across the passes. `kind` is 'episodes' or 'steps'.
+
+    Sorted per store and then concatenated, NOT sorted globally: shard names repeat across stores
+    (both begin at 00000), so a global sort would interleave the two passes and break the
+    one-t=0-row-per-episode ordering every sweep relies on.
+    """
+    out = []
+    for st in stores:
+        out.extend(sorted(glob.glob(st + f"{kind}_*.parquet")))
+    return out
+
+
 def arm_store(arm: str) -> str:
-    hits = sorted(glob.glob(f"{STORE_ROOT}/*_lad_{arm}_*/*/*/"))
-    if len(hits) != 1:
-        raise SystemExit(f"expected exactly one collected store for {arm}, found {len(hits)}")
-    return hits[0]
+    raise SystemExit("arm_store() is gone - the population spans several stores; use arm_stores()")
 
 
 def arm_config(run: str) -> dict:

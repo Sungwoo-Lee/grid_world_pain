@@ -27,13 +27,13 @@ COLS = ["episode_seed", "t", "injury_level", "nutrition", "ate_food", "agent_in_
 
 
 def sweep(arm: str) -> dict:
-    store = L.arm_store(arm)
-    ep = pq.read_table(sorted(glob.glob(store + "episodes_*.parquet")), columns=["episode_seed"])
+    stores = L.arm_stores(arm)
+    ep = pq.read_table(L.store_files(stores, "episodes"), columns=["episode_seed"])
     sd0 = ep.column("episode_seed").to_numpy()
     o = np.argsort(sd0); seed0 = int(sd0[o][0]); nep = len(o)
     acc = {k: np.zeros((4, MAXT)) for k in ["injury", "bush", "nutrition", "ate", "n"]}
     inj0 = np.full(nep, np.nan)
-    for f in sorted(glob.glob(store + "steps_*.parquet")):
+    for f in L.store_files(stores, "steps"):
         tb = pq.read_table(f, columns=COLS)
         sd = tb.column("episode_seed").to_numpy(); t = tb.column("t").to_numpy()
         gi = sd - seed0
