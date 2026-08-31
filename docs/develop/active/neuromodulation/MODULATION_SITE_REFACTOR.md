@@ -8,8 +8,8 @@ last_updated: 2026-08-31
 
 # Modulation Site Refactor — uniform FiLM at selectable sites (RecurrentPPO)
 
-> **Status**: PLANNED (Part A approved by the user; **Part B is a proposal, NOT approved**)
-> **Opened**: 2026-08-31
+> **Status**: PLANNED — **Part A approved and plan-review-cleared** (all five `plan-reviewer` findings addressed, incl. the 🔴 Critical; see [Response to plan-reviewer](#response-to-plan-reviewer-2026-08-31)). **Part B remains a proposal, NOT approved.**
+> **Opened**: 2026-08-31 · **Revised**: 2026-08-31 (post-review)
 > **Related**: [[NEUROMODULATION_ALGORITHM]] · [[NMN_METRICS_REFERENCE]] · [[NMN_ARCHITECTURE_REVIEW]] · [[FILM_MODULATION_PLAN]] · [`docs/project/ideas/20260805_film_rl_context_dependent_policy_discussion.md`](../../../project/ideas/20260805_film_rl_context_dependent_policy_discussion.md) §6 · [`modulation_in_rl_lit_review.md`](../../../project/references/modulation_in_rl/modulation_in_rl_lit_review.md) §8, §12
 
 ---
@@ -75,7 +75,15 @@ The user's wording ("at the output of every hidden layer") admits both readings.
 
 - **PAPL** (ideas doc §6; lit review §8) modulates every layer of both actor and critic, pre-activation, with no normalisation in the modulation path. Direct precedent for A1/A2.
 - **Marquis & Farhood** (lit review §12.3) is the corpus's only controlled actor-vs-critic ablation under PPO. **FiLM + conditioned critic cut errors ~42–57 % across four metrics**; LoRA + conditioned critic roughly *doubled* them. Two conclusions the plan inherits: critic modulation is mechanism-dependent, and **for FiLM specifically the evidence is positive**.
-- **The caveat that applies to us** (ideas doc §6.2): PAPL's stated rule is *modulate the critic when the reward itself is conditioned on the modulating variable* — a condition **our project does not currently meet**, since our reward is not a function of injury. Marquis supplies a second, weaker licence (modulate the critic when the *dynamics* are regime-conditioned). This is a scientific caveat for the experiment design, **not** a reason to withhold the capability; the point of a 2-factor experiment is to measure it.
+- **PAPL's precondition for critic modulation IS met here** (ideas doc §6.2, corrected in `c36a6355`). PAPL's stated rule is *modulate the critic when the reward itself is conditioned on the modulating variable*. Our reward is exactly that: with `use_homeostatic_reward: true` (`configs/environment/default.yaml:181`, live in every current config) the per-step reward is the **reduction in homeostatic drive**, `r_t = D(s_{t-1}) − D(s_t)`, where `D` is the L2 distance of `(satiation, injury)` from `(setpoint, 0)` (`src/environment/core.py:49-53`, `:728-731`). Injury is an argument of the reward and healing is rewarded directly. The condition is met *more* strongly than a merely additive injury term would give, because `∂D/∂injury = injury/D` — the marginal value of healing rises with injury **and** depends on satiation, so hunger and injury are coupled inside the value function rather than separable. **Critic modulation is licensed on PAPL's own criterion.**
+
+  > ⚠️ **An earlier revision of this plan claimed the opposite** ("our reward is not a function of injury"). That was wrong; it was inherited from a since-corrected source doc and caught by `plan-reviewer`. It is recorded here so the false claim is not re-derived from an older copy of this file.
+
+- **The residual caveats that DO survive** — these, not the retracted one, are what the experiment write-up should carry:
+  1. **Conditioner form.** PAPL's modulating variable is an **open-loop clock** — perfectly predictable, so its modulator has a trivially learnable signal. Ours is **contingent sensed injury**, and it arrives through an alpha-kernel smoothing delay (`injury_smoothing_duration: 3`, no instantaneous leak), so the modulator **cannot react on the step the damage occurs**. That is a real disanalogy and it is about *observability of the conditioner*, not about the reward.
+  2. **Sign is mechanism-dependent.** Marquis shows conditioning the critic helps or hurts depending on *how* it is conditioned — positive for FiLM under PPO (error cut ~40–50 %), negative for LoRA. So "critic modulation works" is not transferable as a bare claim; it transfers only for the FiLM mechanism this plan implements.
+
+- **Reader's footgun in the reward code** (confirmed independently by `plan-reviewer`): two different "drive" quantities live in the same function. `calculate_drive` (`core.py:49-53`) is the **unnormalised L2 norm** that actually feeds the reward. `drive_hunger` / `drive_injury` (`core.py:725-726`) are **normalised, logging-only** quantities (sum-of-squares form), and their inline comment sits *directly above* the reward computation. Anyone skimming that block to learn what the reward is will read the wrong function. Do not "fix" this here — it is noted so the next reader of §F does not repeat the retracted claim.
 - **Marquis §V-C** additionally offers a Lipschitz-bound diagnostic (product of the modulator's weight-matrix spectral norms) that tracked stability across their variants, with spectral normalisation as the remedy. **Explicitly out of scope here** — noted as a candidate follow-up metric so it is not silently forgotten.
 
 ### G. Known-bug collisions (from the bug registry)
@@ -112,6 +120,7 @@ Four recorded items bear directly on this work:
 | **D13** | A config with `type` set but **all four sites false and temperature disabled** raises at construction. | Otherwise the modulator GRU runs every step, consumes memory and receives no gradient — dead weight with no error, the same class of failure as the fixed LSTM+`z_memory` bug. |
 | **D14** | The blanket `modulation + rnn_type == "LSTM"` guard (`recurrent_ppo_network.py:220-226`) is **left exactly as-is**. | Narrowing it to "only when `gate_bias`" is defensible but is unrequested scope, and no config in the repo uses LSTM with modulation. Explicit non-goal. |
 | **D15** | `DreamerNeuromodulatorRNN` (same file, `neuromodulator.py:203-379`) is **not touched**. | Dreamer is a separate, archived-config stack. Shared file, separate class. |
+| **D16** | **Archived NMN runs stop being re-evaluatable, and that is intended.** No compatibility shim, no translation layer at the eval boundary, no manual saved-config migration procedure, no extension of `--agent-config` to the other tools. The D9 hard error is the whole response. | **User decision, 2026-08-31** (see "Archived-run evaluation" below for the reasoning and the blast radius). |
 
 #### The config surface
 
@@ -214,6 +223,20 @@ Each edited file's header comment must gain a one-line migration note so a futur
 - **Any new configuration** — actor or critic enabled, `rnn_mechanism: "activation"`, a site turned off, or temperature disabled — produces a **different parameter tree, and old checkpoints will not restore into it.**
 - **Mitigation: none warranted, and here is why.** Those configurations are new architectures; there is no prior run to resume, and no scientific claim depends on continuity with one. Writing a checkpoint-remapping shim would be code with exactly zero callers. The one thing that *is* warranted is a loud failure rather than a silent partial restore — and that already exists: the Finding-L3 fix (`2ad9104`) made restore assert completeness instead of quietly keeping randomly-initialised weights. Confirm that assertion still fires (Checkpoint C5).
 
+#### Archived-run evaluation — a decided policy, not an open risk (D16)
+
+**The problem, stated plainly.** All three evaluation tools rebuild the model from the **run's own saved copy** of the agent config (`models/config.yaml` inside the run directory) — not from the maintained files under `configs/models/`. See `evaluation.py:235`, `scripts/eval/eval_rollout.py:1064-1071`, `scripts/eval/traj_collect/collect_trajectories.py:693`. Every archived NMN run's saved copy still carries the flat `temp_clip` key and none of the new mandatory keys. So after this refactor, re-running an evaluation, a dwell-history pass, or a trajectory collection over an archived NMN run **fails immediately** with the D9 migration error. Only `eval_rollout.py` has an `--agent-config` override; the other two have none.
+
+**Decision (user, 2026-08-31): accept it. The hard failure is correct and intended.**
+
+**Rationale — this is a guard rail, not a defect.** Once the modulation architecture has changed underneath a checkpoint, re-evaluating that checkpoint produces numbers that are **not comparable to anything**: not to the run's own original results (different architecture), and not to post-refactor runs (different training). A refusal to load is therefore the *desired* behaviour — it makes it structurally impossible to silently mix pre- and post-refactor results in one table. The correct response to the error is **re-training under the new architecture, not re-evaluating the old checkpoint.**
+
+**Blast radius — narrower than it first looks.** Only archived **NMN** runs are affected. Every run whose agent config has `modulation.type: null` re-evaluates completely untouched, because all new keys are gated on `type` being non-null and `train.py:1138-1140` collapses null to `modulation_config = None` before construction, so not one new key is ever read. Concretely, that covers **the sensor-ladder, directional-sensor, rest-premium and dwell studies** — the bulk of what actually gets re-analysed. (Same reasoning as "Configs with `type: null` need no edit at all" above.)
+
+**Implementation requirement that follows.** The D9 error must be **self-explaining about the cause and the remedy**, not merely name a missing key. When validation rejects a saved config carrying legacy flat `temp_clip`, the message must say that the run **predates the modulation-site refactor**, that its architecture no longer exists in the code, and that **re-training — not re-evaluation — is the correct response**. The exact wording is in File Changes §2.
+
+**Explicitly NOT done** (all rejected by the same decision): no `--agent-config` on `evaluation.py` or `collect_trajectories.py`; no read-only flat-`temp_clip` → legacy-block translation at the eval boundary; no documented manual saved-config migration procedure. Adding any of them would re-open the door this decision deliberately closes.
+
 #### JAX / Flax NNX staticness — why nothing recompiles per step
 
 The site enables and the mechanism selector are **plain Python attributes on an `nnx.Module`, never traced values**. Under `nnx.split`, non-`Variable` attributes land in the **graphdef**, which is the static half of the jit cache key. They are therefore resolved once at trace time and are constant for the lifetime of a model instance.
@@ -229,7 +252,7 @@ Two concrete requirements follow:
 
 #### 1. `src/models/neuromodulator.py` — `NeuromodulatorRNN` only (lines 31–186)
 
-**`ModulatorOutput` (lines 31–38)** — extend. Field order: keep the four existing encoder fields **first and unchanged**, append new fields, keep `temperature` last so any positional reader in an old branch still lines up on the encoder fields.
+**`ModulatorOutput` (lines 31–38)** — extend. Field order below is chosen for **readability only** (sites grouped in data-flow order: encoder → rnn → actor → critic → temperature); nothing depends on it. An earlier draft justified the ordering as protecting positional readers — that rationale was wrong and is withdrawn: `z_memory` and `temperature` both move index regardless, and `plan-reviewer` grepped the tree and confirmed **every** access is by attribute name. The implementer is free to reorder if a different grouping reads better.
 
 ```python
 # AFTER:
@@ -308,12 +331,28 @@ Then, inside `if self.modulation_enabled:`, before anything else:
 
 ```python
 # --- A3 migration guard: the flat temp_clip key was replaced by temperature.{enabled,clip}
+# The message must be self-explaining for the TWO distinct readers who will hit it (D16):
+#   (a) someone editing a live config    -> tell them the new key spelling;
+#   (b) someone re-evaluating an ARCHIVED run from its saved models/config.yaml
+#       -> tell them the architecture changed and RE-TRAINING, not re-evaluation,
+#          is the correct response. Do not shorten this to "missing key".
 if 'temp_clip' in modulation_config:
     raise ValueError(
-        "modulation.temp_clip has been replaced by modulation.temperature.{enabled, clip}. "
-        "Temperature modulation is now OPT-IN and defaults to disabled. To reproduce this "
-        "config's previous behaviour set:\n"
+        "modulation.temp_clip is no longer supported: it was replaced by "
+        "modulation.temperature.{enabled, clip} in the modulation-site refactor "
+        "(2026-08-31). Temperature modulation is now OPT-IN and defaults to disabled.\n"
+        "\n"
+        "If you are EDITING A LIVE CONFIG, replace the flat key with:\n"
         "    temperature:\n      enabled: true\n      clip: <the old temp_clip value>\n"
+        "(plus the now-mandatory `sites:` block and `rnn_mechanism:`).\n"
+        "\n"
+        "If you are RE-EVALUATING AN ARCHIVED RUN, this config was saved BEFORE the "
+        "modulation-site refactor, so the architecture it describes no longer exists in "
+        "this code. Its checkpoint cannot be restored, and results produced from it would "
+        "not be comparable with either its own original results or any post-refactor run. "
+        "The correct response is to RE-TRAIN under the current architecture, NOT to "
+        "re-evaluate this checkpoint. This refusal is intentional (plan decision D16).\n"
+        "\n"
         "See docs/develop/active/neuromodulation/MODULATION_SITE_REFACTOR.md."
     )
 
@@ -452,13 +491,13 @@ Exactly the block shown above, per-file ceiling preserved, plus a header migrati
 
 | Test | What it pins |
 |---|---|
-| `test_baseline_forward_matches_golden` | Unmodulated path bit-identity vs a pre-change golden fixture. |
-| `test_baseline_param_tree_matches_golden` | Unmodulated parameter tree: identical key set, shapes **and values** from a fixed seed. |
-| `test_legacy_equivalent_forward_matches_golden` | `sites={encoder,rnn}`, `rnn_mechanism="gate_bias"`, `temperature.enabled=true` reproduces the pre-change modulated forward pass bitwise. |
-| `test_legacy_equivalent_param_tree_matches_golden` | Same, for the parameter tree (this is what makes old checkpoints restorable). |
+| `test_baseline_forward_matches_golden` | Unmodulated path bit-identity vs a pre-change golden fixture. **Parametrised over both fixture modes** (flat/no-LN and hierarchical/LN). |
+| `test_baseline_param_tree_matches_golden` | Unmodulated parameter tree: identical key set, shapes **and values** from a fixed seed. **Both modes.** |
+| `test_legacy_equivalent_forward_matches_golden` | `sites={encoder,rnn}`, `rnn_mechanism="gate_bias"`, `temperature.enabled=true` reproduces the pre-change modulated forward pass bitwise. **Both modes** — the hierarchical/LN case is the one that covers what real runs execute. |
+| `test_legacy_equivalent_param_tree_matches_golden` | Same, for the parameter tree (this is what makes old checkpoints restorable). **Both modes.** |
 | `test_site_toggles_build_expected_heads` | Parametrised over all 15 non-empty site subsets × both mechanisms: asserts exactly the expected `head_*` / `z_*_baseline` attributes exist and no others. |
 | `test_all_sites_off_and_temperature_off_raises` | D13. |
-| `test_legacy_temp_clip_key_raises` | D9 — must match on the migration message. |
+| `test_legacy_temp_clip_key_raises` | D9 — must match on the migration message, **including the archived-run clause**: assert the message mentions re-training (not re-evaluation) as the remedy, so a future message edit cannot quietly strip the D16 guidance. |
 | `test_missing_site_key_raises` / `test_missing_rnn_mechanism_raises` / `test_missing_temperature_enabled_raises` | No-fallback-defaults contract, one test per new mandatory key. |
 | `test_unknown_rnn_mechanism_raises` | D12. |
 | `test_temperature_disabled_leaves_logits_untouched` | Builds two models sharing weights, temp on vs off; asserts `head_action` absent and logits differ only by the division. |
@@ -473,11 +512,22 @@ Exactly the block shown above, per-file ceiling preserved, plus a header migrati
 
 #### 6. Golden fixtures — `tests/fixtures/modulation/`
 
-Two `.npz` files (baseline + legacy-equivalent), each holding the flattened parameter tree and the forward-pass outputs for a fixed seed, tiny dims (`input_dim=8, hidden_size=16, action_dim=4`), flat encoding, `use_layer_norm=false`, and one fixed observation.
+**Four** `.npz` files — a (baseline, legacy-equivalent) **pair in each of two encoding modes** — each holding the flattened parameter tree and the forward-pass outputs for a fixed seed and one fixed observation:
+
+| Fixture | Encoding | LayerNorm | Why it exists |
+|---|---|---|---|
+| `flat_baseline.npz` | flat | off | Minimal, fast, isolates the unmodulated path |
+| `flat_legacy.npz` | flat | off | Minimal, isolates the legacy-equivalent modulated path |
+| `hier_ln_baseline.npz` | **hierarchical** | **on** | **The path every real run uses** |
+| `hier_ln_legacy.npz` | **hierarchical** | **on** | Same, modulated |
+
+**Why the second pair is mandatory, not optional** (`plan-reviewer` finding 4): all 12 real NMN configs are `encoding_mode: "hierarchical"` with `use_layer_norm: true` (e.g. `recurrent_ppo_nmn_het_film_g1.yaml:30,37`). A flat/no-LN fixture never enters `forward_with_modulation`'s hierarchical branch and never exercises the LayerNorm placement — so with only the flat pair, bit-identity of the path the project actually runs would rest entirely on V4 and C5, i.e. on one expensive end-to-end run rather than on a cheap unit test. The hierarchical pair needs a realistic `observation_breakdown` (a small multi-sensor dict, not a single flat block) so the unimodal-per-sensor stage and the multimodal hub are both non-trivial.
+
+Dimensions for the flat pair stay tiny (`input_dim=8, hidden_size=16, action_dim=4`); the hierarchical pair uses whatever minimal breakdown makes both encoder stages real — still small, still one fixed observation.
 
 Generator: `tests/fixtures/modulation/generate_golden.py`. **Deliberately NOT under `scripts/`** — placing it there would trigger the [[SCRIPTS_DEPENDENCY_MAP]] maintenance contract for a test-only helper.
 
-⚠️ **Ordering hazard, and the plan's single most skippable step:** the fixtures must be generated on the **pre-change working tree**, before `src/` is edited. Generating them afterwards makes every parity test a tautology that passes no matter what broke. This is Checkpoint C0 and it comes first.
+⚠️ **Ordering hazard, and the plan's single most skippable step:** the fixtures must be generated on the **pre-change working tree**, before `src/` is edited. Generating them afterwards makes every parity test a tautology that passes no matter what broke. This is Checkpoint C0a and it comes first. **The same hazard applies to V4's "before" losses** — see C0b.
 
 #### 7. Docs
 
@@ -517,7 +567,7 @@ Every row names evidence that could actually come out negative.
 | V1 | Unmodulated baseline is bit-identical | `test_baseline_forward_matches_golden` + `test_baseline_param_tree_matches_golden` against fixtures captured **pre-change** | An accidental edit inside the `else:` branch, or a reordered `nnx.Linear` shifting the RNG stream |
 | V2 | Legacy-equivalent modulated config is bit-identical | The two `test_legacy_equivalent_*` tests | Any new head constructed before `head_action`; the RNN-cell branch picking `nnx.GRUCell` |
 | V3 | Existing NMN checkpoints still restore | Restore a real archived `recurrent_ppo_nmn_*` checkpoint with its migrated config; the completeness assertion from `2ad9104` must not fire | Renamed head attributes; changed baseline shapes |
-| V4 | End-to-end training is unchanged for a migrated config | Run ~20 iterations of `recurrent_ppo_nmn_het_film_g1.yaml` at a fixed seed **before** and **after**; per-iteration losses must match to float equality | Anything V1–V2 missed that only shows up through the optimiser |
+| V4 | End-to-end training is unchanged for a migrated config | Run ~20 iterations of `recurrent_ppo_nmn_het_film_g1.yaml` at a fixed seed **before** and **after**; per-iteration losses must match to float equality. **The "before" half is subject to the same ordering discipline as the fixtures — see C0b**; and the whole before/after pair must be bracketed by the sequencing rule below | Anything V1–V2 missed that only shows up through the optimiser; **or a silently non-comparable "before" half captured after `src/` was already touched** |
 | V5 | Each new site actually does something | For each of actor / critic / rnn-activation alone: perturb that head's bias and assert the model's output changes; assert `optax.global_norm` of that head's gradient is non-zero after one PPO update | A head that is constructed but never read — the exact failure mode of the fixed LSTM/`z_memory` bug |
 | V6 | Disabling a site really disables it | With `sites.actor=false`, assert `head_actor` is absent **and** that the forward output equals the same-weights model with the actor path bypassed | A stale `getattr(..., None)` making a disabled site silently active |
 | V7 | No new mandatory key can be silently defaulted | One raising test per key (§5) | `.get(key, default)` sneaking in |
@@ -531,9 +581,13 @@ Every row names evidence that could actually come out negative.
 
 ## Checkpoints
 
-Ordered. C0 is genuinely first — doing it late invalidates C1–C4.
+Ordered. C0a/C0b are genuinely first — doing either late invalidates C1–C4 and V4 respectively.
 
-- [ ] **C0 — Capture golden fixtures on the UNMODIFIED tree.** Run `tests/fixtures/modulation/generate_golden.py` before editing any file under `src/`. Confirm via `git status` that `src/` is clean at capture time and record the commit SHA in the Implementation Report.
+- [ ] **C0a — Capture all four golden fixtures on the UNMODIFIED tree.** Run `tests/fixtures/modulation/generate_golden.py` before editing any file under `src/`; it must emit the flat pair **and** the hierarchical+LayerNorm pair. Confirm via `git status` that `src/` is clean at capture time and record the commit SHA in the Implementation Report.
+- [ ] **C0b — Capture V4's "before" losses, also on the UNMODIFIED tree, in the same sitting as C0a.** V4 is the only bitwise check that exercises the real hierarchical-encoder + LayerNorm path *through the optimiser*, and its "before" half is only meaningful if produced pre-change. Run ~20 iterations of `recurrent_ppo_nmn_het_film_g1.yaml` at a fixed seed and save the per-iteration losses to a file under `tmp/`, recording seed, node, GPU and the same SHA as C0a.
+  **Fallback if C0b was skipped or the run is lost:** do **not** improvise a "before" from the modified tree. Regenerate it from the SHA recorded in C0a via a throwaway git worktree — `git worktree add /tmp/pre_refactor <SHA>` — run the 20 iterations there with the identical seed/node/GPU, then `git worktree remove`. Note in the Implementation Report which route was used. (A worktree is used rather than a branch switch because this repo's git-safety rule forbids switching with untracked data present.)
+
+  ⚠️ **Sequencing rule — the MC-return-bootstrap fix.** The open Monte-Carlo return-bootstrap units bug (Risks item 2, registry row P1 #5) changes the loss values V4 compares. If that fix lands during this work, it must land **strictly before C0b** or **strictly after V4's "after" half** — **never between the two halves**. Landing it in between makes the two sides differ for a reason that has nothing to do with this refactor, and V4 then fails (or, worse, appears to fail) uninterpretably. If the fix lands between, both halves must be re-run.
 - [ ] **C1** — After editing `neuromodulator.py` + `recurrent_ppo_network.py`, the baseline golden tests pass.
 - [ ] **C2** — All three existing tests in `tests/models/test_network_construction.py` pass with the updated fixture dict.
 - [ ] **C3** — `tests/scripts/test_evaluation_model_rebuild.py` passes, including its unmodulated round-trip case.
@@ -552,8 +606,8 @@ Ordered. C0 is genuinely first — doing it late invalidates C1–C4.
 ## Risks the user should decide on
 
 1. **`lr_critic` is dead — the modulator and critic train at `lr_actor` (5× the advertised critic rate).** Recorded open bug (registry row A1). A2 adds FiLM heads that feed the critic, so those heads will also train at 5× the intended critic rate. This does not block the refactor, but it will confound any critic-modulation arm of the 2-factor experiment. **Decide before launching, not before merging.**
-2. **The Monte-Carlo return bootstrap is in the wrong units** (registry row P1 #5, severity **High**, `recurrent_ppo_trainer.py:374-380`): the window-edge seed is added onto un-rescaled rewards while the critic trains on within-window-normalised returns. It is live in every config, so it contaminates the *baseline* that any modulated arm would be compared against. **This is a pre-experiment blocker, not a refactor blocker** — but it should be fixed before the 2-factor runs launch, or the comparison inherits it.
-3. **PAPL's stated precondition for critic modulation is not met by this project** — our reward is not a function of injury (ideas doc §6.2). The capability is still worth having, but the experiment write-up must not claim PAPL as a licence for critic modulation without addressing this. Raised here so it lands in the design doc rather than in review.
+2. **The Monte-Carlo return bootstrap is in the wrong units** (registry row P1 #5, severity **High**, `recurrent_ppo_trainer.py:374-380`): the window-edge seed is added onto un-rescaled rewards while the critic trains on within-window-normalised returns. It is live in every config, so it contaminates the *baseline* that any modulated arm would be compared against. **This is a pre-experiment blocker, not a refactor blocker** — but it should be fixed before the 2-factor runs launch, or the comparison inherits it. ⚠️ **It does carry one hard constraint on *this* work**: because it changes loss values, it must not land between V4's "before" and "after" halves. See the sequencing rule under Checkpoint C0b.
+3. **~~PAPL's precondition for critic modulation is not met~~ — RETRACTED 2026-08-31, the precondition IS met.** The earlier text here claimed our reward is not a function of injury. That is false: the live reward is the step-to-step reduction in homeostatic drive, and injury is one of the two coordinates of that drive (Analysis §F). Nothing about the refactor changes; what changes is what the experiment write-up must say. **The write-up must claim PAPL's licence, not disclaim it**, and must carry instead the two residual caveats in §F: PAPL's conditioner is an open-loop clock while ours is contingent sensed injury delayed by a 3-step smoothing kernel, and Marquis shows the sign of critic conditioning is mechanism-dependent (positive for FiLM, negative for LoRA). This item is left in place rather than deleted so a reader of an older copy of this plan can see it was withdrawn.
 4. **`save_snapshot.py` is broken today and stays broken.** It is a second, never-swept instance of the Finding-A hand-built-whitelist bug, plus a missing `encoding_config`. Recommend asking `bug-curator` to record it (Status OPEN, Severity Low) and fixing it in a separate one-file change.
 5. **Pre-activation vs post-activation for actor/critic** (Analysis §E) — resolved to pre-activation on the strength of the encoder-parity constraint and PAPL. Overrule now if that reading is wrong; changing it later invalidates any runs launched in the meantime.
 6. **Whether to land Part B in the same change.** If Part B is approved now, the same 12 configs get one edit instead of two, and the 2-factor experiment becomes runnable in one step. If deferred, the 12 files are edited twice.
@@ -610,7 +664,12 @@ A `input_sensors: "interoceptive"` preset would need a hard-coded name→sensor-
 > **Date**: [date]
 
 <!-- developer: fill this in. Must include:
-     - the commit SHA the golden fixtures were captured at (C0)
+     - the commit SHA the golden fixtures were captured at (C0a), and confirmation
+       that all FOUR fixtures (flat pair + hierarchical/LN pair) were captured there
+     - where V4's "before" losses live and whether they came from C0b directly or
+       from a worktree regeneration at the recorded SHA
+     - whether the MC-return-bootstrap fix landed during this work, and if so on which
+       side of V4's before/after pair (it must never land between them — see C0b)
      - before/after speed numbers with node, GPU, config, seed (C11)
      - any deviation from the plan and why -->
 
@@ -638,3 +697,21 @@ A `input_sensors: "interoceptive"` preset would need a hard-coded name→sensor-
 Everything else checked out: the golden-fixture verification is genuinely non-circular (fixtures are pre-change ground truth), the RNG-order/bit-identity argument holds structurally for this Flax version, the 12-file migration inventory and ceilings are exact, D6's confound-removal claim is correct (the modulator is constructed last, so the task network's init draws match the baseline), the maintenance-contract audit claims were re-verified, and the cited bug-registry rows exist as described.
 
 — Reviewed by: plan-reviewer
+
+---
+
+## Response to plan-reviewer (2026-08-31)
+
+All five findings are addressed. Nothing was declined.
+
+| # | Sev | Finding | Disposition | Where in this doc |
+|---|:--:|---|---|---|
+| 1 | 🔴 | "Our reward is not a function of injury" is false; PAPL's precondition IS met | **Fixed — claim retracted in both locations.** §F bullet 3 now states the precondition is met, shows the reward is `r_t = D(s_{t-1}) − D(s_t)` with `D` the L2 distance of `(satiation, injury)` from `(setpoint, 0)`, and notes the coupling `∂D/∂injury = injury/D`. Risks item 3 is struck through and rewritten to instruct the write-up to *claim* PAPL's licence, not disclaim it. The two honest residual caveats (open-loop clock vs. delayed contingent sensed injury; FiLM-vs-LoRA mechanism dependence) replace it. A retraction marker is left in both places so an older copy of this file cannot silently win. The `calculate_drive` vs `drive_hunger`/`drive_injury` reader-footgun is recorded in §F. | Analysis §F; Risks 3 |
+| 2 | 🟡 | Archived NMN runs break on re-evaluation because the eval tools load the run's *saved* config | **Resolved by user decision — converted from open risk to recorded decision D16.** Accept the hard failure; it is a guard rail against mixing pre- and post-refactor results, since re-evaluating a checkpoint whose architecture has changed yields numbers comparable to nothing. No shim, no translation layer, no manual migration procedure, no `--agent-config` on the other two tools. Two follow-ons added: the error message must say *re-train, not re-evaluate*, and the blast radius is stated explicitly (NMN runs only — all `type: null` runs, i.e. the sensor-ladder, directional-sensor, rest-premium and dwell work, are untouched). | D16; §"Archived-run evaluation"; File Changes §2 error text; `test_legacy_temp_clip_key_raises` |
+| 3 | 🟡 | V4's "before" half needs C0's ordering discipline | **Fixed — C0 split into C0a (fixtures) and C0b (V4 before-side losses), both on the unmodified tree.** A worktree-regeneration fallback at the recorded SHA is documented for the case where C0b is missed. The MC-return-bootstrap sequencing constraint is recorded alongside it and cross-linked from Risks item 2. | C0a / C0b; V4 |
+| 4 | 🟡 | Fixtures are flat + no LayerNorm; all real NMN configs are hierarchical + LN | **Fixed — a second fixture pair in hierarchical + LayerNorm mode is now mandatory**, and the four parity tests are parametrised over both modes. Without it, bit-identity of the path real runs execute would rest solely on V4/C5. | §6 Golden fixtures; §5 test table |
+| 5 | 🟢 | The "keep temperature last for positional readers" rationale is moot | **Fixed — rationale deleted.** Field order is now stated as readability-only, with an explicit note that all access is by attribute and the implementer may reorder. | File Changes §1 |
+
+**Not addressed, by design:** Part B (modulator input slicing) is unchanged and remains **unapproved** — the user has not ruled on it. The reviewer raised no Part B findings.
+
+— Revised by: senior-developer
