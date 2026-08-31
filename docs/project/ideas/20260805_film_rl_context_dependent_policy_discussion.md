@@ -510,8 +510,13 @@ distributional-PPO variant. That is real work, not a config change.
 2. **Should the conditioner be the full observation or a low-dimensional
    interoceptive slice?** Every precedent that works uses a low-dimensional
    conditioner. This is the single most consequential open design choice.
-3. **Is a reward that is *not* conditioned on injury a blocker for critic
-   modulation?** PAPL's criterion says our critic-side case is unproven.
+3. ~~**Is a reward that is *not* conditioned on injury a blocker for critic
+   modulation?**~~ **RESOLVED 2026-08-31 — the premise was false.** The reward IS
+   a function of injury (see the correction in §6.2), so PAPL's criterion is met
+   and critic modulation is licensed. The residual questions are narrower: PAPL's
+   conditioner is an open-loop clock versus our contingent sensed injury, and
+   Marquis shows the sign of critic conditioning is mechanism-dependent
+   (positive for FiLM, negative for LoRA).
 4. **Fourier expansion of the conditioner** — untested here, cheap, and
    addresses a documented failure mode.
 5. **Non-negative gains** — should γ be constrained ≥ 0?
