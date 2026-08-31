@@ -624,3 +624,17 @@ A `input_sensors: "interoceptive"` preset would need a hard-coded name→sensor-
 | | | | |
 
 **Conclusion**: [one-line summary]
+
+---
+
+## Feedback from plan-reviewer (2026-08-31)
+
+**Verdict: SOUND WITH CONCERNS — one 🔴 Critical text correction required before approval.** Full review: [`docs/reviews/plan_modulation_site_refactor.md`](../../../reviews/plan_modulation_site_refactor.md).
+
+1. 🔴 **Analysis §F bullet 3 and Risks item 3 are factually wrong and must be rewritten.** They claim "our reward is not a function of injury", so PAPL's precondition for critic modulation is unmet. Verified false against the code: `src/environment/core.py:49-53` + `:728-731` — with `use_homeostatic_reward: true` (`configs/environment/default.yaml:181`) the reward is the reduction in homeostatic drive, and the drive is the L2 distance of `(satiation, injury)` from the setpoint. Injury is in the reward; healing is rewarded; **PAPL's precondition IS met.** The source doc was corrected in `c36a6355` after this plan was committed. The honest residual caveats: PAPL's conditioner is an open-loop clock vs. our contingent sensed injury; Marquis shows critic modulation is mechanism-dependent (positive for FiLM).
+2. 🟡 **Archived-run evaluation breaks by default after migration.** `evaluation.py:235`, `scripts/eval/eval_rollout.py:1064-1071`, and `scripts/eval/traj_collect/collect_trajectories.py:693` all rebuild models from the run's **saved** `models/config.yaml`, which still carries flat `temp_clip` — so the D9 hard error fires on every re-analysis of an archived NMN run. Loud, not silent, but the plan's checkpoint-compatibility section assumes the *migrated* config is loaded, which is not the tools' default. Needs a decided policy (documented manual migration + override flags, or a read-only translation at the eval boundary) before implementation.
+3. 🟡 **V4's "before" half needs the same ordering discipline as C0** (capture pre-change, or pin the SHA for a worktree regen), and the golden fixtures cover only flat encoding without LayerNorm while every real NMN config is hierarchical + LN — consider a second fixture pair.
+
+Everything else checked out: the golden-fixture verification is genuinely non-circular (fixtures are pre-change ground truth), the RNG-order/bit-identity argument holds structurally for this Flax version, the 12-file migration inventory and ceilings are exact, D6's confound-removal claim is correct (the modulator is constructed last, so the task network's init draws match the baseline), the maintenance-contract audit claims were re-verified, and the cited bug-registry rows exist as described.
+
+— Reviewed by: plan-reviewer
