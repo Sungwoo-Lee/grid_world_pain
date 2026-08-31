@@ -114,3 +114,58 @@ def outward_label(ax, value, y, pad, fmt="{:+.1f}", color=None, fontsize=7.2):
     x = value + (pad if value >= 0 else -pad)
     ax.text(x, y, fmt.format(value), va="center",
             ha="left" if value >= 0 else "right", fontsize=fontsize, color=color or INK)
+
+
+def group_lines(ax, x, curves: dict, grp: dict, spotlight=(), lw_thin=0.9, lw_bold=2.5,
+                label_end=False, alpha=0.30):
+    """Draw one line per arm, coloured by the two-group split rather than a 14-step ramp.
+
+    Register entry F12: more than about six series cannot be told apart by colour alone, and a
+    continuous ramp is worst of all, because the arms a reader is asked to compare are usually
+    ADJACENT in the ramp. Colour instead by the distinction the argument turns on, draw everything
+    else thin, and name only the series the prose discusses.
+
+    `curves` maps arm -> y values, `grp` maps arm -> True/False (resolves identity), `spotlight`
+    names the arms to draw bold. Returns the legend handles.
+    """
+    import matplotlib.pyplot as _plt
+    for a, y in curves.items():
+        c = GROUP_YES if grp[a] else GROUP_NO
+        if a in spotlight:
+            ax.plot(x, y, lw=lw_bold, color=c, marker="o", ms=4.0, zorder=3)
+            if label_end:
+                ax.annotate(f" {a}", (x[-1], y[-1]), fontsize=7.2, color=c, va="center",
+                            xytext=(4, 0), textcoords="offset points", zorder=4)
+        else:
+            ax.plot(x, y, lw=lw_thin, color=c, alpha=alpha, zorder=2)
+    return [_plt.Line2D([], [], color=GROUP_YES, lw=2.2,
+                        label="sight resolves WHAT it sees  (9 arms)"),
+            _plt.Line2D([], [], color=GROUP_NO, lw=2.2,
+                        label="sight cannot resolve WHAT it sees  (5 arms)"),
+            _plt.Line2D([], [], color=MUTED, lw=2.4, marker="o", ms=4,
+                        label="thick + named = an arm the text discusses")]
+
+
+def stagger_end_labels(ax, points, min_gap_frac=0.055):
+    """Place end-of-line labels so they cannot overprint each other.
+
+    `points` is a list of (x, y, text, colour). Three lines that finish at nearly the same height
+    printed their names on top of one another, which read as garble.
+    """
+    if not points:
+        return
+    pts = sorted(points, key=lambda p: p[1])
+    lo, hi = ax.get_ylim()
+    gap = (hi - lo) * min_gap_frac
+    ys = [p[1] for p in pts]
+    for i in range(1, len(ys)):
+        ys[i] = max(ys[i], ys[i - 1] + gap)
+    over = ys[-1] - hi
+    if over > 0:
+        ys = [y - over for y in ys]
+        for i in range(len(ys) - 2, -1, -1):
+            ys[i] = min(ys[i], ys[i + 1] - gap)
+    for (x, y0, txt, col), y in zip(pts, ys):
+        ax.annotate(txt, xy=(x, y0), xytext=(x + (ax.get_xlim()[1] - ax.get_xlim()[0]) * 0.02, y),
+                    fontsize=7.2, color=col, va="center", ha="left",
+                    arrowprops=dict(arrowstyle="-", lw=0.5, color=MUTED, shrinkA=0, shrinkB=2))

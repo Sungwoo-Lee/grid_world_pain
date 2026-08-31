@@ -13,7 +13,7 @@ falls back into the same false alarm as an agent with no useful sight whatsoever
 
 HOW IT IS COMPUTED. For each arm and each animal class, the proximity effect is
     P(in bush | nearest animal 1-2 cells away) - P(in bush | nearest animal 6+ cells away)
-in percentage points, over all 300,000 episodes. Distance is chebyshev (the moves a king would
+in percentage points, over all 1,000,000 episodes. Distance is chebyshev (the moves a king would
 need) and is read off the row BEFORE the step, since that is the observation the action was chosen
 on. Counts are pooled before the ratio is taken, so a distance bin with more steps carries more
 weight. The left panel shows both classes with a line joining them, so the length of the line is

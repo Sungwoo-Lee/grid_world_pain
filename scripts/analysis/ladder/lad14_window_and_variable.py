@@ -39,6 +39,8 @@ import numpy as np, matplotlib.pyplot as plt
 import _ladder as L, _plot as PL
 
 D = L.load_all(); arms = L.ARM_ORDER; col = PL.arm_colors()
+GRP = {a: L.resolves_identity(D[a]['sensory']) for a in arms}
+SPOT = ('A_baseline', 'V4_blur05')
 x = np.arange(4)
 
 early, whole = {}, {}
@@ -66,15 +68,13 @@ panels = [
     (carried, "C.  CARRIED wound, whole episode\ndifferent variable - a consequence, not a cause",
      "wound it was carrying when it decided  (0-100)")]
 for j, (dat, ttl, xl) in enumerate(panels):
-    for a in arms:
-        ax[j].plot(x, dat[a], marker="o", ms=4, lw=1.7, color=col[a],
-                   label=f"{a} - {L.ARM_LABEL[a][0]}")
+    h = PL.group_lines(ax[j], x, dat, GRP, spotlight=SPOT, label_end=(j == 2))
+    ax[j].set_xlim(-0.25, 3.9 if j == 2 else 3.3)
     ax[j].set_xticks(x); ax[j].set_xticklabels(L.INJ_NAMES)
     ax[j].set_xlabel(xl)
     ax[j].set_ylabel("bush dwell  (% of those steps spent in a bush)")
     ax[j].set_title(ttl, fontsize=9.3, loc="left", pad=8)
-ax[2].legend(loc="center left", bbox_to_anchor=(1.02, 0.5), fontsize=7.4,
-             title="sensor-ladder arm", title_fontsize=8)
+ax[0].legend(handles=h, loc="upper left", fontsize=7.6)
 PL.finish(fig, f"{L.FIG_ROOT}/lad14_window_and_variable.png")
 print(f"{'arm':22}{'A assigned/early':>18}{'B assigned/whole':>18}{'C carried/whole':>18}"
       "   (quarter 4 minus quarter 1, percentage points)")

@@ -52,6 +52,7 @@ window.__probe = function () {
   var out = {overflow:null, stickout:[], narrow:[], zero:[], overlap:[], img:[]};
   var vw = document.documentElement.clientWidth;
   var de = document.documentElement;
+  out.pageHeight = Math.max(de.scrollHeight, document.body.scrollHeight);
   if (de.scrollWidth > de.clientWidth + 1)
     out.overflow = {scrollWidth: de.scrollWidth, clientWidth: de.clientWidth};
 
@@ -208,7 +209,14 @@ def main():
                 print(f"  ... and {len(r[k])-8} more '{label}'")
         if not r["overflow"] and not any(r[k] for k in ("stickout","narrow","zero","overlap","img")):
             print("  clean")
-        print(f"  screenshot: {shot}")
+        ph = int(r.get("pageHeight") or 0)
+        if ph > a.shot_height:
+            problems += 1
+            print(f"  SCREENSHOT TRUNCATED: the page is {ph:,}px tall but the capture is only "
+                  f"{a.shot_height:,}px. The bottom {ph - a.shot_height:,}px was never rendered to "
+                  f"an image and CANNOT have been reviewed. Re-run with "
+                  f"--shot-height {int(ph * 1.05 // 1000 + 1) * 1000}.")
+        print(f"  screenshot: {shot}   (page is {ph:,}px tall)")
 
     print(f"\n{'='*74}")
     print(f"{problems} problem(s) found across {len(a.widths)} viewport(s)")

@@ -181,6 +181,69 @@ series the text asked the reader to tell apart.
 **Rule:** colour by the distinction the argument turns on, draw the rest thin, and label the
 discussed series directly on the line.
 
+### F13 — per-row annotations not reordered when the rows were
+
+**Saw:** every value label in the report's headline figure sat on the wrong bar. The 166-step bar
+was labelled 250; the longest bush-dwell bar was labelled with the smallest number.
+
+**Cause:** fixing F-something-else (the y-axis said "poorest at the bottom" while plotting the
+poorest at the top) meant changing the bar order from `np.arange(n)[::-1]` to `np.arange(n)`. The
+bars moved. The separate annotation loop still placed its text at `len(arms) - 1 - i`, which was
+correct only for the old order.
+
+**Why nothing caught it:** the figure is internally plausible — the bars are right, the axis labels
+are right, and every number printed is a real number from the data. Only cross-referencing a label
+against the bar it sits on reveals it. The geometry checker cannot see it (nothing overlaps or
+overflows), and a reader who does not already know the result will not notice.
+
+**Rule:** draw an annotation from the same row object as its bar, never from a parallel index. Where
+that is impractical, **read both back off the axes and assert they agree** — `lad01_ladder_overview.py`
+now does exactly this, comparing every `axis.texts` entry against the `axis.patches` bar at the same
+y, and refusing to write the figure if any disagree.
+
+### F14 — an author `display` rule defeats the `hidden` attribute
+
+**Saw:** the full-screen figure viewer rendered open on page load, dimming the whole article, in any
+host that does not mark its `[hidden]` rule `!important`.
+
+**Cause:** `.lb{display:flex}` on an element whose only closing mechanism is the `hidden` attribute.
+The UA's `[hidden]{display:none}` loses to any author `display` rule. The layout checker's own
+skeleton *does* use `!important`, which is precisely why its screenshots looked fine — the bug was
+invisible to the tool that should have caught it.
+
+**Rule:** every element toggled with `hidden` carries its own `.x[hidden]{display:none!important}`.
+Never rely on the host's rule being `!important`.
+
+### F15 — prose repeats a figure's number by hand, and the number moved
+
+**Saw:** after the evaluation sample was tripled and every figure regenerated, about a dozen
+sentences still quoted the old values — mostly 0.1–0.4 off the figure sitting beside them, but one
+range wrong by 1.3 (a panel described as collapsing "to between &minus;0.0 and &minus;0.7" actually
+ran &minus;2.0 to +0.0). One alt-text string still asserted a claim the correction box two paragraphs
+below explicitly withdrew, so a screen-reader user got the retracted version.
+
+**Why nothing caught it:** the tables and figures are generated, so they were all correct and
+mutually consistent. Only the hand-written sentences drifted, and each one is individually
+plausible — you cannot spot it without cross-reading every quoted number against the figure or table
+it summarises. The geometry checker sees text, not meaning. A first review that fixed four instances
+and stopped left ten behind.
+
+**Rule:** a number that appears in both a figure and a sentence should be emitted by the analysis
+code into both, or the sentence should quote a table cell verbatim. Where prose genuinely must
+restate a value, a republish after any data regeneration re-scans **every** number in the prose and
+in **all** alt text — not only the ones flagged last time. Beware of claiming a page is fully
+generated when only its tables are: this report's Method section said "every number on this page is
+generated, not transcribed" while a dozen transcribed numbers were stale.
+
+### Tool note — a truncated screenshot is not a review
+
+`check_artifact_layout.py --shot-height` defaulted to 24,000px while these pages run 32,000–37,000px
+tall, so the bottom third was never rendered to an image, and a review that only looked at the
+screenshots would have silently skipped Sections 6–8, the Method and the Limitations. The
+measurements always covered the whole DOM; only the pictures were short. The tool now reports the
+page height, and **counts a truncated capture as a problem** with the `--shot-height` value needed to
+fix it.
+
 ---
 
 ## Checklist
@@ -199,6 +262,10 @@ discussed series directly on the line.
 - [ ] Compared panels share a scale (F10)
 - [ ] One meaning per colour across the whole figure set (F11)
 - [ ] No more than ~6 series distinguished by colour alone (F12)
+- [ ] Every per-row annotation verified against the row it sits on (F13)
+- [ ] Every `hidden`-toggled element carries its own `[hidden]{display:none!important}` (F14)
+- [ ] The screenshots are as tall as the page — the tool now says so
+- [ ] Every number quoted in prose AND in alt text re-checked against its figure (F15)
 - [ ] Every figure has exactly one generating script, and the page says which
 
 ## Related

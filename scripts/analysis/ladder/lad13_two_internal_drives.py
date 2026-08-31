@@ -27,6 +27,8 @@ import numpy as np, matplotlib.pyplot as plt
 import _ladder as L, _plot as PL
 
 arms = L.ARM_ORDER; col = PL.arm_colors(); x = np.arange(4)
+GRP = {a: L.resolves_identity(L.load_arm(a)['sensory']) for a in arms}
+SPOT = ('A_baseline', 'V4_blur05')
 nut, inj = {}, {}
 for a in arms:
     z = np.load(f"{L.OUT_ROOT}/{a}_episodes.npz")
@@ -41,15 +43,13 @@ for j, (dat, ttl, xl) in enumerate([
          "how well fed the agent woke up  (nutrition, 0-100)\nleft = woke up starving"),
         (inj, "WOUND - also assigned at random at the start of the episode",
          "how wounded the agent woke up  (injury level, 0-100)\nleft = woke up unhurt")]):
-    for a in arms:
-        ax[j].plot(x, dat[a], marker="o", ms=4, lw=1.7, color=col[a],
-                   label=f"{a} - {L.ARM_LABEL[a][0]}")
+    h = PL.group_lines(ax[j], x, dat, GRP, spotlight=SPOT, label_end=True)
+    ax[j].set_xlim(-0.25, 3.75)
     ax[j].set_xticks(x); ax[j].set_xticklabels(L.INJ_NAMES)
     ax[j].set_xlabel(xl)
     ax[j].set_ylabel("bush dwell over the episode's first 25 steps\n(% of those steps spent in a bush)")
     ax[j].set_title(ttl, fontsize=9.5, loc="left", pad=8)
-ax[1].legend(loc="center left", bbox_to_anchor=(1.02, 0.5), fontsize=7.4,
-             title="sensor-ladder arm", title_fontsize=8)
+ax[1].legend(handles=h, loc="lower right", fontsize=7.8)
 PL.finish(fig, f"{L.FIG_ROOT}/lad13_two_internal_drives.png")
 print(f"{'arm':22}{'hunger span':>13}{'wound span':>13}   (percentage points, quarter 4 - quarter 1)")
 for a in arms:

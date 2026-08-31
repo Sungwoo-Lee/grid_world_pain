@@ -144,10 +144,11 @@ for a in arms:
     w(f"| `{a}` | {m[0]:.1f} | {m[1]:.1f} | {m[2]:.1f} | {m[3]:.1f} | {m[3]-m[0]:+.1f} |")
 
 w("\n### TABLE 10 - the wound's effect through time (Figure 9)\n")
-import json as _json, os as _os
-_tc = f"{L.OUT_ROOT}/time_course.json"
-if _os.path.exists(_tc):
-    TC = _json.load(open(_tc))
+try:
+    TC = L.load_time_course()
+except SystemExit:
+    TC = None
+if TC:
     w("| arm | peak extra hiding (pp) | at step | extra hiding by step 60 (pp) | "
       "worst nutrition gap |")
     w("|---|---|---|---|---|")

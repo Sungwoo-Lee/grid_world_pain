@@ -61,10 +61,13 @@ if __name__ == "__main__":
     ap.add_argument("--arms", nargs="*", default=None)
     a = ap.parse_args()
     import json
-    p = f"{L.OUT_ROOT}/time_course.json"
-    out = json.load(open(p)) if os.path.exists(p) else {}
+    # ONE FILE PER ARM. A single shared time_course.json was read-modify-written by each arm, so
+    # running arms concurrently made the last writer clobber every other arm's entry - and the
+    # result looked fine, because the clobbered entries were stale data from a previous run rather
+    # than missing. Per-arm files make that failure structurally impossible.
+    os.makedirs(L.OUT_ROOT, exist_ok=True)
     for arm in (a.arms or L.ARM_ORDER):
-        t0 = time.time(); out[arm] = sweep(arm)
-        os.makedirs(L.OUT_ROOT, exist_ok=True); json.dump(out, open(p, "w"))
-        print(f"{arm:22} done ({time.time()-t0:.0f}s)", flush=True)
-    print(f"written: {p}")
+        t0 = time.time()
+        p = f"{L.OUT_ROOT}/time_course_{arm}.json"
+        json.dump(sweep(arm), open(p, "w"))
+        print(f"{arm:22} done ({time.time()-t0:.0f}s) -> {p}", flush=True)

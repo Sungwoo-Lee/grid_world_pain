@@ -9,7 +9,7 @@ episode's steps spent standing in a bush - is the behaviour we are trying to exp
 them together is the whole point: an agent can raise one by sacrificing the other, because a bush
 is safe but has no food in it.
 
-HOW IT IS COMPUTED. Survival is the mean episode length over 300,000 evaluation episodes.
+HOW IT IS COMPUTED. Survival is the mean episode length over 1,000,000 evaluation episodes.
 Bush dwell is (bush steps) / (steps), pooled over every episode of the arm; the t=0 row is the
 world as handed to the agent, not a step it took, so it is in neither the numerator nor the
 denominator.
@@ -28,15 +28,30 @@ fig, ax = plt.subplots(1, 2, figsize=(11.5, 5.4), sharey=True)
 PL.hbar_axis(ax[0], arms, surv, col, "mean survival  (steps per episode)",
              "How long it lives")
 ax[0].set_xlim(0, max(surv) * 1.12)
+# Annotate at the SAME y the bar was drawn at. This read `len(arms) - 1 - i`, which was correct
+# only while the bars were drawn in reversed order; when the order was flipped so that the poorest
+# arm really sits at the bottom (as every y-axis label claims), the annotations were left behind and
+# every value landed on the wrong row - the 166-step bar was labelled 250 and vice versa.
 for i, v in enumerate(surv):
-    ax[0].text(v + 4, len(arms) - 1 - i, f"{v:.0f}", va="center", fontsize=8, color=PL.INK)
+    ax[0].text(v + 4, i, f"{v:.0f}", va="center", fontsize=8, color=PL.INK)
 
 PL.hbar_axis(ax[1], arms, dwell, col, "bush dwell  (% of an episode's steps spent in a bush)",
              "How much it hides")
 ax[1].set_ylabel("")
 ax[1].set_xlim(0, max(dwell) * 1.15)
 for i, v in enumerate(dwell):
-    ax[1].text(v + 0.3, len(arms) - 1 - i, f"{v:.1f}%", va="center", fontsize=8, color=PL.INK)
+    ax[1].text(v + 0.3, i, f"{v:.1f}%", va="center", fontsize=8, color=PL.INK)
+
+# Assert every annotation sits on its own bar, by reading both back off the axes.
+for axis, vals, fmt in ((ax[0], surv, "{:.0f}"), (ax[1], dwell, "{:.1f}%")):
+    bars = {round(b.get_y() + b.get_height() / 2, 3): b.get_width() for b in axis.patches}
+    for t in axis.texts:
+        yy = round(t.get_position()[1], 3)
+        if yy not in bars:
+            raise SystemExit(f"label {t.get_text()!r} sits at y={yy}, where there is no bar")
+        want = fmt.format(bars[yy])
+        if t.get_text() != want:
+            raise SystemExit(f"label {t.get_text()!r} is on the bar whose value is {want}")
 
 PL.finish(fig, f"{L.FIG_ROOT}/lad01_ladder_overview.png")
 print(f"\n{'arm':22}{'survival':>10}{'bush dwell':>13}")

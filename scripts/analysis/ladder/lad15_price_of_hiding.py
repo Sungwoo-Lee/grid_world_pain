@@ -10,9 +10,9 @@ most. They are not. The relationship between bush dwell and survival across the 
 single clearest statement of what the senses are actually for: not to make the agent hide more, but
 to let it hide at the RIGHT moments and forage the rest of the time.
 
-HOW IT IS COMPUTED. One point per arm, from that arm's 300,000 episodes. Bush dwell is bush steps
+HOW IT IS COMPUTED. One point per arm, from that arm's 1,000,000 episodes. Bush dwell is bush steps
 over steps. Eating rate is `ate_food` events per step. Survival is mean episode length. All three
-pool over the same episodes, and every arm saw the same 300,000 worlds.
+pool over the same episodes, and every arm saw the same 1,000,000 worlds.
 """
 import sys, os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import numpy as np, matplotlib.pyplot as plt

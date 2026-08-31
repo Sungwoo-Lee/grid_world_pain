@@ -31,21 +31,22 @@ SPOT = {"A_baseline": "smell, no direction", "B_olf_only": "smell with direction
 fig, ax = plt.subplots(1, 2, figsize=(12.8, 5.6), sharey=True)
 for j, (key, ttl) in enumerate([("pd", "Nearest PREDATOR - a real threat"),
                                 ("rd", "Nearest RABBIT - harmless by construction")]):
+    ends = []   # in the rabbit panel three named lines finish within a few points of each other
     for a in arms:
         g = D[a]["grids"]
         y = L.dist_curve(g[f"{key}_bush"], g[f"{key}_tot"])
         c = PL.GROUP_YES if GRP[a] else PL.GROUP_NO
         if a in SPOT:
             ax[j].plot(x, y, lw=2.4, color=c, marker="o", ms=4.2, zorder=3)
-            ax[j].annotate(f" {a}", (x[-1], y[-1]), fontsize=7.4, color=c, va="center",
-                           xytext=(4, 0), textcoords="offset points", zorder=4)
+            ends.append((x[-1], y[-1], f" {a}", c))
         else:
             ax[j].plot(x, y, lw=1.0, color=c, alpha=0.34, zorder=2)
     ax[j].set_title(ttl, fontsize=10, color=PL.INK, loc="left", pad=8)
     ax[j].set_xlabel("distance from agent to the nearest animal when it decided\n"
                      "(chebyshev steps - the moves a chess king would need; 8 = eight or more)")
     ax[j].set_xticks(x); ax[j].set_xticklabels(L.DIST_NAMES)
-    ax[j].set_xlim(0.7, L.DIST_MAX + 1.15)
+    ax[j].set_xlim(0.7, L.DIST_MAX + 1.6)
+    PL.stagger_end_labels(ax[j], ends)
 ax[0].set_ylabel("bush dwell  (% of those steps spent in a bush)")
 h = [plt.Line2D([], [], color=PL.GROUP_YES, lw=2.2, label=L.GROUP_LABEL[True] + "  (9 arms)"),
      plt.Line2D([], [], color=PL.GROUP_NO, lw=2.2, label=L.GROUP_LABEL[False] + "  (5 arms)"),

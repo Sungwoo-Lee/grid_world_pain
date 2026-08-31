@@ -10,7 +10,7 @@ made the agent live longer (top panel) or hide more (bottom panel). `_ladder.ARM
 the pairing and is derived from the configs, not assumed.
 
 HOW IT IS COMPUTED. The difference of the two arms' pooled values from Figure 1. Because every
-arm replayed the SAME 300,000 worlds, the two members of a pair met identical predators, identical
+arm replayed the SAME 1,000,000 worlds, the two members of a pair met identical predators, identical
 food and identical starting wounds - the difference is the sensor change and nothing else.
 """
 import sys, os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

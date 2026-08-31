@@ -36,10 +36,7 @@ import sys, os, json; sys.path.insert(0, os.path.dirname(os.path.abspath(__file_
 import numpy as np, matplotlib.pyplot as plt
 import _ladder as L, _plot as PL
 
-TC = f"{L.OUT_ROOT}/time_course.json"
-if not os.path.exists(TC):
-    raise SystemExit(f"{TC} missing - run scripts/analysis/ladder/build_time_course.py first")
-T = json.load(open(TC))
+T = L.load_time_course()
 D = L.load_all(); arms = [a for a in L.ARM_ORDER if a in T]
 GRP = {a: L.resolves_identity(D[a]["sensory"]) for a in arms}
 XMAX = 100

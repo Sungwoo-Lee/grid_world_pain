@@ -2,7 +2,7 @@
 
 QUESTION. Survival alone hides the trade-off. An agent that hides constantly does not get eaten,
 it starves; an agent that forages constantly does not starve, it gets eaten. This figure splits
-every arm's 300,000 episodes into the three ways an episode can end, so the reader can see WHICH
+every arm's 1,000,000 episodes into the three ways an episode can end, so the reader can see WHICH
 failure each sensory setting buys down and which one it buys up.
 
 HOW IT IS COMPUTED. The `termination_reason` column of the episode table, counted per arm.
@@ -32,7 +32,7 @@ for j, k in enumerate(order):
     left += M[:, j]
 ax.set_yticks(y); ax.set_yticklabels(PL.arm_ylabels(arms), fontsize=8)
 ax.set_ylabel("sensor-ladder arm  (poorest senses at the bottom)")
-ax.set_xlabel("share of the arm's 300,000 episodes  (%)")
+ax.set_xlabel("share of the arm's 1,000,000 episodes  (%)")
 ax.set_xlim(0, 100); ax.grid(axis="y", visible=False)
 ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.01), ncol=3, fontsize=8.5)
 PL.finish(fig, f"{L.FIG_ROOT}/lad03_how_it_ends.png")

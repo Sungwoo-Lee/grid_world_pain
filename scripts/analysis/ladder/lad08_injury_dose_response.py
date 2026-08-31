@@ -25,19 +25,20 @@ D = L.load_all(); arms = L.ARM_ORDER; col = PL.arm_colors()
 x = np.arange(4)
 curves = {a: L.rate(D[a]["grids"]["dw_early"], D[a]["grids"]["dwt_early"]) for a in arms}
 slope = {a: curves[a][3] - curves[a][0] for a in arms}
+GRP = {a: L.resolves_identity(D[a]["sensory"]) for a in arms}
+# A_baseline is the one arm whose line goes DOWN, so it is the one the prose names.
+SPOT = ("A_baseline", "V4_blur05")
 
 fig, ax = plt.subplots(1, 2, figsize=(12.4, 5.5),
                        gridspec_kw={"width_ratios": [1.1, 1]})
-for a in arms:
-    ax[0].plot(x, curves[a], marker="o", ms=4, lw=1.7, color=col[a],
-               label=f"{a} - {L.ARM_LABEL[a][0]}")
+h = PL.group_lines(ax[0], x, curves, GRP, spotlight=SPOT, label_end=True)
+ax[0].set_xlim(-0.25, 3.7)
 ax[0].set_xticks(x); ax[0].set_xticklabels(L.INJ_NAMES)
 ax[0].set_xlabel("wound the agent was handed at the start of the episode\n"
                  "(injury level, 0-100, assigned at random by the environment)")
 ax[0].set_ylabel("bush dwell over the episode's first 25 steps\n(% of those steps spent in a bush)")
 ax[0].set_title("Response to a wound the agent did not earn", fontsize=9.5, loc="left", pad=8)
-ax[0].legend(loc="center left", bbox_to_anchor=(1.02, 0.5), fontsize=7.4,
-             title="sensor-ladder arm", title_fontsize=8)
+ax[0].legend(handles=h, loc="lower right", fontsize=7.8)
 
 y = np.arange(len(arms))
 v = np.array([slope[a] for a in arms])

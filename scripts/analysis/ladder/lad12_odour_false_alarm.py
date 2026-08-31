@@ -45,7 +45,7 @@ def curve(a, kind, ib):
 def group_curve(kind, ib, want):
     """The two groups' curves, pooling COUNTS across their arms rather than averaging rates.
 
-    Averaging fourteen arms' percentages would give a 300,000-episode arm the same weight as one
+    Averaging fourteen arms' percentages would give a 1,000,000-episode arm the same weight as one
     contributing a tenth as many steps to a bin. Pooling the counts weights each arm by the
     evidence it actually carries.
     """

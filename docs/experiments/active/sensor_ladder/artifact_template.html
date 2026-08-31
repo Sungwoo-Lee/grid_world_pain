@@ -120,6 +120,9 @@ figure img{width:100%;height:auto;display:block;border:1px solid var(--rule);bor
 figure img:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .zoomhint{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
   color:var(--muted);margin:9px 0 0;text-align:right;max-width:1120px}
+.prov{max-width:730px;margin:8px auto 0;font-family:var(--mono);font-size:11.5px;
+  color:var(--muted);line-height:1.5}
+.prov code{background:none;padding:0;font-size:11.5px;color:var(--muted)}
 figcaption{margin-top:14px;font-size:14.5px;color:var(--muted);line-height:1.55;
   max-width:730px;margin-left:auto;margin-right:auto}
 figcaption b{color:var(--ink);font-weight:640}
@@ -196,6 +199,9 @@ pre code{background:none;padding:0;font-size:inherit}
 /* ---------- full-size figure viewer ---------- */
 .lb{position:fixed;inset:0;z-index:99;background:rgba(12,12,14,.93);
   display:flex;flex-direction:column}
+/* An author `display` rule beats the UA's [hidden]{display:none} unless the host marks its own
+   rule !important. Never rely on the host: state it here. */
+.lb[hidden]{display:none!important}
 .lb-bar{display:flex;align-items:center;gap:16px;padding:12px 18px;flex:0 0 auto;
   border-bottom:1px solid rgba(255,255,255,.13);color:#e9e6e1;font-size:13.5px}
 .lb-bar .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
@@ -224,8 +230,8 @@ pre code{background:none;padding:0;font-size:inherit}
   animal that cannot see its own wound.</p>
   <dl class="meta">
     <div><dt>Arms</dt><dd>14<small>one training run each</small></dd></div>
-    <div><dt>Test worlds</dt><dd>300,000<small>identical for every arm</small></dd></div>
-    <div><dt>Step rows analysed</dt><dd>996M<small>across all arms</small></dd></div>
+    <div><dt>Test worlds</dt><dd>1,000,000<small>identical for every arm</small></dd></div>
+    <div><dt>Step rows analysed</dt><dd>3.32B<small>across all arms</small></dd></div>
     <div><dt>Training budget</dt><dd>10.0M<small>steps, spread of 76</small></dd></div>
   </dl>
 </header>
@@ -265,7 +271,7 @@ a blurred picture but can tell a predator from a rabbit at a glance. One sees pe
 rocks and bushes get in the way. Each of the fourteen is called an <strong>arm</strong>, and the set
 of them a <strong>ladder</strong>, because most sit one single setting away from another.</p>
 
-<p>Every agent was then turned loose in the <strong>same 300,000 test worlds</strong> &mdash; same
+<p>Every agent was then turned loose in the <strong>same 1,000,000 test worlds</strong> &mdash; same
 food, same predators, same starting injuries. Each behaves differently and so lives out a different
 episode, but the world it was handed was identical. So when two agents differ, the difference is the
 sensory change and not the luck of the draw.</p>
@@ -301,7 +307,7 @@ any behaviour that tracks the assigned wound is <em>caused</em> by it.</p>
 <li><div>
   <p class="f-claim">Sharp sight is <strong>worse</strong> than slightly blurred sight.
   <span class="badge b-weak">single contrast</span></p>
-  <p class="f-note">&minus;26 steps. Not a paradox: with blur off, the agent sees an object only if it
+  <p class="f-note">&minus;25 steps. Not a paradox: with blur off, the agent sees an object only if it
   stands exactly on one of thirteen sampled cells. Blur trades positional precision for reach, and
   reach is worth more here.</p>
 </div></li>
@@ -316,19 +322,20 @@ any behaviour that tracks the assigned wound is <em>caused</em> by it.</p>
   <p class="f-claim">Waking up wounded causes a <strong>burst</strong> of hiding that lasts about as
   long as the wound does &mdash; and is then paid back in food.
   <span class="badge b-strong">pattern across 13 of 14 arms</span></p>
-  <p class="f-note">Extra hiding peaks at +7.5 to +13.5 percentage points around step 14&ndash;16,
+  <p class="f-note">Extra hiding peaks at +7.1 to +13.5 percentage points around step 14&ndash;16,
   fades as the wound heals (half healed by step 17, 90% by step 28), then goes <em>negative</em> while
-  the agent makes up the 14&ndash;20 nutrition points its caution cost it.</p>
+  the agent makes up the 13&ndash;20 nutrition points its caution cost it.</p>
 </div></li>
 <li><div>
-  <p class="f-claim">Hypervigilance shows up on the <strong>ambiguous</strong> channel, and only there.
-  <span class="badge b-strong">pattern across all 14 arms</span></p>
+  <p class="f-claim">Hypervigilance shows up on the <strong>ambiguous</strong> channel &mdash; but
+  weakly. <span class="badge b-weak">weakest finding here</span></p>
   <p class="f-note">A wound does not make the agent treat a nearby rabbit more like a nearby predator.
   It does amplify the response to a harmless animal's <em>smell</em> more than to a predator's smell,
-  in all fourteen arms &mdash; with two caveats given in Section 5.</p>
+  in <strong>12 of the 14 arms</strong>. A cleaner group split claimed by an earlier version of this
+  page <strong>did not survive</strong> tripling the sample &mdash; see the correction in Section 5.</p>
 </div></li>
 <li><div>
-  <p class="f-claim">Hunger outweighs the wound by 1.5&times; to 4.4&times;, and hiding is a
+  <p class="f-claim">Hunger outweighs the wound by 1.6&times; to 4.5&times;, and hiding is a
   <strong>cost</strong>, not a good. <span class="badge b-strong">pattern across arms</span></p>
   <p class="f-note">Across the fourteen arms, more bush dwell goes with shorter life and less eating.</p>
 </div></li>
@@ -429,9 +436,9 @@ causal claim: the starting injury (uniform 0&ndash;100), the starting nutrition 
 &mdash; the agent chose where to walk &mdash; so the distance curves in Figures 4, 5 and 10 are
 descriptive. They describe a real regularity; they do not by themselves establish that proximity
 <em>caused</em> it.</p>
-<p>Nor does every analysis use all 300,000 episodes. A third of episodes contain no predator and a
+<p>Nor does every analysis use all 1,000,000 episodes. A third of episodes contain no predator and a
 third no rabbit, so the distance and odour analyses use about 200,000; the odour regression needs
-<em>exactly</em> one predator and one rabbit and uses about 33,500, or 11%.</p>
+<em>exactly</em> one predator and one rabbit and uses about 111,200, or 11%.</p>
 </div>
 </section>
 
@@ -440,9 +447,9 @@ third no rabbit, so the distance and odour analyses use about 200,000; the odour
 <section id="buys">
 <div class="col"><h2><span class="n">Section 1</span>What each sense buys</h2></div>
 <figure class="wide">
-  <img src="{{FIG:lad01_ladder_overview}}" alt="Two horizontal bar charts. Left: mean survival per arm, from 166 steps for A_baseline to 264 for V4_blur05. Right: bush dwell per arm, from 14.0% to 20.3%.">
+  <img src="{{FIG:lad01_ladder_overview}}" alt="Two horizontal bar charts. Left: mean survival per arm, from 166 steps for A_baseline to 264 for V4_blur05. Right: bush dwell per arm, from 14.0% to 20.2%.">
   <figcaption><b>Figure 1.</b> Left: mean survival. Right: bush dwell. Both pooled over each arm's
-  300,000 episodes.</figcaption>
+  1,000,000 episodes.</figcaption>
   <div class="fig-blocks">
     <div><h5>Why look</h5><p>The most basic question about a sense is whether having it helps. If
     it does, the agents that have it should live longer.</p></div>
@@ -452,7 +459,7 @@ third no rabbit, so the distance and odour analyses use about 200,000; the odour
     denominator.</p></div>
     <div><h5>What it shows</h5><p>Survival runs 166 to 264 steps &mdash; the best arm lives about
     1.6 times as long as the worst, produced entirely by sensory settings. Bush dwell moves far less,
-    14.0% to 20.3%. The two are <em>anti</em>-correlated: the agents that hide most die soonest. First
+    14.0% to 20.2%. The two are <em>anti</em>-correlated: the agents that hide most die soonest. First
     hint that hiding is not the thing the senses buy.</p></div>
   </div>
 </figure>
@@ -465,21 +472,21 @@ third no rabbit, so the distance and odour analyses use about 200,000; the odour
 several settings at once. The ladder was built so that most arms sit one setting away from a named
 reference, and those pairs are what Figure 2 shows.</p></div>
 <figure class="wide">
-  <img src="{{FIG:lad02_single_variable_steps}}" alt="Two diverging bar charts of single-variable sensor changes. Giving smell a direction is +45.1 steps; collapsing appearance channels to one is -46.8; disabling blur is -25.5; halving visual range is -7.9.">
+  <img src="{{FIG:lad02_single_variable_steps}}" alt="Two diverging bar charts of single-variable sensor changes. Giving smell a direction is +45.3 steps; collapsing appearance channels to one is -46.8 steps; disabling blur is -25.3 steps; halving the visual range is -8.0 steps.">
   <figcaption><b>Figure 2.</b> Each row is one arm minus its reference arm &mdash; a change of exactly
   one setting.</figcaption>
   <div class="fig-blocks">
     <div><h5>How it is computed</h5><p>The difference of the two arms' pooled values from Figure 1.
-    Both members of a pair were handed the same 300,000 worlds, so they met identical predators, food
+    Both members of a pair were handed the same 1,000,000 worlds, so they met identical predators, food
     and starting wounds. The claim that each pair differs in exactly one setting is
     <strong>asserted in code</strong>, not merely intended &mdash; see the correction
     below.</p></div>
     <div><h5>What it shows</h5><p><strong>Direction beats acuity.</strong> Giving smell a direction
-    is worth +45.1 steps, the biggest single win, even though the agent still has no useful sight.
+    is worth +45.3 steps, the biggest single win, even though the agent still has no useful sight.
     <strong>Identity beats sharpness.</strong> Collapsing eight appearance channels to one costs
     &minus;46.8 steps; blurring the picture eightfold costs &minus;23.3. <strong>Sharp is worse than
-    slightly blurred</strong> &mdash; &minus;25.5, explained in Section 3. Halving the visual range
-    costs only &minus;7.9.</p></div>
+    slightly blurred</strong> &mdash; &minus;25.3, explained in Section 3. Halving the visual range
+    costs only &minus;8.0.</p></div>
     <div><h5>What it cannot show</h5><p>These are single pairwise contrasts and so the findings
     most exposed to the one-seed caveat. Sections 4 and 5 do not have that weakness.</p></div>
   </div>
@@ -491,7 +498,7 @@ reference, and those pairs are what Figure 2 shows.</p></div>
 times too large. <code>R1_range1</code> was being compared against <code>V4_blur05</code>, which
 differs from it in <strong>two</strong> settings &mdash; the visual range <em>and</em> whether blur is
 on. The correct single-variable comparison is against <code>V5_sharp</code>, which also has blur off:
-<strong>&minus;7.9 steps</strong>. The analysis code now asserts that every pair differs in exactly one
+<strong>&minus;8.0 steps</strong>. The analysis code now asserts that every pair differs in exactly one
 setting and refuses to draw the figure otherwise; an audit under that rule found two further pairings
 that were also being over-counted.</p>
 </div>
@@ -508,7 +515,7 @@ starves. An agent that forages constantly does not starve &mdash; it gets eaten.
 sensory setting buys down, and which it buys up, is more informative than the net.</p></div>
 <figure class="wide">
   <img src="{{FIG:lad03_how_it_ends}}" alt="Stacked horizontal bars showing per arm the share of episodes ending in predation, starvation, or reaching the step limit. Predation falls from 46-47% in the near-blind arms to 26% in the reference agent while starvation rises from 24% to 37%.">
-  <figcaption><b>Figure 3.</b> Every arm's 300,000 episodes split into the three ways an episode can
+  <figcaption><b>Figure 3.</b> Every arm's 1,000,000 episodes split into the three ways an episode can
   end.</figcaption>
   <div class="fig-blocks">
     <div><h5>What it shows</h5><p>Predation is where the senses pay: 46&ndash;47% in the two arms
@@ -542,14 +549,14 @@ fraction landing inside the diamond is reported. Distant objects fade rather tha
 <strong>reach-versus-precision</strong> dial. Turning it off buys perfect localisation of the few
 objects that happen to sit on a sampled cell, at the cost of not seeing anything else at all.</p>
 <p>The behaviour matches. <strong>Figure 5</strong> shows <code>V5_sharp</code> responding
-<em>less</em> strongly to a predator at one or two cells (25.4 percentage points, against 34.1 for the
+<em>less</em> strongly to a predator at one or two cells (25.3 percentage points, against 34.1 for the
 reference agent), and <strong>Figure 4</strong> shows it maintaining a <em>higher</em> level of hiding
 out at six and seven cells (12.2% against 8.0%). That is the signature of an agent that frequently
 cannot see the predator right next to it and compensates with a raised baseline everywhere. It also
 explains why <code>V5_sharp</code> comes closest to the false-alarm group on every odour measure: with
 unreliable sight, it falls back on smell.</p>
 <p>And the ladder is non-monotonic in exactly the way a reach-versus-precision trade-off predicts:
-survival runs 240.7 &rarr; 250.1 &rarr; 258.6 &rarr; <strong>264.0</strong> &rarr; 238.4 as the blur
+survival runs 240.9 &rarr; 250.3 &rarr; 258.8 &rarr; <strong>264.2</strong> &rarr; 238.9 as the blur
 scale goes 4.0 &rarr; 2.0 &rarr; 1.0 &rarr; 0.5 &rarr; off. There is an optimum in the middle.</p>
 </section>
 
@@ -594,8 +601,8 @@ remove it tells us what discrimination actually requires.</p></div>
     ratio is taken, so a distance bin holding more steps carries more weight.</p></div>
     <div><h5>What it shows</h5><p>The fourteen split cleanly, and the split is <strong>not</strong>
     sight against no sight. Nine arms whose sight resolves identity have a <em>negative</em> rabbit
-    response (&minus;1.0 to &minus;3.5) &mdash; they hide slightly <em>less</em> when a rabbit is near.
-    Five whose sight cannot are all <em>positive</em> (+2.7 to +7.6). <code>Q1_presence_sum</code> and
+    response (&minus;1.0 to &minus;3.6) &mdash; they hide slightly <em>less</em> when a rabbit is near.
+    Five whose sight cannot are all <em>positive</em> (+2.8 to +7.6). <code>Q1_presence_sum</code> and
     <code>Q2_presence_binary</code> are the interesting cases: a full thirteen-cell field at the
     reference blur, lacking only the ability to say what is in it, and they fall straight back into the
     false alarm.</p></div>
@@ -616,7 +623,7 @@ arms separated, not before. It describes the split; it did not predict it.</li>
 the same behaviour stream from the same fourteen agents. Two behavioural contrasts and two regression
 coefficients, on two different cues, is real corroboration &mdash; but corroboration, not
 replication. <code>V5_sharp</code> is the closest of the nine to the boundary on <em>all four</em>,
-with the smallest margin only 0.74 points.</li>
+with the smallest margin only 0.80 points.</li>
 <li><strong>Identity is confounded with capacity.</strong> Collapsing eight appearance channels to one
 does not only remove identity information; it shrinks the visual part of the observation from 104
 numbers to 13. <code>Q1</code> and <code>Q2</code> therefore have a smaller network input as well as a
@@ -653,7 +660,7 @@ which says range matters too.</li>
 <h4>Two rows here look like they contradict the rest of the page. They do not.</h4>
 <p><code>wound it woke up with</code> reads &minus;0.5 to +0.2 &mdash; essentially nothing &mdash;
 while Section 5 reports the wound moving bush dwell by up to +13 points. <code>how well fed it woke
-up</code> reads +0.7 to +1.7 against Section 6's much larger numbers.</p>
+up</code> reads +0.6 to +1.7 against Section 6's much larger numbers.</p>
 <p>Both regressions are fitted on the <strong>whole-episode</strong> bush-dwell rate, and both internal
 states are <em>transient</em>: the wound is 90% healed by step 28. Averaging over an episode of 250
 steps dilutes a 30-step effect almost to nothing. Section 5 shows the full time course; Section 7 shows
@@ -664,18 +671,18 @@ exactly how much the choice of window changes the answer.</p>
 
 <section>
 <figure class="wide">
-  <img src="{{FIG:lad07_odour_regression}}" alt="Paired horizontal bars per arm for the adjusted effect of predator odour and rabbit odour on bush dwell. A_baseline shows +4.38 and +3.97; the reference agent shows effects indistinguishable from zero.">
+  <img src="{{FIG:lad07_odour_regression}}" alt="Paired horizontal bars per arm for the adjusted effect of predator odour and rabbit odour on bush dwell. A_baseline shows +4.33 and +3.81; the reference agent shows effects indistinguishable from zero.">
   <figcaption><b>Figure 7.</b> The effect of a predator's and a rabbit's odour strength on bush dwell,
   with the rest of the world held fixed.</figcaption>
   <div class="fig-blocks">
-    <div><h5>How it is computed</h5><p>Restricted to the &asymp;33,500 episodes per arm with exactly
+    <div><h5>How it is computed</h5><p>Restricted to the &asymp;111,200 episodes per arm with exactly
     one predator and one rabbit, so each smell is one number rather than an average. Adjusted for the
     number of bushes, rocks, food patches and ambush predators, the distance the agent spawned from
     cover, the predator's detection range, attack delay, attack range and stamina, the predator's own
     smell, and the agent's starting wound and hunger.</p></div>
     <div><h5>What it shows</h5><p>The same split, on a different cue and with the world held fixed.
-    <code>A_baseline</code> hides +3.97 points harder for a strong-smelling rabbit; the reference agent
-    is at &minus;0.01 and not distinguishable from zero.</p></div>
+    <code>A_baseline</code> hides +3.81 points harder for a strong-smelling rabbit; the reference agent
+    is at &minus;0.00 and not distinguishable from zero.</p></div>
   </div>
 </figure>
 </section>
@@ -692,7 +699,7 @@ behaviour that tracks <em>that</em> number is caused by it.</p>
 <p>This matters for the sensor ladder because the agent has <strong>no sensor that reads its own
 injury</strong>. The only route from an injury level to behaviour is the interoceptive nociceptor.</p></div>
 <figure class="wide">
-  <img src="{{FIG:lad08_injury_dose_response}}" alt="Left: bush dwell over the first 25 steps against the assigned starting wound, one line per arm; thirteen rise and A_baseline falls. Right: the slope per arm, from -2.28 to +6.78 percentage points.">
+  <img src="{{FIG:lad08_injury_dose_response}}" alt="Left: bush dwell over the first 25 steps against the assigned starting wound, one line per arm; thirteen rise and A_baseline falls. Right: the slope per arm, from -2.34 to +6.69 percentage points.">
   <figcaption><b>Figure 8.</b> Bush dwell over each episode's first 25 steps, against the injury level
   the environment handed the agent at <code>t=0</code>.</figcaption>
   <div class="fig-blocks">
@@ -700,7 +707,7 @@ injury</strong>. The only route from an injury level to behaviour is the interoc
     wound; bush dwell pooled over the <strong>first 25 steps only</strong>. Figure 9 explains why 25,
     and Figure 14 shows what happens if you choose otherwise.</p></div>
     <div><h5>What it shows</h5><p>Thirteen of the fourteen arms hide more when handed a bigger
-    wound, by +2.8 to +6.8 percentage points across the full range. The exception is
+    wound, by +2.6 to +6.7 percentage points across the full range. The exception is
     <code>A_baseline</code> at &minus;2.3, the one agent with neither directional smell nor useful
     sight.</p></div>
   </div>
@@ -710,7 +717,7 @@ injury</strong>. The only route from an injury level to behaviour is the interoc
 <section>
 <div class="col"><h3>How long it lasts, and what it costs</h3>
 <p>Figure 8 measures over 25 steps. Why 25? Widen the window and the effect shrinks: in the reference
-agent it runs +4.2 percentage points at 25 steps, +0.8 at 50, and slightly negative over the whole
+agent it runs +4.0 percentage points at 25 steps, +0.7 at 50, and &minus;0.4 over the whole
 episode. Taken at face value that looks like a result reported at a flattering window, which is a fair
 thing for a reader to suspect. This is the answer.</p></div>
 <figure class="wide">
@@ -730,7 +737,7 @@ thing for a reader to suspect. This is the answer.</p></div>
 <li><p><strong>The dose disappears.</strong> The 75-point injury gap assigned at reset is
 <strong>half gone by step 17 and 90% gone by step 28</strong>. The cause is essentially over before
 step 30.</p></li>
-<li><p><strong>The response follows it.</strong> Extra hiding climbs to a peak of <strong>+7.5 to
+<li><p><strong>The response follows it.</strong> Extra hiding climbs to a peak of <strong>+7.1 to
 +13.5 percentage points around step 14&ndash;16</strong> in thirteen of the fourteen arms &mdash; two
 to three times the size of the 25-step average in Figure 8 &mdash; then falls away on roughly the
 wound's own schedule. An effect that tracks its cause through time is evidence <em>for</em> the causal
@@ -738,8 +745,8 @@ reading, not against it, and it means 25 steps was not a lucky pick: it is appro
 of the dose.</p></li>
 <li><p><strong>Then the bill arrives.</strong> The hiding is paid for in food. An agent handed a heavy
 wound eats 4.4 food items in its first 25 steps against 8.0 for one handed almost none, and runs
-14&ndash;20 nutrition points behind by around step 25. Once the wound has healed it hides
-<strong>less</strong> than the unhurt agent &mdash; &minus;0.7 to &minus;4.8 points at step 60 &mdash;
+13&ndash;20 nutrition points behind by around step 25. Once the wound has healed it hides
+<strong>less</strong> than the unhurt agent &mdash; &minus;0.9 to &minus;4.7 points at step 60 &mdash;
 while it makes up the shortfall, and the two converge by about step 100.</p></li>
 </ol>
 <p>So the honest statement of finding 5 is not "a wound makes the agent hide more" but <strong>"a
@@ -766,8 +773,8 @@ become more defensive across the board &mdash; a gain change, not a criterion ch
     <div><h5>How it is computed</h5><p>Within each starting-wound quarter separately, the same
     proximity effect as Figure 5. The shift is the heaviest quarter minus the lightest.</p></div>
     <div><h5>What it shows</h5><p><strong>No criterion shift on this channel.</strong> The rabbit
-    shift is between +0.0 and +0.7 percentage points in every arm; the predator shift is larger in most,
-    up to +3.1. A wounded agent becomes more responsive to the animal that can actually kill it &mdash;
+    shift is between +0.0 and +0.8 percentage points in every arm; the predator shift is larger in most,
+    up to +3.5. A wounded agent becomes more responsive to the animal that can actually kill it &mdash;
     the opposite of what hypervigilance predicts. Panels A and B share a scale so the rabbit response can
     be seen for what it is: small.</p></div>
   </div>
@@ -781,7 +788,7 @@ become more defensive across the board &mdash; a gain change, not a criterion ch
 an animal's odour is redrawn at random every episode. If a wound shifts the agent's criterion, this is
 the channel where it should show.</p></div>
 <figure class="wide">
-  <img src="{{FIG:lad11_hypervigilance_odour}}" alt="Left: each arm's response to a strong rabbit smell, unhurt versus badly wounded. Right: the difference, positive and green for the nine identity-resolving arms, around zero or negative and orange for the five others, with a grey predator control always smaller.">
+  <img src="{{FIG:lad11_hypervigilance_odour}}" alt="Left: each arm's response to a strong rabbit smell, unhurt versus badly wounded. Right: the difference between the two, alongside a grey predator-smell control; the difference is positive in twelve of the fourteen arms and the two negative ones are close to zero.">
   <figcaption><b>Figure 11.</b> Left: how strongly each arm responds to a strong rabbit smell, having
   begun the episode nearly unhurt or badly wounded. Right: the difference, with the predator smell as a
   control.</figcaption>
@@ -791,17 +798,31 @@ the channel where it should show.</p></div>
     weakest, over the first 25 steps, computed once over episodes that began nearly unhurt and once over
     those that began badly wounded. The bar is the difference. Episodes containing no rabbit are
     excluded.</p></div>
-    <div><h5>What it shows</h5><p>In <strong>all fourteen arms</strong> the wound amplifies the
-    rabbit-smell response more than the predator-smell response; the gap runs +0.03 to +2.58 points. In
-    absolute terms the rabbit-smell response <em>grows</em> by +0.18 to +2.00 points in the nine arms
-    that resolve identity, while in the five that do not it is between &minus;1.07 and +0.26 &mdash;
-    flat, or falling. Those five were already responding to rabbit odour at close to full strength
-    whether wounded or not, so there was no headroom.</p></div>
+    <div><h5>What it shows</h5><p>In <strong>12 of the 14 arms</strong> the wound amplifies the
+    rabbit-smell response more than the predator-smell response; the gap runs &minus;0.34 to +1.67
+    points, and the two arms below zero are small enough to be noise. The predator-smell response
+    <em>falls</em> with the wound in ten of the fourteen while the rabbit-smell response rises in
+    twelve, so the direction of the shift &mdash; toward the ambiguous channel &mdash; is consistent
+    even where the gap is small. The largest absolute amplification is in the three occlusion arms
+    (+1.42, +1.99, +1.71), where sight is present but scenery intermittently blocks it.</p></div>
   </div>
 </figure>
 <div class="col">
+<div class="correction">
+<h4>Correction, made when the evaluation sample was tripled</h4>
+<p>At 300,000 episodes per arm this section reported the gap as positive in <strong>all fourteen</strong>
+arms, and claimed the rabbit-smell response grew <em>only</em> in the nine arms with identity-resolving
+sight (+0.18 to +2.00) while the other five were flat or falling (&minus;1.07 to +0.26). At 1,000,000
+episodes neither holds. The gap is positive in twelve arms, not fourteen. And the absolute response
+now grows in <strong>8 of the 9</strong> with identity-resolving sight (&minus;0.37 to +1.99)
+<strong>and in 4 of the 5 without</strong> (&minus;0.73 to +0.67) &mdash; the ranges overlap, so that
+split was an artefact of the smaller sample.</p>
+<p>Nothing else on this page moved: every other headline number shifted by less than its rounding, and
+the four-measure split in Section 4 separates the groups as cleanly at 1M as it did at 300k.</p>
+</div>
+
 <div class="callout">
-<h4>Two caveats that keep this from being as clean as it looks</h4>
+<h4>Two further caveats that keep even the surviving claim from being clean</h4>
 <p><strong>The control channel is not neutral.</strong> Figure 12 shows that the loudest-smelling
 predators are also the <em>least</em> distinguishable ones, because odour intensity is the sum of two
 channels while predator-ness is their difference. That mechanically flattens the predator slope &mdash;
@@ -812,13 +833,14 @@ instead of 25, the gap goes negative in several arms. Given Figure 9 that is exp
 is gone by then &mdash; but it means the finding is a statement about the wounded phase, not about the
 episode.</p>
 </div>
-<p>Taken with those caveats, the reading this supports is that a wound does not make the agent
-generically more afraid. It makes the agent <strong>lean harder on an ambiguous channel</strong> &mdash;
-which can only show up in an agent that has a reliable channel to lean away from. The largest raw
-amplification is in the three occlusion arms (+1.52 to +2.00), where sight is present but scenery
-intermittently blocks it. On the rabbit-minus-predator gap, though, the leaders are
-<code>V5_sharp</code> (+2.58) and <code>Q2_presence_binary</code> (+2.20), so "largest in the occlusion
-arms" holds for one of the two measures and not the other.</p>
+<p>Taken with those caveats, the reading this supports is a modest one: a wound does not make the
+agent generically more afraid, and what shift there is goes toward the <strong>ambiguous</strong>
+channel rather than the resolved one. The mechanism the occlusion arms suggest &mdash; that an agent
+leans hardest on smell when its sight is unreliable &mdash; fits their being largest in absolute
+terms, but the ladder was not built to test that and the effect is small. On the rabbit-minus-predator
+gap the leaders are <code>Q2_presence_binary</code> (+1.67) and <code>V5_sharp</code> (+1.62), which
+are <em>not</em> occlusion arms. This is the least secure finding here and the one most in need of the
+seed replication.</p>
 </div>
 <figure class="wide">
   <img src="{{FIG:lad12_odour_false_alarm}}" alt="Two line charts of bush dwell against the randomised odour quartile. Bold lines are the two groups; the rabbit panel rises much more steeply for the five arms that cannot resolve identity, and the predator panel dips at the loudest quartile.">
@@ -855,8 +877,8 @@ reset, so both can be tested causally and on the same footing.</p></div>
     agent that woke up starving and the right end one that woke up well fed. The slope is positive,
     meaning a <strong>well-fed</strong> agent hides more &mdash; equivalently, a hungry one hides less,
     because it has to go and eat.</p></div>
-    <div><h5>What it shows</h5><p>Nutrition moves bush dwell by +6.4 to +19.0 percentage points
-    across its range; the wound moves it by &minus;2.3 to +6.8. The ratio runs 1.5&times; to 4.4&times;
+    <div><h5>What it shows</h5><p>Nutrition moves bush dwell by +6.5 to +19.2 percentage points
+    across its range; the wound moves it by &minus;2.3 to +6.7. The ratio runs 1.6&times; to 4.5&times;
     depending on the arm. The metabolic drive is the larger of the two in every arm, and any account of
     this agent's hiding that leaves it out is describing a small part of the behaviour.</p></div>
   </div>
@@ -880,7 +902,7 @@ to conflate, and because a reader who reproduced either one deserves to know why
     <div><h5>A &mdash; the honest measurement</h5><p>The randomised wound, measured while the
     assigned dose is still largely present. Positive in thirteen of fourteen arms.</p></div>
     <div><h5>B &mdash; same cause, wrong window</h5><p>The same randomised wound averaged over the
-    whole episode, and the answer collapses to between &minus;0.0 and &minus;0.7. The wound heals by step
+    whole episode, and the answer collapses to between &minus;2.0 and +0.0. The wound heals by step
     28, so an average over 250 steps is mostly measuring an agent with no wound, plus the compensatory
     foraging that follows. On the shared scale the panel looks nearly flat, which is the correct
     impression.</p></div>
@@ -892,7 +914,7 @@ to conflate, and because a reader who reproduced either one deserves to know why
     <em>was</em> and reports it as what the agent <em>decided</em>.</p></div>
   </div>
 </figure>
-<div class="col"><p>The spread between panel A and panel C &mdash; +4.2 against +18.7 in the reference
+<div class="col"><p>The spread between panel A and panel C &mdash; +4.0 against +18.7 in the reference
 arm &mdash; is the size of the mistake available to anyone who takes the convenient measurement.</p></div>
 <div class="wide">{{TABLE:7}}</div>
 <div class="wide">{{TABLE:8}}</div>
@@ -906,9 +928,9 @@ arm &mdash; is the size of the mistake available to anyone who takes the conveni
 that directly is the cleanest way to say what the senses are actually for.</p></div>
 <figure class="wide">
   <img src="{{FIG:lad15_price_of_hiding}}" alt="Two scatter plots, one point per arm. Left: bush dwell against mean survival, r = -0.62. Right: bush dwell against eating rate, r = -0.70. A_baseline and B_olf_only sit detached in the lower right of both.">
-  <figcaption><b>Figure 15.</b> One point per arm, over that arm's 300,000 episodes. The dashed line is a
+  <figcaption><b>Figure 15.</b> One point per arm, over that arm's 1,000,000 episodes. The dashed line is a
   least-squares fit across the fourteen <b>arm-level</b> points, and <code>r</code> is the correlation
-  across those fourteen points &mdash; not across 300,000 episodes.</figcaption>
+  across those fourteen points &mdash; not across 1,000,000 episodes.</figcaption>
   <div class="fig-blocks">
     <div><h5>What it shows</h5><p>More hiding goes with <strong>shorter</strong> life
     (r = &minus;0.62) and <strong>less</strong> eating (r = &minus;0.70).</p></div>
@@ -935,8 +957,8 @@ the amount of defence but its <strong>selectivity</strong>.</p></div>
 <p><strong>Data.</strong> Fourteen training runs, all finished at 10,000,005&ndash;10,000,081
 environment steps (a spread of 76, so no arm had a meaningfully longer training budget). All share seed
 42 and one environment configuration; only the sensory settings and the per-object sight-blocking flags
-differ. Each arm's final checkpoint was run on 300,000 evaluation worlds seeded from a common base,
-producing 50&ndash;79 million step rows per arm and about 996 million in total.</p>
+differ. Each arm's final checkpoint was run on 1,000,000 evaluation worlds seeded from a common base,
+producing 166&ndash;264 million step rows per arm and about 3.32 billion in total.</p>
 
 <p><strong>Pairing.</strong> All fourteen arms were handed the same seed range, and this was verified
 rather than assumed: the starting injuries, starting nutritions, animal counts and odour draws are
@@ -965,7 +987,7 @@ into the <em>farthest</em> bin, the no-predator episodes &mdash; which hide far 
 hunting them &mdash; silently became the comparison group. That manufactured a large spurious drop in the
 top odour quartile and inflated every proximity effect.</li>
 <li><strong>One reference pairing was not single-variable</strong>, inflating the reported cost of a
-shorter visual range from &minus;7.9 steps to &minus;33.5. The code now asserts single-variable pairing
+shorter visual range from &minus;8.0 steps to &minus;33.5. The code now asserts single-variable pairing
 and refuses to draw the figure otherwise.</li>
 <li><strong>The whole-episode injury result was explained by the wrong mechanism.</strong> An earlier
 draft attributed it to episode-length weighting. The decomposition in Figure 9 shows the real cause: the
@@ -1001,8 +1023,11 @@ collision, proprioceptive and visual channels that were not tested for a criteri
 
 <h3>Reproducing this</h3>
 <p>Every figure has exactly one script, named for its figure number, and each script states its own
-question, method and known limitations in its docstring. Every number on this page is generated, not
-transcribed.</p>
+question, method and known limitations in its docstring. Every <em>table</em> on this page is
+generated rather than transcribed, and the build refuses to publish if a figure has no script. The
+prose is written by hand, so the numbers restated in it are checked against the generated tables on
+every republish &mdash; a check that caught a dozen stale values the last time the underlying data
+changed.</p>
 <pre><code>python scripts/analysis/ladder/build_arm_data.py       # one sweep per arm
 python scripts/analysis/ladder/build_time_course.py    # the step-by-step sweep for Figure 9
 python scripts/analysis/ladder/run_all.py              # all fifteen figures

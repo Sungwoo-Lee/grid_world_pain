@@ -18,7 +18,7 @@ Standard errors are scaled by the Pearson overdispersion, which runs 13-27 here 
 scaling every p-value in the table would be meaningless. The number plotted is the effect of moving
 that feature by one standard deviation, converted to percentage points of bush dwell. Red = hides
 more, blue = hides less. Cells are directly comparable across arms because all fourteen replayed
-the same 300,000 worlds, so each feature has the same spread in every column.
+the same 1,000,000 worlds, so each feature has the same spread in every column.
 """
 import sys, os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import csv, numpy as np, matplotlib.pyplot as plt

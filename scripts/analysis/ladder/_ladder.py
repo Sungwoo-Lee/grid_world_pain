@@ -1,7 +1,7 @@
 """Shared plumbing for the sensor-ladder analysis (the 14 `lad_*` runs).
 
 The ladder is fourteen agents trained on ONE environment with ONE seed, differing only in what
-the agent can sense. Every arm replayed the same 300,000 evaluation worlds (`--seed-base
+the agent can sense. Every arm replayed the same 1,000,000 evaluation worlds (`--seed-base
 1000000`), so any difference between two arms is attributable to the sensory change and not to
 the worlds they happened to meet.
 
@@ -23,7 +23,7 @@ import yaml
 RUN_ROOT   = "results/JAX_RecurrentPPO"
 # The evaluation population was collected in TWO passes and lives in two store roots. This is not
 # untidiness: `n_episodes` is a guarded field of a store's manifest, so a store collected for
-# 300,000 episodes cannot be reopened and extended to 1,000,000 - the collector hard-fails, by
+# a store collected for 300,000 episodes cannot be reopened and extended to 1,000,000 - the collector hard-fails, by
 # design, because a past incident contaminated a store that way. The second pass therefore used a
 # fresh seed base. Together they cover seeds 1,000,000 .. 1,999,999 with no gap and no overlap,
 # identically for all fourteen arms, so the paired design is exactly preserved.
@@ -300,3 +300,19 @@ def resolves_identity(sensory: dict) -> bool:
 
 GROUP_LABEL = {True: "sight resolves WHAT it sees  (range 2, 8 appearance channels)",
                False: "sight cannot resolve WHAT it sees  (range < 2, or 1 channel)"}
+
+
+def load_time_course() -> dict:
+    """The per-arm step-by-step sweeps written by build_time_course.py.
+
+    Asserts that every arm's file was produced by the SAME episode population as the aggregates -
+    a stale file left over from a smaller collection is exactly the failure this layout replaced.
+    """
+    import json
+    out = {}
+    for arm in ARM_ORDER:
+        p = f"{OUT_ROOT}/time_course_{arm}.json"
+        if not os.path.exists(p):
+            raise SystemExit(f"{p} missing - run scripts/analysis/ladder/build_time_course.py")
+        out[arm] = json.load(open(p))
+    return out
