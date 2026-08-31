@@ -3,7 +3,7 @@ title: "NMN Metrics Reference: Calculation Details"
 topic: neuromodulation
 status: active
 created: 2026-03-10
-last_updated: 2026-04-12
+last_updated: 2026-08-31
 ---
 
 # NMN Metrics Reference: Calculation Details
@@ -12,7 +12,7 @@ last_updated: 2026-04-12
 > **Author**: Claude
 > **Scope**: Detailed reference for all neuromodulator (NMN) metrics logged to WandB during RecurrentPPO training.
 > **Key files**: `train.py`, `src/models/neuromodulator.py`, `src/models/recurrent_ppo_trainer.py`, `src/models/recurrent_ppo_network.py`, `src/models/modulated_gru_cell.py`
-> **Related**: [NMN_ARCHITECTURE_REVIEW.md](NMN_ARCHITECTURE_REVIEW.md), [NMN_PERFORMANCE_DIAGNOSIS.md](NMN_PERFORMANCE_DIAGNOSIS.md), [WANDB_METRICS_REFERENCE.md](WANDB_METRICS_REFERENCE.md)
+> **Related**: [NMN_ARCHITECTURE_REVIEW.md](NMN_ARCHITECTURE_REVIEW.md), [NMN_PERFORMANCE_DIAGNOSIS.md](NMN_PERFORMANCE_DIAGNOSIS.md), [WANDB_METRICS_REFERENCE.md](WANDB_METRICS_REFERENCE.md), [[MODULATION_SITE_REFACTOR]] (planned — adds per-site gamma/beta metrics for the actor, critic and RNN-activation sites, and makes `z_memory_*` / `temperature_*` conditional)
 
 ---
 

@@ -3,11 +3,16 @@ title: Unified Interoceptive Neuromodulation for Grid-World Pain
 topic: neuromodulation
 status: active
 created: 2026-02-11
-last_updated: 2026-04-12
+last_updated: 2026-08-31
 aliases: [neuromodulation_algorithm]
 ---
 
 # Unified Interoceptive Neuromodulation for Grid-World Pain
+
+> ⏳ **Pending change (2026-08-31)**: a planned refactor makes every modulation site use the same
+> feature-wise scale-and-shift (FiLM) operator, makes each site config-selectable, adds actor and critic
+> sites, and makes the action-temperature opt-in. Until it lands, §2A and the rPPO pseudocode below still
+> describe the current four-mechanism architecture. Plan: [[MODULATION_SITE_REFACTOR]].
 
 ## Research Motivation & Hypotheses
 
