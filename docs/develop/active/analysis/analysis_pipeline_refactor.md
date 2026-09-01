@@ -4,7 +4,7 @@ topic: analysis
 status: proposed
 created: 2026-09-01
 last_updated: 2026-09-01
-revision: 2 — rewritten after the first plan review returned NOT READY
+revision: 3 — two Criticals from the second review fixed; one of them fixed in code, not deferred
 ---
 
 # A reusable analysis pipeline
@@ -23,10 +23,10 @@ analysis."*
 ## The evidence
 
 **Duplication, verified by reading the code.** `slot_layout` is implemented **three** times,
-`smell_channels` three times, `listcol` three times, `nociception_kernel` twice, and the store
-finder twice — and that last pair **has already drifted**: one handles a single root, the other
-several, which is why the ladder's second collection pass needed a new implementation rather than
-reusing the existing one.
+`smell_channels` three times, `listcol` three times, `nociception_kernel` twice, and the store finder
+**three** times (`figures/_common.find_store`, `hiding_drivers.find_stores`, `_ladder.arm_stores`) —
+and those **have already drifted**: one handles a single root, the others several, which is why the
+ladder's second collection pass needed a new implementation rather than reusing what existed.
 
 **Divergent safety checks.** Each scan performs whichever checks its author had in mind. Read from
 the code, not pattern-matched:
@@ -37,10 +37,16 @@ the code, not pattern-matched:
 | episodes never split across shards | yes | no | yes |
 | step count matches the episode table | yes | no | no |
 | the `t=0` row is not a step | yes | no | yes (`m = t >= 1`, line 208) |
-| predictors read from the previous row | yes | yes | no |
+| predictors read from the previous row | yes | **was no — fixed 2026-09-01** | no |
 | absent animals excluded | yes | n/a (reads no animal columns) | yes |
+| population matches the other derived products | no | no | no |
 
-**Nine of seventeen applicable cells are empty.** Two of the three bugs this analysis hit sit in an
+**Eleven of twenty applicable cells were unsatisfied** when this plan was written, counting `partial`
+and the row fixed today. That count is now *generated* from an explicit cell list rather than typed:
+revision 1 claimed twelve of twenty-one, revision 2 claimed nine of seventeen, and both were wrong —
+the second because the population row was dropped from the table after the count was taken. Three
+wrong counts of one small table is itself an argument for generating the numbers that go into
+documents. Two of the three bugs this analysis hit sit in an
 empty cell: the time course was rebuilt from stale data because nothing cross-checked its population
 against the other products, and episodes containing no predator became the comparison group because
 nothing filtered absent animals.
@@ -102,19 +108,52 @@ def collect(frame, acc):
 acc = scan.sweep(st, columns=[...], on_shard=collect)
 ```
 
-The driver guarantees, for every study, forever: shard order and alignment, episode boundaries, the
-`t=0` exclusion, the previous-row shift, absent-entity masks, and the population cross-check. **A
-check added there is a check every study gets, including the ones already written.**
+The driver **asserts** data properties (shard order and alignment, seed contiguity and uniqueness,
+the step-count cross-check) and **provides** conventions the callback must use (`frame.is_step`,
+`frame.prev`, `frame.present(...)`). Revision 2 blurred that distinction: an assert cannot be
+bypassed, a provision can — a callback is free to index raw arrays. The guarantee is therefore
+**auditable, not structural**. Raw arrays sit behind an explicit `frame.raw()`, so a breach is one
+`grep` away, and a frame-contract audit table records which accessor each ported sweep uses.
+
+> **A contradiction the second review found, and how it was resolved.** Revision 2 claimed the driver
+> would give every study the previous-row convention "including the ones already written". But
+> `build_time_course` binned the perceptual dose-response **contemporaneously** — pairing the
+> nociception at row *t* with the bush state at row *t*, when the action producing row *t* was chosen
+> while feeling row *t−1*. Porting it with the guaranteed shift would change a **published** number
+> and fail the gate; porting it bug-for-bug would pass the gate while making the guarantee false.
+> Rather than carry that into the refactor, **the bug was fixed at source on 2026-09-01**, before any
+> porting. Measured impact: the dose spread moves from +24.68 to +25.03 percentage points — small,
+> because the signal is a twelve-step convolution and adjacent rows barely differ, but it was the
+> wrong convention.
+>
+> Any *remaining* cell where porting a guard would move a published number goes into a **divergence
+> register**: reproduce the old behaviour, gate on the reproduction, then fix it afterwards as an
+> adjudicated change with a pre-declared expected diff. What must not happen is the gate being
+> renegotiated at porting time on numbers behind a published page.
 `perceived_nociception` moves into `core/env.py` *with a regression test for its reset boundary* —
 the `src > estart` guard was a real bug with published impact (Known Bugs, 2026-08-25).
 
-### The population contract
+### The population contract — split in two, because one version deadlocks
 
-`store.open_run()` asserts, and this is what the missing bottom-row check means: seeds are contiguous
-with no duplicates across all collection passes; every episode's step rows are contained in one
-shard; the summed step count equals the episode table's `length` column; and the episode count
-matches every other derived product already on disk for that run. That last clause is what would have
-caught the half-regenerated time course.
+Revision 2 had `store.open_run()` assert that the store matched every derived product on disk. That
+deadlocks its own workflow: after a collection top-up — the ladder has had two — every product is
+stale by definition, so the rebuild that would refresh them cannot open the store; regenerating one
+product alone becomes impossible; first-run is undefined. The predictable resolution under deadline
+pressure is to delete the assert, which is the flagship guard.
+
+Split by when each check can be true:
+
+- **At open (`store.open_run`)** — store-internal properties only, always checkable: seeds contiguous
+  with no duplicates across collection passes, every episode's rows contained in one shard, summed
+  step count equal to the episode table's `length`.
+- **At write (`provenance`)** — every derived product is stamped with the population it was built
+  from: episode count, seed range, store fingerprints.
+- **At read (the figure scripts)** — a product whose stamp disagrees with its siblings, or with the
+  store, is refused. This is the pattern `_ladder.load_time_course` already implements, and it is what
+  caught the half-regenerated time course.
+
+Regenerating one product alone is then normal: it is written with a current stamp, and the next read
+that mixes it with a stale sibling fails loudly.
 
 ### The manifest is keyed `(unit, seed)`
 
@@ -146,26 +185,33 @@ consequence is that two copies of the duplicated helpers survive, not one.
 
 ## Verification, and why byte-identity is the wrong gate
 
-Revision 1 made byte-identical output the whole safety argument. It cannot hold: the three scans use
-three different NumPy summation primitives for the same logical sum — `np.add.reduceat`, `np.bincount`
-and `np.add.at` — and these are **not bitwise equivalent on floating-point data**. A unified driver
-changes accumulation order, so a *correct* port would fail the test on every float column
-(`injury_level`, `nutrition`, the nociception convolution). The gate would then get renegotiated
-under pressure, on exactly the numbers behind the published ladder analysis.
+Revision 1 made byte-identical output the whole safety argument; revision 2 rejected it because the
+three scans' summation primitives are not bitwise equivalent on floats. **The second review measured
+that on the real store, and my claim was too strong.** On 870,000 rows of the `A_baseline` store,
+per-episode sums of `injury_level`, `nutrition` and `agent_in_bush` are **bit-exact** across
+`add.reduceat`, `bincount`, `add.at` and a per-segment `np.sum` — the columns hold float32-origin
+values summed in float64, so every partial sum is exactly representable and order cannot matter. Only
+the nociception convolution is genuinely order-sensitive, and reversing its inner loop moves it by
+6.4 × 10⁻¹⁶ relative, four orders of magnitude inside the pre-registered tolerance.
+
+The tiered criterion therefore is not a retreat from rigour, and the tolerance will not need
+renegotiating. It stands because order-sensitivity is a property of the data as much as the
+primitive, and a gate that depends on today's columns being conveniently exact is one awkward column
+away from failing a correct port.
 
 The tiered criterion instead, fixed **before** any porting starts:
 
 | product | criterion |
 |---|---|
-| integer-valued accumulators (0/1 sums, counts) | **bit-exact.** Order-independent, so exactness is free and any mismatch is a real bug |
+| integer-valued accumulators (0/1 sums, counts) | **bit-exact.** Order-independent, so exactness is free and any mismatch is a real bug. Tier membership is declared per output field in `core/provenance.py`, and the harness asserts `x == round(x)` on every tier-1 field, so a misclassification fails loudly instead of silently relaxing the gate |
 | float accumulators | `rtol = 1e-12`, pre-registered here, not chosen after seeing the diff |
 | figures | equality of the **plotted arrays**, not PNG bytes |
 | tables and the page | byte-identical (they are generated from the arrays) |
 
 **The baseline must be fresh.** The goldens currently on disk were produced before the second
 collection pass; the comparison must be old-code-run-today against new-code-run-today, on the same
-store. And the goldens must be protected: ported code writes to a scratch path, or
-`results/analysis/ladder/` is copied aside first — it is gitignored, and cheap to regenerate, but the
+store. And the goldens must be protected: ported code writes to a scratch path, and **all three golden roots** are copied aside first —
+`results/analysis/ladder/`, `results/analysis/lad/` and `results/analysis/hiding_drivers/<tag>/` — it is gitignored, and cheap to regenerate, but the
 protocol should not rely on remembering that.
 
 ## What is at risk, and what is not
@@ -186,7 +232,12 @@ rather than a careful reading.
 2. Regenerate the goldens with the **current** code, today, on the current store.
 3. Port `build_arm_data` → `core.scan`; compare against the golden under the tiered criterion.
 4. Port `build_time_course`, then `hiding_drivers`; same gate each time.
-5. Only once all three pass, delete the old implementations.
+5. Only once all three pass, retire the old implementations — but `hiding_drivers.py` is **kept**,
+   not deleted: `supplementary/README.md` names it as the producer for the earlier study, so
+   "reproduce as published" fails without it. Its port must also keep writing
+   `results/analysis/lad/<arm>/multivariate.csv` at that exact path, because
+   `lad06_world_factor_map.py` filters arms by whether that CSV exists — a moved output path would
+   silently thin the published figure instead of erroring.
 6. Port the fifteen figure scripts, comparing plotted arrays.
 7. Freeze `figures/` and `supplementary/` with a README note.
 
