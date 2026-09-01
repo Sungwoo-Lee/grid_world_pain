@@ -339,17 +339,73 @@ GROUPS    = {"resolves_identity": lambda cfg: cfg["visual_sensor_range"] &gt;= 2
 
 <section class="col">
 <h3>Two decisions that are yours, not mine</h3>
-<p><strong>Scope.</strong> Two older folders — <code>scripts/analysis/figures/</code> (9 scripts) and
-<code>scripts/analysis/supplementary/</code> (19) — hold the third copies of the duplicated helpers and
-back the earlier trajectory-factors study. Porting them makes the day estimate fiction; freezing them
-as archived reproductions is defensible, but then two copies survive rather than one. I lean toward
-freezing them and saying so in their READMEs.</p>
+<p><strong>Scope — now decided.</strong> Two older folders,
+<code>scripts/analysis/figures/</code> (9 scripts) and <code>scripts/analysis/supplementary/</code>
+(19 — not the 9 the dependency map claims, a separate correction that map owes), hold the third copies
+of the duplicated helpers and back the earlier trajectory-factors study. They are
+<strong>frozen</strong>: a note in each README saying they predate <code>core/</code> and are kept to
+reproduce that study as published. The honest consequence, stated rather than glossed: two copies of
+the duplicated helpers survive, not one. Porting them would double the work for no new capability.</p>
+<p><strong>Moving about 25 files under <code>scripts/</code> obliges a same-commit update</strong> to
+<code>SCRIPTS_DEPENDENCY_MAP.md</code>, whose repo-root and <code>sys.path</code> depth hazard applies
+directly to <code>from analysis.core import scan</code>. Two documents also name script paths that
+will move.</p>
 <p><strong>Timing.</strong> The seed replication is the natural first client of this core, which
 argues for building it now, before a fourth scan gets written for it. It is also days that are not
 spent on the replication itself. That trade is a portfolio call.</p>
 </section>
 
 <section class="col">
+<h2>How a port is checked</h2>
+<p>Rewriting code that produces published numbers needs a mechanical check, not a careful reading.
+But the obvious check — require identical output — cannot be used, and finding out why changed the
+plan.</p>
+<div class="callout fix">
+<h4>Why "identical output" is the wrong gate</h4>
+<p>The three scans use three different NumPy primitives for the same logical sum:
+<code>np.add.reduceat</code>, <code>np.bincount</code> and <code>np.add.at</code>. These are
+<strong>not bitwise equivalent on floating-point data</strong> — addition is not associative in
+floating point, and they accumulate in different orders. A unified driver necessarily changes that
+order, so a <em>correct</em> port would fail the test on every float column. The gate would then be
+renegotiated after the fact, on exactly the numbers behind the published ladder analysis.</p>
+</div>
+<div class="scroll">
+<table>
+  <caption>The criterion instead, fixed before any porting starts rather than after seeing a diff</caption>
+  <thead><tr><th>product</th><th>criterion</th><th>why that one</th></tr></thead>
+  <tbody>
+    <tr><td>integer accumulators<br><span style="color:var(--muted)">0/1 sums, counts</span></td>
+        <td class="y">bit-exact</td>
+        <td>order-independent, so exactness is free — any mismatch is a real bug</td></tr>
+    <tr><td>float accumulators</td><td class="y">rtol 1e-12</td>
+        <td>the only place order matters; the number is pre-registered here</td></tr>
+    <tr><td>figures</td><td class="y">plotted arrays equal</td>
+        <td>PNG bytes move with the matplotlib version; the data does not</td></tr>
+    <tr><td>tables and the page</td><td class="y">byte-identical</td>
+        <td>generated from the arrays, so nothing else may move</td></tr>
+  </tbody>
+</table>
+</div>
+<p style="margin-top:16px">Two conditions on the baseline. It must be <strong>fresh</strong> — the
+goldens on disk predate the second collection pass, so the comparison is old-code-run-today against
+new-code-run-today on the same store. And the goldens must be <strong>protected</strong>: ported code
+writes to a scratch path, because the naive port would overwrite the very files it is being compared
+against.</p>
+
+<h2>Order of work</h2>
+<p>Each step leaves the repository working. <code>hiding_drivers.py</code> is on the ladder's critical
+path — figures 6 and 7 read its output — so nothing is deleted until its replacement has passed the
+gate.</p>
+<ol>
+  <li>Build <code>core/</code> alongside the existing code, changing nothing that runs.</li>
+  <li>Regenerate the goldens with the <strong>current</strong> code, today.</li>
+  <li>Port <code>build_arm_data</code>; compare under the criterion above.</li>
+  <li>Port <code>build_time_course</code>, then <code>hiding_drivers</code>; same gate each time.</li>
+  <li>Only once all three pass, delete the old implementations.</li>
+  <li>Port the fifteen figure scripts, comparing plotted arrays.</li>
+  <li>Freeze <code>figures/</code> and <code>supplementary/</code> with a note in each README.</li>
+</ol>
+
 <h3>Honest cost</h3>
 <p>The reviewer's estimate, which I accept over my own: <strong>two to four days</strong>, not one. My
 figure budgeted nothing for the verification sweeps — three sweeps across fourteen arms, run twice, to
@@ -359,9 +415,10 @@ hold: the three programs use three different NumPy summation primitives for the 
 those are not bitwise equivalent on floating-point data, so a <em>correct</em> port would fail the
 test. The workable version is bit-exact for integer-valued counts, a pre-registered tolerance for
 float accumulations, and equality of plotted data rather than image bytes.</p>
-<p class="foot">Full plan, including the migration order and what it explicitly does not fix:
-<code>docs/develop/active/analysis/analysis_pipeline_refactor.md</code>. Review:
-<code>docs/reviews/plan_analysis_pipeline_refactor.md</code>.</p>
+<p class="foot">This page lives at <code>scripts/analysis/pipeline_layout.html</code>, beside the
+code it describes. Full plan: <code>docs/develop/active/analysis/analysis_pipeline_refactor.md</code>
+(revision 2). Review: <code>docs/reviews/plan_analysis_pipeline_refactor.md</code> — a second
+adversarial pass on revision 2 is in flight, and anything it finds will land here.</p>
 </section>
 </main>
 </div>
