@@ -204,6 +204,8 @@ Not every analysis uses all 1,000,000. Stating this once, so no figure has to ca
 
 **Figure 1.** Left: mean survival. Right: bush dwell. Both pooled over each arm's 1,000,000 episodes.
 
+**Axes.** Both panels: y = the fourteen sensor-ladder arms, poorest senses at the bottom. x, left = mean survival in steps per episode; x, right = bush dwell as a percentage of an episode's steps. Both x-axes start at zero.
+
 **Motivation.** The most basic question about a sense is whether having it helps. If it does, the
 agents that have it should live longer.
 
@@ -240,6 +242,8 @@ first hint that hiding is not the thing the senses buy.
 ![Effect of each single-variable sensor change](figures/lad02_single_variable_steps.png)
 
 **Figure 2.** Each row is one arm minus its reference arm &mdash; a change of exactly one setting.
+
+**Axes.** Both panels: y = the twelve single-setting changes, each labelled with the arm it compares and the reference it is compared against. x, left = change in mean survival in steps; x, right = change in bush dwell in percentage points. Both x-axes are differences and are centred on zero, so a bar left of the line means the change made that quantity smaller.
 
 **Motivation.** Figure 1's ranking confounds everything: the sharp-sighted agent differs from the
 near-blind one in several settings at once. The ladder was built so that most arms sit one setting
@@ -299,6 +303,8 @@ the above.
 
 **Figure 3.** Every arm's 1,000,000 episodes split into the three ways an episode can end.
 
+**Axes.** y = the fourteen arms, poorest senses at the bottom. x = share of that arm's episodes, 0 to 100 percent; the three coloured segments of each bar sum to 100 percent by construction.
+
 **Motivation.** Survival alone hides the trade-off. An agent that hides constantly does not get
 eaten &mdash; it starves. An agent that forages constantly does not starve &mdash; it gets eaten.
 Which failure a sensory setting buys down, and which it buys up, is more informative than the net.
@@ -353,6 +359,8 @@ survival runs 240.9 &rarr; 250.3 &rarr; 258.8 &rarr; **264.2** &rarr; 238.9 as t
 agent chose its move. Colour is the grouping of Section 4; the four arms the text discusses are
 drawn thick and named.
 
+**Axes.** Both panels: x = distance from the agent to the nearest animal at the moment it chose its move, in chebyshev steps, from 1 (adjacent) to 8 or more. y = bush dwell as a percentage of those steps. Both panels share one y-scale. The y-axis does not start at zero; it is cropped to the range the curves occupy.
+
 **Motivation.** Hiding is only defensive if the threat triggers it. A flat curve would mean the
 agent hides on a schedule; a curve that rises as the animal approaches means it hides in response to
 something it perceived.
@@ -380,6 +388,8 @@ which is the subject of the next section.
 **Figure 5.** Left: each arm's response to a nearby predator and to a nearby rabbit, joined by a line
 whose length is that arm's discrimination. Right: the rabbit response alone, coloured by whether the
 arm's sight can resolve identity.
+
+**Axes.** Both panels: y = the fourteen arms, poorest senses at the bottom. x = a DIFFERENCE in percentage points — bush dwell when the animal is 1-2 cells away minus bush dwell when it is 6 or more cells away. Left panel shows that difference for a predator and for a rabbit; right panel shows the rabbit one alone. Below zero means the agent hides LESS when the animal is near.
 
 **Motivation.** A rabbit cannot hurt the agent. Hiding when one comes near costs foraging time and
 returns nothing. So the rabbit response is a clean measure of wasted defence &mdash; and asking which
@@ -463,6 +473,8 @@ overlap** &mdash; the largest value among the nine never reaches the smallest am
 **Figure 6.** Every feature of the world that is randomised before the agent acts, against every arm.
 Red means the agent hides more; blue, less.
 
+**Axes.** y = the nine features of the world that are randomised before the agent acts. x = the fourteen arms, poorest senses on the left. The colour of each cell, and the number printed in it, is the effect on bush dwell in percentage points of moving that feature by one standard deviation — red for more hiding, blue for less.
+
 **Motivation.** Figures 1&ndash;5 each isolate one thing. This one steps back and asks which world
 features move bush dwell at all, in every arm at once.
 
@@ -498,6 +510,8 @@ afford to be selective.
 **Figure 7.** The effect of a predator's and a rabbit's odour strength on bush dwell, with the rest
 of the world held fixed.
 
+**Axes.** y = the fourteen arms, poorest senses at the bottom. x = the effect on bush dwell, in percentage points, of a one-standard-deviation stronger smell, with everything else in the regression held fixed. Centred on zero; right of the line means the agent hides more when that animal smells stronger.
+
 **Motivation.** Figure 5 uses proximity. This uses smell, which is the genuinely ambiguous cue, and
 puts it inside a regression so the result cannot be explained by strong-smelling worlds differing in
 some other way.
@@ -512,7 +526,6 @@ and stamina, the predator's own smell, and the agent's starting wound and hunger
 **Reading.** The same split, on a different cue and with the world held fixed. `A_baseline` hides
 +3.97 points harder for a strong-smelling rabbit; the reference agent is at &minus;0.00 and not
 distinguishable from zero.
-
 
 ---
 
@@ -554,6 +567,8 @@ the policy's input &mdash; and the worst disagreement over 1.36 million rows was
 **Figure 8.** Bush dwell over each episode's first 25 steps, against the injury level the environment
 handed the agent at `t=0`.
 
+**Axes.** Left: x = the injury level the environment handed the agent at t=0, in four equal quarters of the 0-100 range; y = bush dwell over the episode's first 25 steps, as a percentage of those steps. Right: y = the fourteen arms; x = the difference between that arm's heaviest and lightest quarter, in percentage points. The left panel's y-axis does not start at zero; it is cropped to the range the curves occupy.
+
 **Method.** Episodes are split into four equal quarters of the starting wound. Bush dwell is pooled
 over the **first 25 steps only**. Figure 9 explains why 25, and Figure 14 shows what happens if you
 choose otherwise.
@@ -570,6 +585,8 @@ with neither directional smell nor useful sight.
 and heaviest quarters. B: the three quantities as fractions of their own peak, so their timing can be
 compared. C: bush dwell against how hurt the agent is feeling *right now*. D: the food the caution
 cost. Faint lines are individual arms; bold lines are the two groups.
+
+**Axes.** Panels A, B and D: x = step number within the episode, 0 to 100. y in A = injury level and perceived signal, both on the same 0-100 scale; y in B = each curve as a fraction of its own maximum, so only shape and timing are comparable, not size; y in D = the nutrition difference between the heaviest and lightest starting-wound quarters, on the 0-100 nutrition scale. Panel C: x = the perceived nociception the agent is receiving right now, in four equal quarters of the 0-100 range; y = bush dwell as a percentage of those steps. None of the four y-axes starts at zero; each is cropped to its own data.
 
 **Motivation.** Figure 8 measures over 25 steps. Why 25? Widen the window and the effect shrinks: in
 the reference agent it runs +4.0 percentage points at 25 steps, +0.7 at 50, and &minus;0.4 over the
@@ -653,6 +670,8 @@ differently-selected survivors.
 **Figure 10.** Panels A and B: response to a nearby rabbit and to a nearby predator, at the lightest
 and heaviest starting wound, **on one shared scale**. Panel C: the two shifts.
 
+**Axes.** All three panels: y = the fourteen arms, poorest senses at the bottom. x in A and B = a DIFFERENCE in percentage points, bush dwell with the animal 1-2 cells away minus 6 or more cells away, drawn once for the lightest and once for the heaviest starting wound, and A and B share one scale. x in C = the difference between those two, in percentage points.
+
 **Motivation.** Figure 8 shows a wounded agent hides more. That, on its own, is ordinary caution. The
 claim that would earn the word *hypervigilance* is stronger and more specific: that being wounded
 changes **what the agent treats as evidence of danger**, so an ambiguous, harmless cue starts driving
@@ -675,6 +694,8 @@ is: small.
 
 **Figure 11.** Left: how strongly each arm responds to a strong rabbit smell, having begun the
 episode nearly unhurt or badly wounded. Right: the difference, with the predator smell as a control.
+
+**Axes.** Both panels: y = the fourteen arms, poorest senses at the bottom. x, left = a DIFFERENCE in percentage points, bush dwell in the strongest-smelling quarter of episodes minus the weakest, drawn once for episodes begun unhurt and once for begun badly wounded. x, right = the difference between those two.
 
 **Motivation.** Proximity is not the ambiguous cue. For an agent that can see, a nearby animal is a
 *resolved* cue &mdash; it can look and tell what the animal is. Smell is the ambiguous one, and an
@@ -733,6 +754,8 @@ seed replication.
 and predators (right) happened to smell. Bold lines pool the counts within each group; faint lines
 are the fourteen individual arms.
 
+**Axes.** Both panels: x = how strongly that episode's animals happened to smell, in four quartiles of the randomised odour draw, weakest on the left. y = bush dwell over the episode's first 25 steps, as a percentage of those steps. Both panels share one y-scale. The y-axis does not start at zero; it is cropped to the range the curves occupy.
+
 **Reading.** The rabbit panel rises for both groups and much more steeply for the five that cannot
 resolve identity. The predator panel dips at the loudest quartile, and that dip is real rather than
 an artefact: intensity is the **sum** of the two odour channels while what marks an animal out as a
@@ -769,6 +792,8 @@ means a loud rabbit is genuinely harder to rule out, so part of the "false" alar
 
 **Figure 13.** Bush dwell over the first 25 steps against the two internal states the environment
 assigns at random, on a shared y-scale.
+
+**Axes.** Both panels: x = the internal state the environment assigned at t=0, in four equal quarters of the 0-100 range — nutrition on the left (so the left end is an agent that woke starving) and injury on the right. y = bush dwell over the episode's first 25 steps, as a percentage of those steps. Both panels share one y-scale so their slopes can be compared directly. The shared y-axis does not start at zero; it is cropped to the range the curves occupy.
 
 **Motivation.** The agent carries two internal states that pull in opposite directions. A wound
 argues for staying in cover; an empty stomach argues for leaving it, because a bush contains no food.
@@ -813,6 +838,8 @@ hiding that leaves it out is describing a small part of the behaviour.
 **Figure 14.** The same question answered three ways, on one shared y-scale. A: the assigned wound
 over the first 25 steps. B: the assigned wound over the whole episode. C: the carried wound over the
 whole episode.
+
+**Axes.** All three panels: x = an injury level in four equal quarters of the 0-100 range — the wound assigned at t=0 in panels A and B, the wound the agent was carrying when it decided in panel C. y = bush dwell as a percentage of steps. All three share one y-scale, which is the point of the figure. The shared y-axis does not start at zero; it is cropped to the range the curves occupy.
 
 **Motivation.** "Does injury make the agent hide?" has three plausible-looking answers in this data
 and two of them are wrong. They are shown together because the two mistakes have *different* causes
@@ -886,6 +913,8 @@ size of the mistake available to anyone who takes the convenient measurement.
 ![Bush dwell against survival and against eating](figures/lad15_price_of_hiding.png)
 
 **Figure 15.** One point per arm, over that arm's 1,000,000 episodes.
+
+**Axes.** Both panels: x = bush dwell as a percentage of an episode's steps, one point per arm. y, left = mean survival in steps per episode; y, right = eating rate in food items per 100 steps. Neither axis starts at zero; both are cropped to the range the fourteen points occupy.
 
 **Motivation.** If hiding were simply good, the arms that hide most would be the ones that survive
 longest. Testing that directly is the cleanest way to say what the senses are actually for.

@@ -282,6 +282,16 @@ difference rather than a rate, say that too.
 
 *Enforcement:* the build fails if a `<figcaption>` lacks an `<b>Axes.</b>` sentence.
 
+The same sentences are also mirrored into the markdown report (`sensor_ladder.md`), because a reader
+who opens the report in the editor rather than the published page should not be the only one who has
+to guess what an axis means. That mirror is a hand-maintained duplicate, which is the thing this
+project keeps getting wrong, so it is checked rather than trusted: `build_artifact.py` extracts each
+axes sentence from the template, requires a verbatim `**Axes.**` match in the report, and **refuses
+to write the page** if any figure's two copies have drifted. The check names the figure and prints
+what the template says, so fixing it is a copy-paste. It runs before the write specifically so a
+drift cannot ship a page — a check that only prints after the artifact is on disk is a check the
+next person will ignore.
+
 ### 11b. Every figure declares how much data it used
 
 Several figures filter — a third of episodes contain no predator, one regression needs exactly one

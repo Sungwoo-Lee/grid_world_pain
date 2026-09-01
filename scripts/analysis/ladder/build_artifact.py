@@ -12,7 +12,7 @@ table that does not exist is a hard error rather than a silently empty slot - a 
 nobody noticed is the single most common way one of these pages ships broken.
 """
 from __future__ import annotations
-import base64, io, json, os, re, subprocess, sys
+import base64, html as html_lib, io, json, os, re, subprocess, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
@@ -20,6 +20,7 @@ DOC = os.path.join(ROOT, "docs/experiments/active/sensor_ladder")
 FIGS = os.path.join(DOC, "figures")
 TEMPLATE = os.path.join(DOC, "artifact_template.html")
 OUT = os.path.join(DOC, "sensor_ladder.html")
+REPORT = os.path.join(DOC, "sensor_ladder.md")
 
 
 def figure_uri(name: str) -> str:
@@ -154,10 +155,46 @@ def attach_provenance(html: str) -> tuple[str, dict[str, str]]:
     return out, seen
 
 
+def check_report_axes(template: str) -> int:
+    """The report repeats each figure's axes sentence; check the two copies still agree.
+
+    The axes sentences were written once, in the template, and copied into sensor_ladder.md so that
+    a reader of the markdown gets them too. Nothing structural keeps the copies in step, and an
+    unenforced duplicate is exactly the failure class this analysis has already been bitten by. So
+    the duplicate is checked rather than trusted: edit the template, re-run this, and it names the
+    caption in the report that has gone stale.
+    """
+    if not os.path.exists(REPORT):
+        raise SystemExit(f"missing report: {REPORT}")
+    report = open(REPORT).read()
+    n = 0
+    for block in re.findall(r"<figure\b.*?</figure>", template, re.S):
+        names = re.findall(r"\{\{FIG:([a-z0-9_]+)\}\}", block)
+        if not names:
+            continue
+        cap = re.search(r"<figcaption\b[^>]*>(.*?)</figcaption>", block, re.S)
+        i = cap.group(1).find("<b>Axes.</b>")
+        txt = cap.group(1)[i + len("<b>Axes.</b>"):]
+        for stop in ("<details", "<p class="):
+            j = txt.find(stop)
+            if j != -1:
+                txt = txt[:j]
+        txt = re.sub(r"<sup>(.*?)</sup>", r"^\1", txt)
+        want = html_lib.unescape(re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", txt))).strip()
+        if f"**Axes.** {want}" not in report:
+            raise SystemExit(
+                f"figure {names[0]}: the report's axes sentence does not match the template.\n"
+                f"  template: {want}\n"
+                f"  fix the '**Axes.**' line for this figure in sensor_ladder.md to match verbatim.")
+        n += 1
+    return n
+
+
 def main():
     if not os.path.exists(TEMPLATE):
         raise SystemExit(f"missing template: {TEMPLATE}")
     html = open(TEMPLATE).read()
+    n_axes = check_report_axes(html)      # before any write: a stale report must not ship a page
     tables = md_tables()
 
     used_f, used_t = set(), set()
@@ -194,6 +231,7 @@ def main():
     print(f"written: {OUT}  ({len(html)/1e6:.2f} MB)")
     print(f"figures inlined: {len(used_f)}/{len(on_disk)}   tables inlined: {len(used_t)}")
     print(f"every figure names its script: {len(scripts)}/{len(all_scripts)} scripts accounted for")
+    print(f"report axes sentences match the template: {n_axes}/{len(scripts)}")
 
 
 if __name__ == "__main__":
