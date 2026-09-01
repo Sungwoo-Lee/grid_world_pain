@@ -606,8 +606,8 @@ It is the one arm with neither directional smell nor useful sight.
 
 **The size of the effect was also understated.** Binning by the assigned wound averages over the
 whole ramp-up window in which the agent feels almost nothing, which is why Figure 8's numbers are
-small. Binned by what the agent is actually feeling (panel C), bush dwell runs from **12.6&ndash;17.8%
-at the lowest quarter of felt nociception to 31.3&ndash;49.6% at the highest** &mdash; a spread three
+small. Binned by what the agent is actually feeling (panel C), bush dwell runs from **12.6&ndash;17.9%
+at the lowest quarter of felt nociception to 31.7&ndash;49.5% at the highest** &mdash; a spread three
 to five times larger than anything in Figure 8. That panel is associational, so it is not a
 substitute for the causal contrast; but it is the right scale for the perceptual effect.
 
