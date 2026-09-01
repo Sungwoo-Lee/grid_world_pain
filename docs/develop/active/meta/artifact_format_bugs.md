@@ -332,6 +332,7 @@ details is closed and must stay in the default pass.
 - [ ] The checker run twice: default, and `--open-details` (F19)
 - [ ] Breakout wrappers are siblings of the column, not children (F20)
 - [ ] Mono-block column alignment uses `&nbsp;` or `pre`, not plain spaces (F21)
+- [ ] Numeric table columns are right-aligned, headers included (F22)
 - [ ] Every figure has exactly one generating script, and the page says which
 
 ### F20 — a nested max-width silently caps a designed-wider element
@@ -364,6 +365,23 @@ space.
 **Rule:** in a mono block, build column alignment from `&nbsp;` runs or `white-space: pre`, never
 plain spaces. The symptom is subtle — it reads as sloppiness rather than as an error — so it survives
 proofreading and only shows up on render.
+
+### F22 — `tabular-nums` mistaken for column alignment
+
+**Saw:** a worked-example table whose numeric columns held mixed signs and digit counts
+(`0.58`, `13.95`, `−7.32`, `4.25`) rendered with the decimal points drifting down every column.
+`font-variant-numeric: tabular-nums` was set, and the cells were monospace, so the alignment
+looked handled.
+
+**Cause:** tabular figures equalise the *width of each glyph*; they say nothing about where the
+number starts. A **left-aligned** numeric column still begins every value at the same left edge, so
+a minus sign or an extra integer digit shifts the decimal point. Monospace plus tabular-nums makes
+the drift look deliberate rather than broken, which is why it survives proofreading.
+
+**Rule:** numeric table columns are **right-aligned** (`td.num, th.num { text-align: right }`) — with
+a fixed number of decimal places that right-alignment decimal-aligns for free. Pad with a figure
+space (U+2007) only where right-alignment is not wanted. `tabular-nums` is necessary but not
+sufficient; align the header cell too, or the column reads as detached from its label.
 
 ## Related
 
