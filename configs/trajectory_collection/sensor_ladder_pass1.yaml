@@ -1,0 +1,54 @@
+# Sensor-ladder trajectory collection — pass 1 of 2, REGENERATED FROM THE STORES
+#
+# Driver: scripts/eval/traj_collect/run_collection.py
+# Study:  docs/experiments/active/sensor_ladder/sensor_ladder.md
+#
+# THIS FILE WAS NOT THE FILE USED. The ladder's collection was driven ad hoc in
+# 2026-08 and its spec was never saved, so a published study had no recorded way to
+# reproduce its evaluation population. Every value below was read back out of the
+# `_manifest.json` the collector itself wrote into each of the fourteen stores, which
+# records every resolved parameter precisely so the value actually used is never in
+# doubt. Re-running this spec reproduces the population; it does not reproduce the
+# original invocation, which is unrecoverable.
+#
+# The population is one million episodes per arm, seeds 1,000,000-1,999,999, split
+# across two contiguous non-overlapping passes. The split is not untidiness:
+# `n_episodes` is a guarded manifest field, so the 300,000-episode store of pass 1
+# could not be reopened and extended - the collector hard-fails by design. Pass 2 is
+# therefore a second store covering the remaining 700,000 seeds.
+#
+# All fourteen arms share `seed_base`, so they are PAIRED: episode i faces the same
+# environment draw in every arm.
+#
+# `checkpoints: [final]` is what was used. The resolved step differs per arm
+# (10,000,005 to 10,000,081) because each run's last checkpoint lands wherever its
+# episode budget ran out; the per-arm value each store recorded is listed beside its
+# run below, as a comment, so the resolution is checkable but not hard-coded.
+
+name: sensor_ladder_pass1
+algo: rppo
+out_root: results/trajectories_lad
+episodes: 300000
+seed_base: 1000000
+checkpoints: [final]
+nodes: [101, 103, 104, 105]   # what was available; any set works
+obs_precision: float32
+device: gpu
+shard_episodes: 5000
+batch_size: 5000
+
+runs:
+  - {label: A_baseline, path: results/JAX_RecurrentPPO/20260828-173438_lad_A_baseline_n101g0}   # final = step 10,000,057
+  - {label: B_olf_only, path: results/JAX_RecurrentPPO/20260828-173623_lad_B_olf_only_n101g1}   # final = step 10,000,019
+  - {label: R1_range1, path: results/JAX_RecurrentPPO/20260828-173637_lad_R1_range1_n105g1}   # final = step 10,000,025
+  - {label: V1_blur40, path: results/JAX_RecurrentPPO/20260828-173626_lad_V1_blur40_n103g0}   # final = step 10,000,012
+  - {label: V2_blur20, path: results/JAX_RecurrentPPO/20260828-173628_lad_V2_blur20_n103g1}   # final = step 10,000,005
+  - {label: V3_blur10, path: results/JAX_RecurrentPPO/20260828-173632_lad_V3_blur10_n104g0}   # final = step 10,000,015
+  - {label: V4_blur05, path: results/JAX_RecurrentPPO/20260828-173632_lad_V4_blur05_n104g1}   # final = step 10,000,057
+  - {label: V5_sharp, path: results/JAX_RecurrentPPO/20260828-173635_lad_V5_sharp_n105g0}   # final = step 10,000,028
+  - {label: P1_blur05_iso, path: results/JAX_RecurrentPPO/20260828-173641_lad_P1_blur05_iso_n102g0}   # final = step 10,000,062
+  - {label: Q1_presence_sum, path: results/JAX_RecurrentPPO/20260828-173642_lad_Q1_presence_sum_n102g1}   # final = step 10,000,081
+  - {label: Q2_presence_binary, path: results/JAX_RecurrentPPO/20260828-173645_lad_Q2_presence_binary_n113g0}   # final = step 10,000,065
+  - {label: O1_occl_rock, path: results/JAX_RecurrentPPO/20260828-173646_lad_O1_occl_rock_n113g1}   # final = step 10,000,010
+  - {label: O2_occl_veg, path: results/JAX_RecurrentPPO/20260828-173650_lad_O2_occl_veg_n114g0}   # final = step 10,000,056
+  - {label: O3_occl_all, path: results/JAX_RecurrentPPO/20260828-173650_lad_O3_occl_all_n114g1}   # final = step 10,000,058

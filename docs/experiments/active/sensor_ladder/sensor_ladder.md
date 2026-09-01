@@ -1029,6 +1029,36 @@ into circulation:
 
 ## Reproducing this
 
+Three stages. The analysis stage was always scripted; the two before it were not, and were
+reconstructed on 2026-09-01 &mdash; see the note at the end of this section.
+
+**1. Train the fourteen agents** (~11 h each, run in parallel across seven nodes):
+
+```bash
+bash scripts/lab/launch_ladder_arm.sh <arm> <cuda_index> <node_label>
+```
+
+One call per arm, with `<arm>` one of the fourteen config stems in
+`configs/environment/experiment/sensory_ladder/`. Seed is **not** a parameter: the sweep is
+single-seed by design (seed 42, from `configs/train/default.yaml`) and compares across arms, not
+across seeds. Limitation 1 above is about exactly this.
+
+**2. Collect the evaluation population** (1,000,000 episodes per arm, seeds 1,000,000&ndash;1,999,999,
+~452 GB in total), in two contiguous passes:
+
+```bash
+P=/home/vncuser/miniconda3/envs/grid_world_pain/bin/python
+$P scripts/eval/traj_collect/run_collection.py configs/trajectory_collection/sensor_ladder_pass1.yaml
+$P scripts/eval/traj_collect/run_collection.py configs/trajectory_collection/sensor_ladder_pass2.yaml
+```
+
+Two passes rather than one because `n_episodes` is a guarded field of a store's manifest: the
+300,000-episode store of pass 1 cannot be reopened and extended to a million, so pass 2 is a second
+store covering the remaining 700,000 seeds. All fourteen arms share a seed base, so they are
+**paired** &mdash; episode *i* faces the same environment draw in every arm.
+
+**3. Run the analysis:**
+
 ```bash
 P=/home/vncuser/miniconda3/envs/grid_world_pain/bin/python
 $P scripts/analysis/ladder/build_arm_data.py       # one sweep per arm, ~60-95 s each
@@ -1039,7 +1069,17 @@ $P scripts/analysis/ladder/build_artifact.py       # the shareable HTML page
 ```
 
 Every figure has exactly one script, named for its figure number, and each script states its own
-question, method and known limitations in its docstring. Figures 6 and 7 additionally require
+question, method and known limitations in its docstring.
+
+**A reproducibility gap, closed late and honestly.** Until 2026-09-01 this section covered only
+stage 3. The fourteen arm configs and the launch script existed **only as untracked files** on the
+NAS &mdash; not ignored, simply never added &mdash; so a published study could not be rebuilt from a
+fresh clone. They are now committed, and were verified before committing against the config the
+trainer itself saved beside each arm's checkpoints: every leaf value agrees, 14 of 14. The two
+collection specs in stage 2 were never saved at all; they are **regenerated from the `_manifest.json`
+each store carries**, which records every resolved parameter. Re-running them reproduces the
+population, not the original invocation, which is unrecoverable. Both were checked with the
+driver's `--dry-run`. Figures 6 and 7 additionally require
 `scripts/analysis/hiding_drivers.py` to have been run per arm. See
 [`scripts/analysis/ladder/README.md`](../../../../scripts/analysis/ladder/README.md).
 
