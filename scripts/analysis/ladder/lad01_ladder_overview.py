@@ -53,14 +53,15 @@ for axis, vals, fmt in ((ax[0], surv, "{:.0f}"), (ax[1], dwell, "{:.1f}%")):
         if t.get_text() != want:
             raise SystemExit(f"label {t.get_text()!r} is on the bar whose value is {want}")
 
-P = L.population()
+POP = L.population()
 n_steps = sum(int(np.load(f"{L.OUT_ROOT}/{a}_episodes.npz")["n_steps"].sum()) for a in arms)
 L.record_samples("lad01_ladder_overview", [
-    dict(what="episodes, for mean survival", used=P["episodes"], total=P["episodes"],
+    dict(what="episodes, for mean survival", used=POP["episodes"], total=POP["episodes"],
          note="every episode of every arm"),
-    dict(what="step rows, for bush dwell", used=n_steps, total=P["steps"],
+    dict(what="step rows, for bush dwell", used=n_steps, total=POP["steps"],
          note="every step; the t=0 row of each episode is excluded by construction")])
 
+PL.assert_labels_fit(fig, ax)
 PL.finish(fig, f"{L.FIG_ROOT}/lad01_ladder_overview.png")
 print(f"\n{'arm':22}{'survival':>10}{'bush dwell':>13}")
 for a, s, d in zip(arms, surv, dwell):

@@ -35,11 +35,12 @@ ax.set_ylabel("sensor-ladder arm  (poorest senses at the bottom)")
 ax.set_xlabel("share of the arm's 1,000,000 episodes  (%)")
 ax.set_xlim(0, 100); ax.grid(axis="y", visible=False)
 ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.01), ncol=3, fontsize=8.5)
-P = L.population()
+POP = L.population()
 L.record_samples("lad03_how_it_ends", [
-    dict(what="episodes classified by outcome", used=P["episodes"], total=P["episodes"],
+    dict(what="episodes classified by outcome", used=POP["episodes"], total=POP["episodes"],
          note="every episode ends exactly one of the three ways, so the shares sum to 100%")])
 
+PL.assert_labels_fit(fig, ax)
 PL.finish(fig, f"{L.FIG_ROOT}/lad03_how_it_ends.png")
 print(f"{'arm':22}" + "".join(f"{k[:14]:>17}" for k in order))
 for a, row in zip(arms, M):

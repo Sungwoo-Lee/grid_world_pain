@@ -42,7 +42,18 @@ PROBE = r"""
 // Content inside a CLOSED <details> is laid out and reports a real bounding box, but is never
 // painted. Without this the probe reports every collapsed panel as overlapping whatever sits above
 // it - 24 false positives on the first page that used one.
+// OPEN_DETAILS is set by the driver's --open-details pass: collapsed panels are never
+// geometry-checked otherwise, so a defect can hide inside one indefinitely.
+if (window.__OPEN_DETAILS__) {
+  document.addEventListener('DOMContentLoaded', function () {
+    var dd = document.querySelectorAll('details');
+    for (var i = 0; i < dd.length; i++) dd[i].setAttribute('open', '');
+  });
+}
+
 function inClosedDetails(el) {
+  // the <summary> of a closed <details> IS painted - only its siblings are hidden
+  if (el.tagName === 'SUMMARY') return false;
   for (var n = el.parentElement; n && n !== document.body; n = n.parentElement) {
     if (n.tagName === 'DETAILS' && !n.hasAttribute('open')) return true;
   }
@@ -144,7 +155,7 @@ def chrome() -> str:
     raise SystemExit("no Chrome found - this check requires a real browser")
 
 
-def wrap(page_html: str, lean: bool) -> str:
+def wrap(page_html: str, lean: bool, open_details: bool = False) -> str:
     body = page_html
     if lean:
         # swap inlined images for same-aspect placeholders: 60x smaller, identical text layout
@@ -152,7 +163,8 @@ def wrap(page_html: str, lean: bool) -> str:
                       'src="data:image/svg+xml;utf8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22'
                       ' viewBox=%220 0 1000 430%22%3E%3Crect width=%221000%22 height=%22430%22'
                       ' fill=%22%23e8e6e1%22/%3E%3C/svg%3E"', body)
-    return HOST_SKELETON_HEAD + body + PROBE + "</body></html>"
+    flag = "<script>window.__OPEN_DETAILS__=true;</script>" if open_details else ""
+    return HOST_SKELETON_HEAD + flag + body + PROBE + "</body></html>"
 
 
 def measure(binary: str, path: str, width: int, height: int) -> dict:
@@ -182,6 +194,9 @@ def main():
     ap.add_argument("--out", default="tmp/artifact_layout")
     ap.add_argument("--widths", nargs="+", type=int, default=[500, 834, 1440])
     ap.add_argument("--shot-height", type=int, default=24000)
+    ap.add_argument("--open-details", action="store_true",
+                    help="also render with every <details> expanded, so collapsed panels are "
+                         "geometry-checked; they are invisible to the default pass")
     a = ap.parse_args()
     binary = chrome()
     # Chrome headless refuses to make the viewport narrower than 500px: --window-size=390 silently
@@ -196,7 +211,7 @@ def main():
     problems = 0
     for w in a.widths:
         with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False) as f:
-            f.write(wrap(src, lean=True)); lean_path = f.name
+            f.write(wrap(src, lean=True, open_details=a.open_details)); lean_path = f.name
         r = measure(binary, lean_path, w, 1400)
         shot = os.path.join(a.out, f"page_{w}.png")
         shoot(binary, lean_path, w, a.shot_height, shot)

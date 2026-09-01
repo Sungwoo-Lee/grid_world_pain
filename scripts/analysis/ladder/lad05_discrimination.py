@@ -43,8 +43,9 @@ ax[0].scatter(P, y, s=54, color=PL.THREAT, zorder=3, label="nearest animal is a 
 ax[0].axvline(0, color=PL.INK, lw=1)
 ax[0].set_yticks(y); ax[0].set_yticklabels(PL.arm_ylabels(arms), fontsize=8)
 ax[0].set_ylabel("sensor-ladder arm  (poorest senses at the bottom)")
-ax[0].set_xlabel("hiding triggered by a nearby animal  -  a DIFFERENCE, in percentage points\n"
-                 "bush dwell at 1-2 cells MINUS bush dwell at 6+ cells;  "
+ax[0].set_xlabel("hiding triggered by a nearby animal\n"
+                 "a DIFFERENCE, in percentage points:\n"
+                 "dwell at 1-2 cells MINUS dwell at 6+ cells\n"
                  "below zero = hides LESS when one is near")
 ax[0].grid(axis="y", visible=False)
 ax[0].legend(loc="lower center", bbox_to_anchor=(0.5, 1.01), ncol=1, fontsize=8.5)
@@ -55,8 +56,8 @@ ax[0].set_xlim(min(R.min(), 0) - 4, P.max() + 9)
 ax[1].barh(y, R, color=[CY if g else CN for g in grp], height=0.72, edgecolor="none")
 ax[1].axvline(0, color=PL.INK, lw=1)
 ax[1].set_xlabel("FALSE ALARM: hiding triggered by a nearby rabbit\n"
-                 "a DIFFERENCE in percentage points;  right of zero = wasted hiding, "
-                 "left = hides less")
+                 "a DIFFERENCE, in percentage points\n"
+                 "right of zero = wasted hiding\nleft of zero = hides less")
 ax[1].grid(axis="y", visible=False)
 m = max(abs(R)) * 1.55
 ax[1].set_xlim(-m, m)
@@ -65,20 +66,21 @@ for i in range(len(arms)):
 h = [plt.Rectangle((0, 0), 1, 1, color=CY, label="sight resolves WHAT it sees\n(visual range 2, 8 appearance channels)"),
      plt.Rectangle((0, 0), 1, 1, color=CN, label="sight cannot resolve WHAT it sees\n(range < 2, or a single channel)")]
 ax[1].legend(handles=h, loc="lower center", bbox_to_anchor=(0.5, 1.01), fontsize=8, ncol=1)
-P = L.population()
+POP = L.population()
 def _bins(key, bins):
     return sum(int(np.asarray(D[a]["grids"][f"{key}_tot"], float)[list(bins)].sum()) for a in arms)
 L.record_samples("lad05_discrimination", [
     dict(what="step rows with a predator 1-2 cells away", used=_bins("pd", L.NEAR_BINS),
-         total=P["steps"], note="the 'near' half of the predator contrast"),
+         total=POP["steps"], note="the 'near' half of the predator contrast"),
     dict(what="step rows with a predator 6+ cells away", used=_bins("pd", L.FAR_BINS),
-         total=P["steps"], note="the 'far' half"),
+         total=POP["steps"], note="the 'far' half"),
     dict(what="step rows with a rabbit 1-2 cells away", used=_bins("rd", L.NEAR_BINS),
-         total=P["steps"], note="the 'near' half of the rabbit contrast"),
+         total=POP["steps"], note="the 'near' half of the rabbit contrast"),
     dict(what="step rows with a rabbit 6+ cells away", used=_bins("rd", L.FAR_BINS),
-         total=P["steps"], note="the 'far' half. Distances 3-5 are plotted in Figure 4 but are "
+         total=POP["steps"], note="the 'far' half. Distances 3-5 are plotted in Figure 4 but are "
                                "not part of this contrast")])
 
+PL.assert_labels_fit(fig, ax)
 PL.finish(fig, f"{L.FIG_ROOT}/lad05_discrimination.png")
 print(f"{'arm':22}{'predator':>10}{'rabbit':>9}{'gap':>8}   resolves identity")
 for i, a in enumerate(arms):

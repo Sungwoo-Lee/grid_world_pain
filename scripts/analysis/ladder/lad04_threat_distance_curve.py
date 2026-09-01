@@ -42,8 +42,9 @@ for j, (key, ttl) in enumerate([("pd", "Nearest PREDATOR - a real threat"),
         else:
             ax[j].plot(x, y, lw=1.0, color=c, alpha=0.34, zorder=2)
     ax[j].set_title(ttl, fontsize=10, color=PL.INK, loc="left", pad=8)
-    ax[j].set_xlabel("distance from agent to the nearest animal when it decided\n"
-                     "(chebyshev steps - the moves a chess king would need; 8 = eight or more)")
+    ax[j].set_xlabel("distance to the nearest animal when it decided\n"
+                     "chebyshev steps - the moves a chess king would need\n"
+                     "8 = eight or more")
     ax[j].set_xticks(x); ax[j].set_xticklabels(L.DIST_NAMES)
     ax[j].set_xlim(0.7, L.DIST_MAX + 1.6)
     PL.stagger_end_labels(ax[j], ends)
@@ -53,16 +54,17 @@ h = [plt.Line2D([], [], color=PL.GROUP_YES, lw=2.2, label=L.GROUP_LABEL[True] + 
      plt.Line2D([], [], color=PL.MUTED, lw=2.4, marker="o", ms=4,
                 label="thick + named = an arm the text discusses; thin = the other ten")]
 ax[0].legend(handles=h, loc="lower center", bbox_to_anchor=(1.03, 1.10), ncol=1, fontsize=8.3)
-P = L.population()
+POP = L.population()
 pd_used = sum(int(np.asarray(D[a]["grids"]["pd_tot"], float).sum()) for a in arms)
 rd_used = sum(int(np.asarray(D[a]["grids"]["rd_tot"], float).sum()) for a in arms)
 L.record_samples("lad04_threat_distance_curve", [
-    dict(what="step rows, predator panel", used=pd_used, total=P["steps"],
+    dict(what="step rows, predator panel", used=pd_used, total=POP["steps"],
          note="excludes episodes containing no predator, and each episode's first step, "
               "which has no previous row to read the distance from"),
-    dict(what="step rows, rabbit panel", used=rd_used, total=P["steps"],
+    dict(what="step rows, rabbit panel", used=rd_used, total=POP["steps"],
          note="same, for episodes containing no rabbit")])
 
+PL.assert_labels_fit(fig, ax)
 PL.finish(fig, f"{L.FIG_ROOT}/lad04_threat_distance_curve.png")
 print(f"{'arm':22}" + "".join(f"{d:>7}" for d in L.DIST_NAMES) + "   (predator, % in bush)")
 for a in arms:

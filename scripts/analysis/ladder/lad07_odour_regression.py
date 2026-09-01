@@ -12,6 +12,15 @@ WHAT THE TWO BARS MEAN. `pred_olf_intensity` is how strongly this episode's pred
 its job. A positive rabbit bar is the agent hiding from an animal that has never hurt it and cannot.
 The rabbit bar is the false-alarm rate expressed in percentage points of lost foraging time.
 
+WHAT "STRONG" MEANS. An animal's odour intensity is the SUM of its two odour channels, redrawn for
+it every episode. It runs 0 to 2 and averages 1.17. Splitting into quartiles of that sum splits by
+how LOUDLY the animal smells, not by what it is: a predator averages 0.7 on one channel and 0.5 on
+the other and a rabbit the reverse, so both classes have the same expected intensity of 1.2 and
+differ only in WHICH channel is larger. A typical strongest-quarter animal sits at 1.58 against 0.75
+in the weakest - about 2.1x as loud. The nose receives intensity divided by distance, so at equal
+distance the loud one reads 2.1x higher, and equivalently reaches further: a strong-smelling rabbit
+six cells away produces the same reading as a weak-smelling one at about three cells.
+
 HOW IT IS COMPUTED. Quasi-binomial regression on the episode-level bush-dwell rate, restricted to
 episodes with exactly one predator and one rabbit so that "the predator's smell" and "the rabbit's
 smell" are each a single well-defined number rather than an average over several animals. Standard
@@ -59,16 +68,17 @@ ax.set_xlim(lo - 0.35 - abs(lo) * 0.5, hi * 1.42 + 0.35)
 ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=1, fontsize=8.5)
 fig.text(0.5, -0.08, "'(n.s.)' marks an effect that is not distinguishable from zero at p < 0.001 "
          "after scaling for overdispersion", ha="center", fontsize=7.6, color=PL.MUTED)
-P = L.population()
+POP = L.population()
 _n = sum(int(r["n"]) for a in arms
          for r in csv.DictReader(open(f"{GLM_ROOT}/{a}/multivariate.csv"))
          if r["model"] == MODEL and r["term"] == "const")
 L.record_samples("lad07_odour_regression", [
-    dict(what="episodes entering the regressions", used=_n, total=P["episodes"],
+    dict(what="episodes entering the regressions", used=_n, total=POP["episodes"],
          note="restricted to episodes with EXACTLY one predator and one rabbit, so that each "
               "animal's odour is a single number rather than an average over several animals. "
               "This is the smallest sample behind any figure on the page")])
 
+PL.assert_labels_fit(fig, ax)
 PL.finish(fig, f"{L.FIG_ROOT}/lad07_odour_regression.png")
 print(f"{'arm':22}{'predator smell':>16}{'rabbit smell':>15}")
 for i, a in enumerate(arms):

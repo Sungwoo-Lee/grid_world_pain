@@ -10,6 +10,15 @@ WHY THIS IS THE SHARPEST TEST IN THE REPORT. The predator panel is what a compet
 do: hide more when the world happens to contain strong-smelling predators. The rabbit panel is
 pure false alarm - and because the draw is random, no confound can produce it.
 
+WHAT "STRONG" MEANS. An animal's odour intensity is the SUM of its two odour channels, redrawn for
+it every episode. It runs 0 to 2 and averages 1.17. Splitting into quartiles of that sum splits by
+how LOUDLY the animal smells, not by what it is: a predator averages 0.7 on one channel and 0.5 on
+the other and a rabbit the reverse, so both classes have the same expected intensity of 1.2 and
+differ only in WHICH channel is larger. A typical strongest-quarter animal sits at 1.58 against 0.75
+in the weakest - about 2.1x as loud. The nose receives intensity divided by distance, so at equal
+distance the loud one reads 2.1x higher, and equivalently reaches further: a strong-smelling rabbit
+six cells away produces the same reading as a weak-smelling one at about three cells.
+
 HOW IT IS COMPUTED. Within each arm, episodes are split into quartiles of the mean odour intensity
 drawn for its rabbits (and separately, its predators); intensity is the sum of the two olfactory
 channels that separate the two classes, with the channels derived from the run's own config rather
@@ -85,16 +94,17 @@ h = [plt.Line2D([], [], color=PL.GROUP_YES, lw=2.6, label=L.GROUP_LABEL[True] + 
 ax[0].legend(handles=h, loc="lower center", bbox_to_anchor=(1.03, 1.10), ncol=2, fontsize=8.2)
 fig.text(0.5, -0.03, "Bold lines pool the counts within each group; the faint lines behind them are "
          "the fourteen individual arms.", ha="center", fontsize=8, color=PL.MUTED)
-P = L.population()
+POP = L.population()
 _r = sum(int(np.asarray(D[a]["odour"]["rab_tot"], float).sum()) for a in arms)
 _p = sum(int(np.asarray(D[a]["odour"]["pred_tot"], float).sum()) for a in arms)
 L.record_samples("lad12_odour_false_alarm", [
-    dict(what="step rows, rabbit panel", used=_r, total=P["steps"],
+    dict(what="step rows, rabbit panel", used=_r, total=POP["steps"],
          note="the first 25 steps of every episode that contains a rabbit, across all four "
               "starting-wound quarters"),
-    dict(what="step rows, predator panel", used=_p, total=P["steps"],
+    dict(what="step rows, predator panel", used=_p, total=POP["steps"],
          note="same, for episodes containing a predator")])
 
+PL.assert_labels_fit(fig, ax)
 PL.finish(fig, f"{L.FIG_ROOT}/lad12_odour_false_alarm.png")
 print(f"{'arm':22}{'rabbit slope':>14}{'  (unhurt)':>12}{'rabbit slope':>14}{'  (wounded)':>13}"
       f"{'predator slope':>16}")

@@ -50,16 +50,17 @@ for j, (dat, ttl, xl) in enumerate([
     ax[j].set_ylabel("bush dwell over the episode's first 25 steps\n(% of those steps spent in a bush)")
     ax[j].set_title(ttl, fontsize=9.5, loc="left", pad=8)
 ax[1].legend(handles=h, loc="lower right", fontsize=7.8)
-P = L.population()
+POP = L.population()
 _used = sum(int(np.load(f"{L.OUT_ROOT}/{a}_episodes.npz")["steps_early"].sum()) for a in arms)
 L.record_samples("lad13_two_internal_drives", [
-    dict(what="step rows in the 25-step window", used=_used, total=P["steps"],
+    dict(what="step rows in the 25-step window", used=_used, total=POP["steps"],
          note="both panels use the same rows; they differ only in which internal state the "
               "episode is filed under"),
-    dict(what="episodes contributing", used=P["episodes"], total=P["episodes"],
+    dict(what="episodes contributing", used=POP["episodes"], total=POP["episodes"],
          note="every episode has both a randomised starting wound and a randomised starting "
               "nutrition, so none is excluded from either panel")])
 
+PL.assert_labels_fit(fig, ax)
 PL.finish(fig, f"{L.FIG_ROOT}/lad13_two_internal_drives.png")
 print(f"{'arm':22}{'hunger span':>13}{'wound span':>13}   (percentage points, quarter 4 - quarter 1)")
 for a in arms:

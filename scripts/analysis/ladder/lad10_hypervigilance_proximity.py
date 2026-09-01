@@ -46,8 +46,9 @@ for j, (lo, hi, ttl, unit) in enumerate([
                label="woke up badly wounded  (start wound 75-100)")
     ax[j].axvline(0, color=PL.INK, lw=1)
     ax[j].set_title(ttl, fontsize=9.5, loc="left", pad=8)
-    ax[j].set_xlabel(f"hiding triggered by a nearby {unit}  -  a DIFFERENCE, in percentage points\n"
-                     "bush dwell at 1-2 cells MINUS at 6+ cells;  below zero = hides less")
+    ax[j].set_xlabel(f"hiding triggered by a nearby {unit}\n"
+                     "a DIFFERENCE, in percentage points\n"
+                     "dwell at 1-2 cells MINUS at 6+ cells")
     ax[j].grid(axis="y", visible=False)
     # A and B SHARE a scale. Drawing the rabbit panel on its own tighter axis made a response
     # of a few points look like the predator panel's forty, which is the opposite of the finding.
@@ -62,8 +63,9 @@ ax[2].axvline(0, color=PL.INK, lw=1)
 ax[2].set_title("C.  THE TEST: how much the wound moved each response\n"
                 "(both on one scale - a longer blue bar than red would be hypervigilance)",
                 fontsize=9.5, loc="left", pad=8)
-ax[2].set_xlabel("shift caused by waking up badly wounded  -  a DIFFERENCE of two differences\n"
-                 "the response above, at start wound 75-100 MINUS at 0-25, in percentage points")
+ax[2].set_xlabel("shift caused by waking up badly wounded\n"
+                 "a DIFFERENCE of two differences, in percentage points\n"
+                 "the response above at wound 75-100 MINUS at 0-25")
 ax[2].grid(axis="y", visible=True, color=PL.GRID, lw=0.5)
 m2 = max(np.max(np.abs(np.r_[d_rab, d_pre])), 1e-6)
 ax[2].set_xlim(min(0, np.min(np.r_[d_rab, d_pre])) - m2 * 0.45, m2 * 1.45)
@@ -74,22 +76,23 @@ ax[0].set_yticks(y); ax[0].set_yticklabels(PL.arm_ylabels(arms), fontsize=8)
 ax[0].set_ylabel("sensor-ladder arm  (poorest senses at the bottom)")
 ax[0].legend(loc="lower center", bbox_to_anchor=(1.03, 1.14), ncol=2, fontsize=8.5)
 ax[2].legend(loc="lower center", bbox_to_anchor=(0.5, 1.14), ncol=1, fontsize=8.5)
-P = L.population()
+POP = L.population()
 def _q(key, bins, q):
     return sum(int(np.asarray(D[a]["grids"][f"{key}_tot"], float)[list(bins)][:, list(q)].sum())
                for a in arms)
 L.record_samples("lad10_hypervigilance_proximity", [
     dict(what="step rows, rabbit panel, lightest wound quarter",
-         used=_q("rd", L.NEAR_BINS, LOW) + _q("rd", L.FAR_BINS, LOW), total=P["steps"],
+         used=_q("rd", L.NEAR_BINS, LOW) + _q("rd", L.FAR_BINS, LOW), total=POP["steps"],
          note="near and far bins together, for episodes that began with a wound of 0-25"),
     dict(what="step rows, rabbit panel, heaviest wound quarter",
-         used=_q("rd", L.NEAR_BINS, HIGH) + _q("rd", L.FAR_BINS, HIGH), total=P["steps"], note=""),
+         used=_q("rd", L.NEAR_BINS, HIGH) + _q("rd", L.FAR_BINS, HIGH), total=POP["steps"], note=""),
     dict(what="step rows, predator panel, lightest wound quarter",
-         used=_q("pd", L.NEAR_BINS, LOW) + _q("pd", L.FAR_BINS, LOW), total=P["steps"],
+         used=_q("pd", L.NEAR_BINS, LOW) + _q("pd", L.FAR_BINS, LOW), total=POP["steps"],
          note="smaller than the rabbit rows because a third of episodes contain no predator"),
     dict(what="step rows, predator panel, heaviest wound quarter",
-         used=_q("pd", L.NEAR_BINS, HIGH) + _q("pd", L.FAR_BINS, HIGH), total=P["steps"], note="")])
+         used=_q("pd", L.NEAR_BINS, HIGH) + _q("pd", L.FAR_BINS, HIGH), total=POP["steps"], note="")])
 
+PL.assert_labels_fit(fig, ax)
 PL.finish(fig, f"{L.FIG_ROOT}/lad10_hypervigilance_proximity.png")
 print(f"{'arm':22}{'rab lo':>9}{'rab hi':>9}{'shift':>8}  |{'pred lo':>9}{'pred hi':>9}{'shift':>8}")
 for i, a in enumerate(arms):

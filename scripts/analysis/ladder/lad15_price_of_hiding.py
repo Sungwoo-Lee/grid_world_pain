@@ -48,16 +48,17 @@ for j, (yv, yl, ttl) in enumerate([
     ax[j].set_ylabel(yl)
     ax[j].set_title(f"{ttl}\n(across the 14 arms: r = {r:+.2f}, dashed line is the fit)",
                     fontsize=9.3, loc="left", pad=8)
-P = L.population()
+POP = L.population()
 _steps = sum(int(np.load(f"{L.OUT_ROOT}/{a}_episodes.npz")["n_steps"].sum()) for a in arms)
 L.record_samples("lad15_price_of_hiding", [
-    dict(what="episodes behind the 14 points", used=P["episodes"], total=P["episodes"],
+    dict(what="episodes behind the 14 points", used=POP["episodes"], total=POP["episodes"],
          note="each of the 14 points pools one arm's whole population into three numbers"),
-    dict(what="step rows behind bush dwell and eating rate", used=_steps, total=P["steps"], note=""),
-    dict(what="points entering the correlation", used=len(arms), total=P["arms"],
+    dict(what="step rows behind bush dwell and eating rate", used=_steps, total=POP["steps"], note=""),
+    dict(what="points entering the correlation", used=len(arms), total=POP["arms"],
          note="the r values are computed across 14 ARM-LEVEL points, not across episodes - this "
               "is the smallest n on the page and the reason Section 8 qualifies the correlation")])
 
+PL.assert_labels_fit(fig, ax)
 PL.finish(fig, f"{L.FIG_ROOT}/lad15_price_of_hiding.png")
 print(f"{'arm':22}{'bush dwell':>12}{'survival':>11}{'eat/100 steps':>15}")
 for a, d, s, e in zip(arms, dwell, surv, eat):

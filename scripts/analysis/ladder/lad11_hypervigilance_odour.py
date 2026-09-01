@@ -18,6 +18,15 @@ The reading this supports: a wound does not make the agent generically more afra
 agent lean harder on an ambiguous channel - and that shows up only in an agent that has a reliable
 channel to lean AWAY from.
 
+WHAT "STRONG" MEANS. An animal's odour intensity is the SUM of its two odour channels, redrawn for
+it every episode. It runs 0 to 2 and averages 1.17. Splitting into quartiles of that sum splits by
+how LOUDLY the animal smells, not by what it is: a predator averages 0.7 on one channel and 0.5 on
+the other and a rabbit the reverse, so both classes have the same expected intensity of 1.2 and
+differ only in WHICH channel is larger. A typical strongest-quarter animal sits at 1.58 against 0.75
+in the weakest - about 2.1x as loud. The nose receives intensity divided by distance, so at equal
+distance the loud one reads 2.1x higher, and equivalently reaches further: a strong-smelling rabbit
+six cells away produces the same reading as a weak-smelling one at about three cells.
+
 HOW IT IS COMPUTED. Within each arm, episodes are split by the odour intensity drawn for their
 rabbits (four quartiles; intensity is the sum of the two olfactory channels that separate predators
 from rabbits, with the channels derived from the run's own config). The slope is bush dwell in the
@@ -60,8 +69,9 @@ ax[0].barh(y - h/2, r_hi, height=h, color=PL.WOUND_HI, edgecolor="none",
 ax[0].axvline(0, color=PL.INK, lw=1)
 ax[0].set_yticks(y); ax[0].set_yticklabels(PL.arm_ylabels(arms), fontsize=8)
 ax[0].set_ylabel("sensor-ladder arm  (poorest senses at the bottom)")
-ax[0].set_xlabel("response to a strong RABBIT smell  -  a DIFFERENCE, in percentage points\n"
-                 "bush dwell in the strongest-smelling quarter MINUS the weakest")
+ax[0].set_xlabel("response to a strong RABBIT smell\n"
+                 "a DIFFERENCE, in percentage points\n"
+                 "dwell in the strongest-smelling quarter MINUS the weakest")
 ax[0].grid(axis="y", visible=False)
 ax[0].legend(loc="lower center", bbox_to_anchor=(0.5, 1.01), ncol=1, fontsize=8.5)
 ax[0].set_xlim(min(0, r_lo.min(), r_hi.min()) - 0.6, max(r_lo.max(), r_hi.max()) * 1.16)
@@ -69,8 +79,9 @@ ax[0].set_xlim(min(0, r_lo.min(), r_hi.min()) - 0.6, max(r_lo.max(), r_hi.max())
 ax[1].barh(y + h/2, d_r, height=h, color=[CY if g else CN for g in grp], edgecolor="none")
 ax[1].barh(y - h/2, d_p, height=h, color=PL.GRID, edgecolor="none")
 ax[1].axvline(0, color=PL.INK, lw=1)
-ax[1].set_xlabel("how much the wound AMPLIFIED that response  -  a DIFFERENCE of two differences\n"
-                 "the response above when wounded MINUS when unhurt, in percentage points")
+ax[1].set_xlabel("how much the wound AMPLIFIED that response\n"
+                 "a DIFFERENCE of two differences, in percentage points\n"
+                 "the response at left when wounded MINUS when unhurt")
 ax[1].grid(axis="y", visible=False)
 m = max(np.max(np.abs(np.r_[d_r, d_p])), 1e-6)
 ax[1].set_xlim(min(0, np.min(np.r_[d_r, d_p])) - m * 0.45, m * 1.5)
@@ -81,20 +92,21 @@ hh = [plt.Rectangle((0, 0), 1, 1, color=CY, label="RABBIT smell - arm whose sigh
       plt.Rectangle((0, 0), 1, 1, color=CN, label="RABBIT smell - arm whose sight does not"),
       plt.Rectangle((0, 0), 1, 1, color=PL.GRID, label="PREDATOR smell (control, all arms)")]
 ax[1].legend(handles=hh, loc="lower center", bbox_to_anchor=(0.5, 1.01), ncol=1, fontsize=8)
-P = L.population()
+POP = L.population()
 def _o(kind, q):
     return sum(int(np.asarray(D[a]["odour"][f"{kind}_tot"], float)[:, q].sum()) for a in arms)
 L.record_samples("lad11_hypervigilance_odour", [
     dict(what="step rows, rabbit odour, lightest wound quarter", used=_o("rab", 0),
-         total=P["steps"],
+         total=POP["steps"],
          note="the first 25 steps of episodes that contain a rabbit and began with a wound of 0-25"),
     dict(what="step rows, rabbit odour, heaviest wound quarter", used=_o("rab", 3),
-         total=P["steps"], note=""),
+         total=POP["steps"], note=""),
     dict(what="step rows, predator odour control, lightest quarter", used=_o("pred", 0),
-         total=P["steps"], note="episodes containing no predator are excluded"),
+         total=POP["steps"], note="episodes containing no predator are excluded"),
     dict(what="step rows, predator odour control, heaviest quarter", used=_o("pred", 3),
-         total=P["steps"], note="")])
+         total=POP["steps"], note="")])
 
+PL.assert_labels_fit(fig, ax)
 PL.finish(fig, f"{L.FIG_ROOT}/lad11_hypervigilance_odour.png")
 print(f"{'arm':22}{'rab unhurt':>12}{'rab wounded':>13}{'amplified':>11}   "
       f"{'pred amplified':>15}   resolves identity")

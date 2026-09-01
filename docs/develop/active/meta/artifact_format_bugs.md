@@ -272,6 +272,40 @@ coordinates. Any geometry check that walks the DOM will see it.
 **Rule:** a renderer-based checker must skip content inside a closed `<details>`, the same way it
 skips `display:none`. `check_artifact_layout.py` now does.
 
+### F18 — an axis label wider than its panel, in a multi-panel figure
+
+**Saw:** in a two-panel figure the two x-axis labels printed through each other mid-canvas, reading
+`...below zero = hides LESS when o**aneDIsFFEeRE**NCE in percentage points...`, and the right one
+ran off the canvas edge mid-word. Three figures were affected.
+
+**Cause:** the labels had just been *lengthened* — to fix a different defect, F15's cousin, where
+"percentage points" alone did not tell the reader an axis was a difference. Matplotlib places an
+xlabel centred under its axes and neither wraps nor warns when it is wider than the panel; in a
+multi-panel figure it simply overlaps the neighbour.
+
+**Why nothing caught it:** the defect is inside the PNG. The DOM-based layout checker sees an image,
+not the text drawn in it, and matplotlib emits nothing.
+
+**Rule:** measure every axis label's rendered extent against its own panel at draw time and refuse
+to write the figure on overflow — the same read-back-and-assert pattern F13 mandates for bar
+annotations. `_plot.assert_labels_fit(fig, ax)` does this and is called by all fifteen figure
+scripts; it immediately caught a fourth figure the human reviewer had not flagged.
+
+### F19 — a collapsed panel is never geometry-checked
+
+**Saw:** nothing, for a while — which is the problem. Once the layout checker was taught to skip
+content inside a closed `<details>` (F17), that content stopped being checked at all, and a real
+defect sat inside one undetected: at a 500px viewport the notes column of every data panel was
+142px wide, crushing a 214-character sentence into a ribbon.
+
+**Cause:** the F17 fix was correct but one-sided. Skipping unpainted content removes the false
+positives and the true ones together.
+
+**Rule:** a checker that skips collapsed content must also offer a pass that expands it.
+`check_artifact_layout.py --open-details` forces every `<details>` open and re-runs the geometry;
+run both passes before publishing. Relatedly, the `<summary>` element itself *is* painted when the
+details is closed and must stay in the default pass.
+
 ## Checklist
 
 - [ ] `check_artifact_layout.py` exits 0
@@ -294,6 +328,8 @@ skips `display:none`. `check_artifact_layout.py` now does.
 - [ ] Every number quoted in prose AND in alt text re-checked against its figure (F15)
 - [ ] Edits to one of N repeated elements are scoped to that element (F16)
 - [ ] Geometry checks skip closed `<details>` content (F17)
+- [ ] Every axis label measured against its own panel at draw time (F18)
+- [ ] The checker run twice: default, and `--open-details` (F19)
 - [ ] Every figure has exactly one generating script, and the page says which
 
 ## Related

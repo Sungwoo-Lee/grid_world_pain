@@ -170,3 +170,29 @@ def stagger_end_labels(ax, points, min_gap_frac=0.055):
         ax.annotate(txt, xy=(x, y0), xytext=(x + (ax.get_xlim()[1] - ax.get_xlim()[0]) * 0.02, y),
                     fontsize=7.2, color=col, va="center", ha="left",
                     arrowprops=dict(arrowstyle="-", lw=0.5, color=MUTED, shrinkA=0, shrinkB=2))
+
+
+def assert_labels_fit(fig, axes, slack=1.04):
+    """Refuse to write a figure whose axis labels are wider than the panel they belong to.
+
+    Matplotlib silently lets an xlabel run past its axes and off the canvas: in a multi-panel
+    figure two neighbouring labels then print through each other, and the outermost one is clipped
+    at the edge. Nothing warns, and the defect lives inside the PNG where a DOM-based layout
+    checker cannot see it. This measures each label's rendered width against its own panel and
+    raises, in the same read-back-and-assert spirit the bar annotations already use.
+    """
+    fig.canvas.draw()
+    r = fig.canvas.get_renderer()
+    bad = []
+    for ax in np.atleast_1d(axes).ravel():
+        panel = ax.get_window_extent(renderer=r).width
+        for which, art in (("xlabel", ax.xaxis.label), ("title", ax.title)):
+            if not art.get_text():
+                continue
+            w = max(art.get_window_extent(renderer=r).width, 1.0)
+            if w > panel * slack:
+                bad.append(f"{which} is {w:.0f}px wide in a {panel:.0f}px panel: "
+                           f"{art.get_text().splitlines()[0][:60]!r}")
+    if bad:
+        raise SystemExit("axis text does not fit its panel -\n  " + "\n  ".join(bad) +
+                         "\nShorten it, or split it across more lines.")

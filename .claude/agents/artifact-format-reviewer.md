@@ -44,6 +44,11 @@ widths, and reports horizontal page overflow, boxes escaping the viewport, text 
 absurd column, elements with text but zero height, text overlapping text, and image problems. A
 non-zero exit means it found something.
 
+**Run it twice**: once normally, and once with `--open-details`, which forces every collapsed panel
+open. The default pass deliberately skips content inside a closed `<details>` (it is laid out but
+never painted, and it produced 24 false overlaps once) — which means a real defect can hide in there,
+and one did. Also pass `--shot-height` large enough that the tool does not report a truncated capture.
+
 Known limits, which you must not forget: Chrome headless **floors the viewport at 500px**, so true
 phone width is not covered; the run uses a lean copy with images replaced by placeholders, so nothing
 about image *content* is tested.
