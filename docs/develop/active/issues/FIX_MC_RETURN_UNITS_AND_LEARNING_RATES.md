@@ -8,9 +8,21 @@ last_updated: 2026-09-01
 
 # Fix: MC return units + wiring the critic and modulator learning rates
 
-> **Status**: PLANNED
+> **Status**: PLANNED — amended 2026-09-01 after adversarial plan review
 > **Opened**: 2026-09-01
 > **Related**: [[MODULATION_SITE_REFACTOR]] (must land **before** its fixture capture) · [[KNOWN_BUGS]] rows "P1 #5" and "A1" · `docs/reviews/diagnosis_20260723/findings_rppo_trainer.md` Findings 1 and 3 · `docs/reviews/diagnosis_20260723/review_full_diagnosis_20260723.md` P1 #5
+
+> 🚧 **Blocked on one user decision.** Everything is specified and ready except **Open question 5** — how much slowdown in the policy's learning is acceptable while still calling this a clean bug fix. The safety-check thresholds are *pre-registered*, meaning they are fixed before the measurement is taken and cannot be adjusted afterwards, so the answer is needed **before the "before" measurement is taken** (the stage called Stage A-obs below). The implementer must not pick a number.
+
+### Amendment log
+
+| Date | Change | Trigger |
+|---|---|---|
+| 2026-09-01 | **The safety check now reads the tail, not the middle.** The check that guards against the fix accidentally slowing the policy down used to look at a typical (median) update. That statistic cannot see the failure that matters here — the brake binding only on the death-containing updates this project studies — so it was replaced by a four-condition rule reading per-update, unsmoothed statistics. | plan-reviewer M1 |
+| 2026-09-01 | **The measurement window moved from 200 to ~1000 iterations, judged on its last fifth, with the trajectory reported** — and a standing obligation added to re-run the same check on the first real training run. 200 iterations is simultaneously the moment the risk looks worst and a window that says nothing about later training. | plan-reviewer M2 |
+| 2026-09-01 | **The environment is now pinned**: `configs/environment/experiment/basic/04-jump_attack_10x10.yaml`, single seed (the user's decision). Every diagnostic and speed measurement records environment config, node, GPU, seed and commit alongside the result. | plan-reviewer M3 |
+| 2026-09-01 | **The tolerance a "pass" grants is surfaced as Open question 5** rather than left as an implementer default. | plan-reviewer M4 |
+| 2026-09-01 | Four specification tightenings: corrected a false claim about the optimizer's saved state keeping its shape; specified the test critic as tabular; required the freeze tests to assert both directions with a nonzero-gradient precheck; corrected two transposed grep counts. Plus an attribution step for a bit-identity mismatch. | plan-reviewer L1–L4, O1 |
 
 ---
 
@@ -97,7 +109,9 @@ Raw value targets have σ ≈ 23–25 instead of ≈ 1. So:
 - Gradients from the value term grow by roughly σ (≈ 25×).
 - Gradient clipping is **global**: `optax.clip_by_global_norm(0.5)` over *all* parameters (`train.py:1167-1170`, `max_grad_norm: 0.5` in every config). When clipping binds, every parameter's update is scaled by the same factor `min(1, c/‖g‖)`. If the value term comes to dominate `‖g‖`, the **actor's effective step shrinks by that same factor** — a large, unintended change to the policy's learning speed.
 
-This is a genuine risk of the chosen repair, and it cannot be settled by reading the code. It is settled by measurement: Stage A adds per-parameter-group gradient-norm logging, Stage A-obs records the pre-fix composition, Stage B records it again, and a **pre-registered decision rule** (below) says what to do. The GAE branch already lives in this regime, but the registry records that every live config uses MC returns, so the GAE path is not evidence that the regime is safe here.
+⚠️ **And the throttle need not be uniform.** The clip may bind only on the *subset* of update steps whose window contained a death — which are the highest-magnitude rewards in this environment, and precisely the steps carrying the nociceptive lesson this project exists to study. In that regime a typical (median) update is untouched while the informative updates are crushed. Any statistic that summarises the run with a middle value is blind to it. This is why the Gate below reads **per-update, unsmoothed tail statistics** and not an average of averages, and why the instrument writes a per-iteration CSV rather than relying on the 100-iteration WandB means.
+
+This is a genuine risk of the chosen repair, and it cannot be settled by reading the code. It is settled by measurement: Stage A adds per-parameter-group gradient-norm logging **and per-update clip statistics**, Stage A-obs records the pre-fix composition, Stage B records it again, and a **pre-registered four-condition decision rule** (below) says what to do. The GAE branch already lives in this regime, but the registry records that every live config uses MC returns, so the GAE path is not evidence that the regime is safe here.
 
 #### Scope: plain PPO is excluded from Part 1
 
@@ -137,7 +151,14 @@ Two candidate shapes were considered.
 
 **Candidate B — one shared Adam, per-leaf learning-rate scaling applied afterwards. CHOSEN.**
 
-The key algebraic fact: `optax.adam(lr)` is exactly `chain(scale_by_adam(), scale(-lr))`, and every operation in `scale_by_adam` is **elementwise per leaf** — there is no cross-leaf reduction anywhere in Adam. Therefore "one shared `scale_by_adam` followed by a per-group `-lr` multiply" is **mathematically identical** to "a separate `optax.adam(lr_g)` per group", not merely similar. It is also simpler, has no masked sentinels, and keeps the optimizer-state pytree structurally the same as today.
+The key algebraic fact: `optax.adam(lr)` is exactly `chain(scale_by_adam(), scale(-lr))`, and every operation in `scale_by_adam` is **elementwise per leaf** — there is no cross-leaf reduction anywhere in Adam. Therefore "one shared `scale_by_adam` followed by a per-group `-lr` multiply" is **mathematically identical** to "a separate `optax.adam(lr_g)` per group", not merely similar. It is also simpler and has no masked sentinels.
+
+⚠️ **Correction (plan-reviewer L1): the optimizer-state pytree does NOT keep the same structure.** An earlier draft of this plan claimed it did; that claim is false and was verified false against optax 0.2.6. Because `optax.adam` is itself a chain, today's state nests as `(EmptyState, (ScaleByAdamState, EmptyState))`, while the new chain is a **flat** `(EmptyState, ScaleByAdamState, EmptyState)`. The *contents* (the Adam moment pair) are identical; only the nesting depth differs.
+
+Consequences:
+
+- **For this plan: none.** Every run is retrained from scratch (see Context), and V6 round-trips the new shape through `src/utils/checkpoint_restore.py`.
+- **For anyone else: warm-resuming a pre-Stage-A checkpoint's optimizer state will fail structurally**, with a pytree-structure mismatch, not silently. That is the correct failure mode, and it is another reason no migration shim is built. Say so in the Implementation Report so the failure is recognised rather than debugged.
 
 ```
 optax.chain(
@@ -200,6 +221,7 @@ The group label is derived from each parameter's **top-level attribute name**. T
 2. **Stage A-obs sits between them** because the diagnostic instrumentation is added in Stage A, so the only tree that has the instrument but not Fix 1 is the post-Stage-A tree. That is the "before" for Fix 1.
 3. **Both stages land strictly before** the [[MODULATION_SITE_REFACTOR]]'s Checkpoint **C0a** (golden-fixture capture) and **C0b** (the "before" losses for its end-to-end parity check). That refactor's own sequencing rule (its C0b note) forbids this fix landing between C0b and its "after" half; landing both stages entirely before C0a satisfies it with margin, and means the refactor's before/after pair is taken on already-fixed code.
 4. **Do not start the refactor's fixture capture until the Gate below has been passed and recorded.**
+5. **Open question 5 must be answered before Stage A-obs runs.** The Gate's four thresholds are pre-registered — fixed before the measurement, unchangeable after it. If the user has not confirmed them, Stage A can be implemented and committed, but the diagnostic run waits.
 
 ### Stage A — wire the learning rates, add the instrument (zero behaviour change)
 
@@ -451,6 +473,53 @@ Note: `mod_grad_norm` (the existing `'modulator' in grads` probe at `:336-347`) 
 
 and extend `_loss_sample` with the seven keys `loss/grad_norm_trunk`, `loss/grad_norm_actor`, `loss/grad_norm_critic`, `loss/grad_norm_modulator`, `loss/value_target_std`, `loss/value_target_mean`, `loss/advantage_std`. They join the windowed set and go through `spread()` like the existing five; keep them as JAX scalars (no `float()` on the hot path), matching the existing pattern documented in the block comment there.
 
+#### `train.py:1779-1804` — the clip statistics (added per plan-reviewer M1)
+
+**Why this is not optional.** The Gate is supposed to detect the value gradient eating the shared clip budget. The quantity it reads, `loss/grad_norm`, is currently averaged twice before anyone sees it, and both averages destroy exactly the signal the Gate needs:
+
+- **First smoothing — within the iteration.** `train.py:1783` computes `jnp.mean` over the iteration's `K_epochs` update steps (`K_epochs: 4` in `recurrent_ppo_nmn_het_film_g1.yaml`; `src/models/recurrent_ppo_trainer.py:414-417` appends one aux tuple per epoch). The clip factor is a **nonlinear** function of the norm — `f = min(1, c/‖g‖)` — so `f(mean ‖g‖) ≠ mean f(‖g‖)`, and neither equals `min f(‖g‖)`. The factor must be computed **per update** and only then reduced.
+- **Second smoothing — across iterations.** `configs/train/recurrent_ppo.yaml:56-63` sets `logging.step.smoothing_iters: 100` / `interval_iters: 50`, so each WandB row is a mean over 100 iterations emitted every 50. A 1000-iteration diagnostic yields ~20 rows, each already an average of 100 iterations. A percentile computed over 20 pre-averaged rows cannot see a tail that lives in individual iterations.
+
+The failure mode this hides is the one that matters here: if the clip binds only on **death-containing** update steps — the exact steps carrying the nociceptive lesson this project studies — then the median clip factor is 1.0 before and after, the Gate passes, and the policy's update is crushed at precisely those steps.
+
+**Two changes, both diagnostic-only, neither touching an update.**
+
+**(1) Per-update clip statistics, computed correctly and logged to WandB.** In the same block at `train.py:1780-1785`, alongside the existing `avg_*` lines. `max_grad_norm` is already a local in `main()` (assigned at `train.py:1164`, same function, RecurrentPPO branch — the loop at 1780 is inside that branch, so it is in scope; if the implementer finds otherwise, read it from `train_config.max_grad_norm` rather than re-reading the config on the hot path).
+
+```python
+                    # Per-UPDATE clip statistics. `f = min(1, c/||g||)` is nonlinear, so it
+                    # must be computed per update step and only then reduced — averaging the
+                    # norms first and clipping the average is a different, blinder number.
+                    # Diagnostic only; nothing here feeds an update.
+                    _gn = jnp.stack([l[1][3] for l in losses])          # (K_epochs,)
+                    _f  = jnp.minimum(1.0, max_grad_norm / (_gn + 1e-12))
+                    avg_grad_norm_max   = jnp.max(_gn)
+                    avg_clip_factor     = jnp.mean(_f)                  # mean over updates
+                    avg_clip_factor_min = jnp.min(_f)                   # worst update
+                    avg_clip_binding    = jnp.mean((_gn > max_grad_norm).astype(jnp.float32))
+```
+
+Add four more keys to `_loss_sample`: `loss/grad_norm_max`, `loss/clip_factor`, `loss/clip_factor_min`, `loss/clip_binding_frac`. All stay JAX scalars — no `float()` on the hot path.
+
+⚠️ **Naming.** Do **not** call any of these `clip_fraction` / `clipfrac`. In PPO that name conventionally means the *policy-ratio* clip fraction, which is a different quantity; grep confirms neither name is currently used in `train.py` or `src/`, and this change must not create the collision.
+
+**(2) A per-iteration, unsmoothed CSV — the tail-visible record.** WandB rows are window-averaged and cannot be un-averaged. Write one raw row per iteration to `os.path.join(results_dir, "grad_diagnostics.csv")`, always on, for every recurrent-PPO run.
+
+Header:
+
+```
+iteration,grad_norm_mean,grad_norm_max,clip_factor,clip_factor_min,clip_binding_frac,gn_trunk,gn_actor,gn_critic,gn_modulator,value_target_std,value_target_mean,advantage_std,value_loss
+```
+
+**It must not add a host sync.** The block comment already in `train.py:1786-1799` explains why nothing on this path is `float()`-converted per iteration. Respect it: append the iteration's JAX scalars to a plain Python list `_diag_rows`, and convert + write the whole buffer inside the **existing** emission branch, reusing the sync that already happens there.
+
+- Flush trigger: the two-level path's `_emit` (`train.py:1811`) — **not** `_do_step_log`, which is additionally gated on `wandb_enabled`, so a `--no-wandb` diagnostic would never flush. On the legacy path (`logging_cfg is None`), flush every `log_interval` iterations.
+- Convert with one batched `np.asarray(...)` over the buffered rows, exactly as `spread()` does, then `clear()` the buffer.
+- Flush once more at the end of training so the last partial buffer is not lost.
+- Buffer cost is ~100 iterations × 14 tiny device scalars — negligible; V10 is the check that this is true in practice.
+
+**This instrument is permanent, not diagnostic scaffolding.** It stays in the tree after the Gate is passed, because the Gate answers a question about iterations 1–1000 and the same question has to be re-asked at iteration 50k (see "The post-launch obligation" below).
+
 #### Config migration — `lr_critic` set to the file's own `lr_actor`, plus a new `lr_modulator`
 
 **Twenty recurrent-PPO files.** Each currently has `lr_actor: 0.0005` and `lr_critic: 0.0001`. In each: set `lr_critic: 0.0005` and add `lr_modulator: 0.0005` immediately after it. None of these files use `extends:` — they are all standalone, so every one needs the edit.
@@ -498,7 +567,7 @@ grep -rn "lr_critic\|lr_modulator\|lr_actor" configs/ | sort
 | Doc | Required? | What |
 |---|---|---|
 | `docs/environment/CONFIG_CRITICAL_SETTINGS.md` | **Yes** | Three registry rows (`agent.lr_actor`, `agent.lr_critic`, `agent.lr_modulator`) + a dated change-log entry. Warranted by exactly this history: a declared rate that controlled nothing for the project's entire recurrent-PPO history. The registry's "Set in" column says `configs/environment/default.yaml` for env keys; for these, write `all 20 configs/models/recurrent_ppo/*.yaml` and note that agent rates are per-model-config, not inherited. Change-log entry must state: `agent.lr_critic` 0.0001 → 0.0005 in 20 rPPO configs and 0.001 → 0.0003 in `ppo.yaml`, 0.0001 → 0.0005 in `neuromodulated_ppo.yaml`; `agent.lr_modulator` added at 0.0005 in 20 rPPO configs; reason = the key was dead and is now live; **blast radius = zero, verified bit-identical** (cite the Stage-A evidence); and that the archived `testbed_cellC_native_v2.yaml` was deliberately left unmigrated and will now raise if revived. |
-| `docs/environment/CONFIG_GUIDE.md` and `docs/environment/02_config_schema.md` | **No — but prove it** | Both document the **environment** schema (`load_env_params`, `EnvParams`, the layering system). Neither documents the `agent:` block: `grep -c "agent\."` returns 1 and 2 respectively, both incidental. `config_loader` / `state.py` are untouched. **The implementer must re-run that grep and record the counts in the Implementation Report**; if either doc has since gained an agent-key section, the Maintenance Contract activates and both must be updated. |
+| `docs/environment/CONFIG_GUIDE.md` and `docs/environment/02_config_schema.md` | **No — but prove it** | Both document the **environment** schema (`load_env_params`, `EnvParams`, the layering system). Neither documents the `agent:` block: `grep -c "agent\."` returns **2** for `CONFIG_GUIDE.md` and **1** for `02_config_schema.md`, both incidental. (An earlier draft transposed these two counts — corrected per plan-reviewer L4; the exemption conclusion is unchanged.) `config_loader` / `state.py` are untouched. **The implementer must re-run that grep and record the counts in the Implementation Report**; if either doc has since gained an agent-key section, the Maintenance Contract activates and both must be updated. |
 | `docs/environment/SCRIPTS_DEPENDENCY_MAP.md` | **No** | Nothing under `scripts/` is added, moved, renamed or deleted. `src/models/lr_groups.py` is under `src/` precisely to keep it that way. **If the implementer relocates it to `scripts/`, this contract activates.** |
 | `docs/develop/active/issues/KNOWN_BUGS.md` | **Do not edit** | The registry is owned by `bug-curator`, and the file currently carries another session's uncommitted edits. After the fix lands, ask `bug-curator` to close rows **A1** and **P1 #5** and to open a new Low row for the misleadingly-named `neuromodulated_ppo.yaml`. |
 | `docs/develop/INDEX.md` | Regenerate, leave unstaged | `python scripts/claude/regen_dev_index.py`. The file is dirty from a parallel session — **do not stage it**. |
@@ -507,13 +576,51 @@ grep -rn "lr_critic\|lr_modulator\|lr_actor" configs/ | sort
 
 On the Stage-A tree (Fix 2 landed, Fix 1 not yet), run a fixed-seed diagnostic and save the result to `tmp/`. This is a measurement step, not a code step.
 
-- Config: `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_film_g1.yaml` (the hierarchical + LayerNorm + modulator path that real runs use).
-- ≥ 200 iterations, one fixed seed, one named node and GPU. Record node, GPU, seed and commit SHA.
-- Extract from WandB (or the local log): median and p90 of `loss/grad_norm`, and the medians of `loss/grad_norm_{trunk,actor,critic,modulator}`, `loss/value_target_std`, `loss/value_target_mean`, `loss/advantage_std`.
-- Compute the **median clip factor** `min(1, max_grad_norm / loss/grad_norm)` with `max_grad_norm = 0.5`.
-- Write everything to `tmp/YYYYMMDD_HHMMSS_lr_and_mc_fix_before.md`.
+#### The run — every setting pinned
 
-Expected "before" shape, as a sanity check that the instrument works: `loss/value_target_std ≈ 1.0` and `loss/value_target_mean ≈ 0.0` (targets are z-scored), and `loss/advantage_std` some arbitrary value that is **not** 1.0 (MC advantages are not normalised today). If `value_target_std` does not come out at ≈ 1.0, the instrument is wired wrong — stop and fix that before proceeding.
+Both halves of the comparison (this run and the Gate's "after" run) must be identical in **all** of the following. An earlier draft named only the model config; that is not enough to make "identical settings" checkable (plan-reviewer M3).
+
+| Setting | Value | Why pinned |
+|---|---|---|
+| Model config | `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_film_g1.yaml` | the hierarchical + LayerNorm + modulator path real runs use |
+| **Environment config** | **`configs/environment/experiment/basic/04-jump_attack_10x10.yaml`** | **the user's decision — this is the environment the next experiment runs on.** Reward composition (death frequency, drive scale) is environment-dependent, so the Gate's verdict only transfers if it is measured on the environment that will actually be used. The σ ≈ 23–25 figures in §Magnitude come from rest-premium recordings, **not** from this environment (plan-reviewer O3 — see the note below) |
+| Seed | one fixed seed, **single seed** (the user's decision) | |
+| Iterations | **~1000** (see below) | |
+| Node, GPU | one named node + one named GPU, **the same on both halves** | the cluster is heterogeneous (`docs/environment/LAB_NODE_GPU_SPEC.md`); a card swap invalidates the speed half of the comparison and can perturb the numeric half |
+| Commit SHA | recorded for each half | |
+
+**Record all six in the results file and in the Implementation Report, for each half.** A comparison whose two halves cannot be shown to differ in exactly one thing is not evidence.
+
+#### Why ~1000 iterations, and why the verdict reads the tail of it (plan-reviewer M2)
+
+200 iterations is the least representative window available, and it is unrepresentative in **both** directions:
+
+- **It over-states the risk.** Immediately after Fix 1, the critic starts at ≈ 0 against targets of σ ≈ 20–25, so the value term's share of the gradient is at its **lifetime maximum** in the first few hundred iterations and then falls as the critic fits. A Gate reading only that window can trip on a transient that resolves itself — blocking a correct fix.
+- **It under-states the risk.** A pass over iterations 1–200 says nothing about iteration 50 000, by which point the policy has changed, death frequency has changed, and the reward composition with it.
+
+So: run **~1000 iterations**, and evaluate the decision rule on the **final 200** (iterations 801–1000), while **reporting the trajectory** across the whole run in 100-iteration blocks. The final segment is the closest available proxy for the settled regime; the trajectory is what shows whether the segment is settled or still moving. If the per-block clip factor is still trending downward at iteration 1000, say so explicitly — a still-falling trajectory is itself a finding and is reported to the user regardless of whether the numeric rule passes.
+
+#### What to extract
+
+Read the **per-iteration CSV** `results/JAX_RecurrentPPO/<run>/grad_diagnostics.csv`, not the WandB rows. WandB rows are 100-iteration means (`logging.step.smoothing_iters: 100`) and cannot show a tail.
+
+Compute over the final 200 iterations, and per 100-iteration block for the trajectory:
+
+- `clip_factor` — **median**, **p10**, and **p01**
+- `clip_binding_frac` — mean, and the **fraction of iterations with `clip_factor < 1`** (i.e. the clip bound on at least one update in that iteration)
+- `grad_norm_mean`, `grad_norm_max` — median and p90
+- `gn_trunk`, `gn_actor`, `gn_critic`, `gn_modulator` — medians, and each group's **share of the total** (`gn_g / Σ gn`), median over iterations
+- `value_target_std`, `value_target_mean`, `advantage_std` — medians
+
+Write everything to `tmp/YYYYMMDD_HHMMSS_lr_and_mc_fix_before.md`.
+
+#### The instrument's own sanity check
+
+Expected "before" shape: `value_target_std ≈ 1.0` and `value_target_mean ≈ 0.0` (targets are z-scored today), and `advantage_std` some arbitrary value that is **not** 1.0 (MC advantages are not normalised today). If `value_target_std` does not come out at ≈ 1.0, the instrument is wired wrong — **stop and fix that before proceeding**; every number downstream depends on it.
+
+Second check, on the clip statistics specifically: confirm `clip_factor_min ≤ clip_factor ≤ 1` in every row and that `clip_binding_frac > 0` exactly when `clip_factor < 1`. These are algebraic identities; if they do not hold, the statistic is miswired.
+
+📌 **Open item O3, carried from the review.** Return σ on `basic/04` is currently **unmeasured** — the ≈ 23–25 figure comes from rest-premium recordings. `value_target_std` in the Gate's "after" run is the first in-situ measurement of it. Report the number even if it is far from 25; the plan's argument depends on σ ≫ 1, not on σ = 25 specifically, but a σ near 1 would mean the units defect is far smaller on this environment than estimated and the user should be told before Stage B is trusted.
 
 ### Stage B — fix the units
 
@@ -588,30 +695,81 @@ git worktree remove /tmp/pre_fix_units
 Take the *oracle* critic — the one that is already exactly right, i.e. `V*(s_t)` = the independently-computed raw discounted future return. Feed `values = V*` and `bootstrap_value = V*(s_T)`. Assert `targets == V*` elementwise (within `1e-4`) and `max|advantages_unnormalised| < 1e-4` before normalisation.
 This is the self-consistency property the defect destroys: a critic that is already correct must be trained toward what it already predicts, so its value loss must be zero. *Pre-fix:* the "already correct" critic (which outputs z-scored returns) is handed a target in a different currency, the value loss is large and never reaches zero, and the assertion fails.
 
-**Test 3 — `test_critic_trained_on_targets_converges_to_raw_returns` (end-to-end fixed point).** Iterate the actual loop, five rounds: (i) compute `targets` from the current value estimate and bootstrap; (ii) fit a small value function to `targets` with the **same value-loss expression as `ppo_loss_fn`** (`0.5 * mean((V - target)^2)`) for a few hundred Adam steps; (iii) feed its window-edge output back as `bootstrap_value`; repeat. Assert the fixed point matches the independently-computed raw return within 5 %.
+**Test 3 — `test_critic_trained_on_targets_converges_to_raw_returns` (end-to-end fixed point).** Iterate the actual loop, five rounds: (i) compute `targets` from the current value estimate and bootstrap; (ii) fit the critic to `targets` with the **same value-loss expression as `ppo_loss_fn`** (`0.5 * mean((V - target)^2)`) for a few hundred Adam steps; (iii) feed its window-edge output back as `bootstrap_value`; repeat. Assert the fixed point matches the independently-computed raw return within 5 %.
+
+⚠️ **The critic here must be TABULAR, not a function approximator** (plan-reviewer L2). "A small value function" was under-specified: a `Dense` net over synthetic features can miss a 5 % tolerance for reasons that have nothing to do with the units bug, making the test flaky and its failure uninterpretable. Specify instead: a free parameter per state — a single `jnp` array of shape `(T + 1, B)` holding `V[t, b]` for each of the `T` in-window steps **plus the window-edge boot state at index `T`** — initialised to zeros and optimised directly. A tabular critic has zero approximation error, so the only thing the 5 % tolerance can be measuring is the fixed point of the target/bootstrap recursion, which is exactly the property under test. Index `T` is the entry that gets fed back as `bootstrap_value`, so the loop is genuinely closed through the critic's own output.
 *Pre-fix:* the fixed point lands near the z-scored scale (order 1), not the raw scale (order hundreds), and the assertion fails by two orders of magnitude — which is the measured 1/25-magnitude defect, observed end to end.
 
 The seven existing tests in `tests/models/test_mc_window_bootstrap.py` must keep passing unchanged — `compute_mc_returns` itself is not modified, and their continued passing is the guard that Stage B did not disturb the H4 window-edge semantics.
 
 ### The Gate — the one thing this plan cannot pre-decide
 
-After Stage B, re-run the **identical** diagnostic from Stage A-obs (same config, same seed, same node, same GPU, same iteration count) and write `tmp/YYYYMMDD_HHMMSS_lr_and_mc_fix_after.md`.
+**What the Gate is for, in one paragraph.** Fixing the units makes the critic's targets ~25× larger, so the gradient coming from the value term gets ~25× larger too. Gradient clipping in this codebase is **global** — one budget shared by every parameter — so a bigger value gradient can crowd out the policy's share of that budget and quietly slow the policy's learning. Nobody can predict from the code whether that happens; it is measured. The Gate is the pre-registered rule that says, before the measurement is taken, what result means "proceed" and what result means "stop and ask the user".
 
-**Expected and fine:**
+After Stage B, re-run the **identical** diagnostic from Stage A-obs — same model config, same environment config (`basic/04-jump_attack_10x10.yaml`), same seed, same node, same GPU, same ~1000 iterations — and write `tmp/YYYYMMDD_HHMMSS_lr_and_mc_fix_after.md`.
+
+#### Expected and fine
 
 | Metric | Before | After |
 |---|---|---|
-| `loss/value_target_std` | ≈ 1.0 | ≈ 20–25 (raw scale) |
-| `loss/value_target_mean` | ≈ 0.0 | raw-scale, non-zero |
-| `loss/advantage_std` | arbitrary, ≠ 1 | ≈ 1.0 |
-| `loss/value` | ≈ 0.1–1 | ≈ 10²–10³ — **expected, not a regression** |
+| `value_target_std` | ≈ 1.0 | raw scale — expected ≫ 1; the actual number is the first in-situ measurement on `basic/04` (open item O3) |
+| `value_target_mean` | ≈ 0.0 | raw-scale, non-zero |
+| `advantage_std` | arbitrary, ≠ 1 | ≈ 1.0 |
+| `loss/value` | ≈ 0.1–1 | larger by roughly σ² — **expected, not a regression** |
 
-**Pre-registered decision rule.** Let `f = median(min(1, 0.5 / loss/grad_norm))` be the median clip factor.
+#### The amended pre-registered decision rule
 
-- If `f_after >= f_before / 2` — proceed. Record both numbers.
-- If `f_after < f_before / 2` — **STOP and escalate to the user.** The actor's effective step has been throttled more than 2× by the value term monopolising the global clip budget. Do not launch training and do not proceed to the refactor. Present the two named fallbacks: (a) a stationary-scale value loss that divides the value term by a slowly-tracked return scale, keeping raw targets and raw critic outputs; (b) a symlog value target with a symexp'd bootstrap. Both are design changes and need the user's decision.
+> **These thresholds are pre-registered: they are fixed in this document BEFORE the "before" run is taken, and must not be adjusted after seeing either result.** If the user wants different numbers, they change them here first (see Open question 5).
 
-Also report `loss/grad_norm_actor` vs `loss/grad_norm_critic` before and after — if the critic's norm goes from a minority to an overwhelming majority of the total, that is the mechanism, made visible.
+**Definitions.** All statistics are computed from the per-iteration CSV `grad_diagnostics.csv`, over the **final 200 iterations** (801–1000) of each half. Nothing is read from WandB rows, which are 100-iteration means.
+
+Per iteration `i`, the instrument records `K_epochs` per-update clip factors and reduces them to two numbers:
+
+- `f_i` = **mean** clip factor over that iteration's updates (`clip_factor`)
+- `w_i` = **worst-update** clip factor in that iteration (`clip_factor_min`) — the tail-visible one
+
+From those, over the 200-iteration segment:
+
+| Symbol | Plain meaning | Definition |
+|---|---|---|
+| `M` | typical throttle | `median_i(f_i)` |
+| `P10` | throttle on a bad-but-not-rare iteration | `10th percentile over i of w_i` |
+| `P01` | throttle on the worst 1 % of iterations | `1st percentile over i of w_i` (reported, not gated) |
+| `B` | how often the clip binds at all | fraction of iterations with `w_i < 1` |
+
+**STOP and escalate if ANY of these four fires.** They are OR-ed, not averaged; each covers a failure the others cannot see.
+
+| # | Trip condition | The failure it catches |
+|---|---|---|
+| **G1** | `M_after < M_before / 2` | The whole run is throttled ≥ 2×. (This was the original rule — kept, but it is now the *least* sensitive of the four.) |
+| **G2** | `P10_after < P10_before / 2` | **Tail binding.** The clip binds ≥ 2× harder on the worst tenth of iterations while the median stays at 1.0 on both sides. This is the case the original median-only rule was blind to, and it is the case that matters: if the clip binds only on death-containing updates, the median sees nothing while the policy's lesson is crushed at exactly the steps this project studies. |
+| **G3** | `B_after − B_before > 0.10` (ten percentage points) | **The clip starts binding in a regime where it previously did not.** A statistic that stayed at 1.0 before and dips below 1.0 on 30 % of iterations after is a regime change even if the dips are mild. |
+| **G4** | `P10_after < 0.25` (absolute floor, independent of the "before" value) | **A severe absolute throttle that the ratio rules structurally cannot see.** If the clip essentially never bound before (`P10_before = 1.0`), G2 only fires below 0.5 — so a post-fix `P10` of 0.3, a 3.3× throttle on a tenth of all iterations, would pass every ratio test. G4 is the backstop. |
+
+**If none fires — proceed**, and record all eight numbers (`M`, `P10`, `P01`, `B`, before and after) in the Implementation Report. A pass is not silent: see Open question 5 for what a pass still permits.
+
+**If any fires — STOP.** Do not launch training and do not proceed to the [[MODULATION_SITE_REFACTOR]]. Present to the user: which condition(s) fired, all eight numbers, the per-group gradient shares, the trajectory table, and the two named fallbacks — (a) a stationary-scale value loss that divides the value term by a slowly-tracked return scale, keeping raw targets and raw critic outputs; (b) a symlog value target with a symexp'd bootstrap. Both are **design changes**, not bug fixes; neither is pre-approved here and the user decides.
+
+#### Reported alongside the verdict — always, pass or fail
+
+1. **The trajectory, not just the endpoint.** A table of `M`, `P10` and `B` per 100-iteration block across all ~1000 iterations, for both halves. The final-segment verdict is only trustworthy if the trajectory has settled. **If the post-fix `P10` is still trending downward at iteration 1000, report that to the user even on a numeric pass** — a still-falling tail means the 200-iteration segment is not the settled regime and the Gate is extrapolating.
+2. **Per-group gradient shares.** Median of `gn_critic / (gn_trunk + gn_actor + gn_critic + gn_modulator)` and the same for each other group, before and after. If the critic goes from a minority to an overwhelming majority of the total, that is the mechanism made visible — and it is the number that tells the user *why* a trip happened, not just that it did.
+3. **The `mod_grad_norm` cross-check.** If the legacy `Grad/norm_modulator` probe disagrees with the new `gn_modulator`, report it as a finding (see the note in the instrument section).
+
+#### The post-launch obligation — pre-registered here, not optional later
+
+The Gate answers a question about iterations 1–1000 of one diagnostic. The same question has to be re-asked on the real run, because reward composition drifts as the policy improves and death frequency changes. That is why the instrument is permanent.
+
+**Pre-registered:** the analysis of the **first real training run** launched after this fix must report, from that run's own `grad_diagnostics.csv`, over the **full run**:
+
+- `M`, `P10`, `P01`, `B` — under the same definitions above;
+- the four per-group gradient shares;
+- the same 100-iteration-block trajectory, so a late-onset regime change is visible;
+- an explicit statement of whether the full-run numbers would have tripped **G1–G4** against the Stage A-obs "before" baseline.
+
+If they would have tripped, that is a finding to raise **before** the run's behavioural results are interpreted — because a throttled actor makes "the agent failed to learn nociceptive avoidance" indistinguishable from "the optimizer clipped the lesson away", and the second reading is not a scientific result.
+
+⚠️ **Hand-off note.** `senior-developer` does not write under `docs/experiments/`. This obligation is recorded here; it must be **carried into the experiment design doc** by `experiment-designer` when that run is designed, and executed by `experiment-analyzer` when it is analysed. Whoever launches the first post-fix run is responsible for naming this requirement to both.
 
 ---
 
@@ -622,26 +780,43 @@ Every row names evidence that can actually come out negative.
 | # | Claim under test | Evidence | How it could fail |
 |---|---|---|---|
 | V1 | Stage A changes nothing numerically | `tests/models/test_lr_param_groups.py::test_equal_rates_match_single_adam` — two identical models, one stepped with the **old** `chain(clip_by_global_norm, adam(lr))` constructed inline in the test, one with the new chain, on the same synthetic batch for 10 steps; assert every parameter is **bitwise** equal | A non-elementwise operation sneaking into the chain; a different Adam epsilon/b1/b2 |
-| V2 | Stage A changes nothing end-to-end | 20 iterations of `recurrent_ppo_nmn_het_film_g1.yaml` at a fixed seed, run on a `git worktree` at the **pre-Stage-A** SHA and on the Stage-A tree; the five existing `loss/*` scalars must match to **float equality** | Anything V1 missed that only appears through the real model, the real env and the real optimizer state |
+| V2 | Stage A changes nothing end-to-end | 20 iterations of `recurrent_ppo_nmn_het_film_g1.yaml` **on `configs/environment/experiment/basic/04-jump_attack_10x10.yaml`** at a fixed seed, run on a `git worktree` at the **pre-Stage-A** SHA and on the Stage-A tree; the five existing `loss/*` scalars must match to **float equality**. If it mismatches, run the attribution step below before concluding anything | Anything V1 missed that only appears through the real model, the real env and the real optimizer state |
 | V3 | The labeller is right — not merely consistent | Deliberately-unequal-rate tests (below). **V1 and V2 cannot detect mislabelling**, because all rates are equal there; a labeller that put every parameter in one group would pass both | A prefix rule capturing `mod_*_ln`; a new head defaulting into `trunk` |
 | V4 | No parameter is silently unlabelled | `test_all_params_labelled` constructs a baseline `ActorCriticRNN`, a modulated `ActorCriticRNN` (hierarchical + LayerNorm) and an `ActorCriticMLP`, and asserts `param_group_labels` raises for none of them and that each expected group is non-empty | A renamed attribute; a new module |
 | V5 | The new keys cannot be silently defaulted | `test_missing_lr_modulator_raises` / `test_missing_lr_critic_raises` — a config dict without the key must raise `ValueError` from `get_mandatory` | `.get(key, default)` sneaking in |
 | V6 | New checkpoints round-trip | Save and restore through `src/utils/checkpoint_restore.py` on the new optimizer, assert model **and** optimizer state come back bitwise equal, and that one further update step from the restored state matches one from the unsaved state | An optimizer-state pytree the serializer cannot represent |
 | V7 | Fix 1 is correct (not bit-identical — it deliberately changes behaviour) | The three tests in `test_mc_return_units.py`, **shown failing on the Stage-A tree** and passing after; plus the before/after diagnostic table | An oracle computed with the code under test (guarded: the oracle is a NumPy loop written in the test) |
 | V8 | H4's window-edge semantics survive Fix 1 | The seven existing tests in `tests/models/test_mc_window_bootstrap.py` pass unchanged | An edit to `compute_mc_returns` that should not have happened |
-| V9 | The clip budget has not silently retuned the actor | The Gate's median-clip-factor rule, from logged `loss/grad_norm` | Value gradients dominating; caught, not hidden |
-| V10 | No speed regression | `Time/sps_env` over ≥ 200 iterations, same node/GPU/seed/config, at HEAD and after both stages. Per project protocol: > 5 % slowdown warrants discussion, > 15 % blocks merge | Per-leaf `tree_map_with_path` in the update path; the per-group norm reduction on the hot path |
+| V9 | The clip budget has not silently retuned the actor — **including on the tail** | The Gate's four-condition rule (G1 median, G2 p10 tail, G3 binding frequency, G4 absolute floor), computed **per update** and read from the unsmoothed per-iteration `grad_diagnostics.csv`, over the final 200 of ~1000 iterations | Value gradients dominating everywhere (G1); dominating only on death-containing steps while the median stays at 1.0 (G2/G3); a severe throttle that no ratio rule can see because the clip never bound before (G4). Each is caught, not hidden |
+| V9b | The instrument itself is not lying | Algebraic identities on every CSV row: `clip_factor_min ≤ clip_factor ≤ 1`, and `clip_binding_frac > 0` iff `clip_factor_min < 1`; plus `value_target_std ≈ 1.0` pre-fix (targets are z-scored today) | A clip factor computed from the epoch-**mean** norm instead of per update; a wrongly-scoped `max_grad_norm`; the CSV flushing from a stale buffer |
+| V10 | No speed regression | `Time/sps_env` over the same ~1000-iteration diagnostic, same model config, **same environment config (`basic/04-jump_attack_10x10.yaml`)**, same node, GPU and seed, at HEAD and after both stages. Per project protocol: > 5 % slowdown warrants discussion, > 15 % blocks merge | Per-leaf `tree_map_with_path` in the update path; the per-group norm reduction on the hot path; **the per-iteration CSV forcing a host sync** — the buffered-flush design exists to prevent exactly this, and V10 is what proves it worked |
 | V11 | Full suite green | `pytest tests/` | Anything |
 
 **Deliberately-unequal-rate tests** — `tests/models/test_lr_param_groups.py`:
 
-- `test_zero_actor_rate_freezes_actor_and_trunk_only` — rates `{trunk: 0, actor: 0, critic: 1e-3, modulator: 1e-3}`; after one update assert `actor_fc1`, `actor_fc2`, `obs_encoder`, `rnn_cell` are **bitwise unchanged** and `critic_fc1`, `critic_fc2`, `modulator` **changed**. This also pins the documented trunk→`lr_actor` decision.
-- `test_zero_critic_rate_freezes_critic_head_only` — the mirror image.
-- `test_zero_modulator_rate_freezes_modulator_only` — on a modulated model.
-- `test_encoder_layernorms_are_trunk_not_modulator` — asserts `mod_unimodal_ln`, `mod_multimodal_ln`, `mod_flat_ln` label as `trunk`, so the `startswith('mod')` trap is caught if anyone reintroduces it.
+**Two requirements bind every one of the freeze tests below** (plan-reviewer L3 — write them into the shared helper, do not leave them implicit):
+
+1. **Assert both directions.** Every frozen leaf must be **bitwise unchanged** AND every leaf in the complement must have **changed**. Asserting only the frozen half would pass for a labeller that froze everything.
+2. **Assert the gradient is nonzero first.** Before the update, take the gradient of the same loss and assert `optax.global_norm(grads[leaf]) > 0` for every leaf that the test expects to *change*. Without this, "changed" can fail for a reason that has nothing to do with labelling — a saturated or clipped modulator output produces an exactly-zero gradient, so the parameter would not move even under a correct label and a nonzero rate, and the test would report a labelling bug that does not exist. If a leaf legitimately has zero gradient on the synthetic batch, the test must **fail loudly with that diagnosis** ("zero gradient — change the batch"), not silently reinterpret it.
+
+Shared helper sketch: `_assert_only_group_moved(model, rates, expected_frozen_prefixes)` — snapshot params, check grads nonzero on the complement, apply one update, assert bitwise-equal on the frozen set and not-equal on the complement.
+
+- `test_zero_actor_rate_freezes_actor_and_trunk_only` — rates `{trunk: 0, actor: 0, critic: 1e-3, modulator: 1e-3}`; after one update assert `actor_fc1`, `actor_fc2`, `obs_encoder`, `rnn_cell` are **bitwise unchanged** and `critic_fc1`, `critic_fc2`, `modulator` **changed** (with the nonzero-gradient precheck on the latter three). This also pins the documented trunk→`lr_actor` decision.
+- `test_zero_critic_rate_freezes_critic_head_only` — the mirror image; assert `critic_fc1`, `critic_fc2` frozen AND trunk + actor + modulator all changed.
+- `test_zero_modulator_rate_freezes_modulator_only` — on a modulated model; assert `modulator` frozen AND trunk + actor + critic all changed.
+- `test_encoder_layernorms_are_trunk_not_modulator` — asserts `mod_unimodal_ln`, `mod_multimodal_ln`, `mod_flat_ln` label as `trunk`, so the `startswith('mod')` trap is caught if anyone reintroduces it. Strengthen it behaviourally too: under `{modulator: 0, everything else: 1e-3}` the three LayerNorms must **change** (they are trunk), and under `{trunk: 0, everything else: 1e-3}` they must be **frozen**.
 - `test_unknown_parameter_name_raises` — a stub module with an unrecognised attribute must raise, proving there is no fallback group.
 
 These observe *which parameters moved*. They do not depend on the labeller being correct, so they are not circular with it.
+
+**If V2 mismatches — the attribution step (plan-reviewer O1).** Bitwise equality of the five losses across two *differently compiled* graphs is an empirical bet, not a theorem: Stage A adds seven outputs to the aux tuple, and XLA is free to fuse the surrounding computation differently, which can change floating-point results at the last bit even when the algebra is identical. The STOP-on-mismatch rule stands — do **not** substitute a tolerance — but before escalating, separate the two candidate causes:
+
+1. Build a third worktree carrying **Stage A minus the instrument**: the learning-rate wiring and the config migration, but *not* the seven new aux outputs and *not* the new logging.
+2. Re-run the identical 20-iteration comparison against the pre-Stage-A tree.
+3. If Stage-A-minus-instrument **matches** and full Stage A does not, the cause is the instrument changing XLA fusion — a compilation artefact, not an optimizer change. Report it with both numbers and the diff magnitude; the user decides whether to accept it.
+4. If Stage-A-minus-instrument **also mismatches**, the optimizer change is implicated and V1's bitwise claim is contradicted at the whole-model level. That is a genuine STOP: report and do not proceed to Stage B.
+
+This step costs one extra worktree build and turns an ambiguous failure into a diagnosed one.
 
 ---
 
@@ -656,16 +831,16 @@ Ordered. A1–A8 must all be green before B1 begins.
 - [ ] **A4** — 22 config files migrated per the table. Re-run the grep; paste the "after" inventory. Confirm: no `lr_critic: 0.0001` anywhere in `configs/models/`; `ppo.yaml` shows `0.0003`; exactly 20 `lr_modulator` keys, all in `configs/models/recurrent_ppo/`; the archived `testbed_cellC_native_v2.yaml` untouched.
 - [ ] **A5** — V5: both missing-key tests raise `ValueError`.
 - [ ] **A6** — V6: the checkpoint save/restore round-trip test passes.
-- [ ] **A7** — V2: the 20-iteration fixed-seed before/after loss comparison is **exactly equal**. State node, GPU, seed and both SHAs. If it is not exactly equal, **stop and report** — do not substitute a tolerance.
+- [ ] **A7** — V2: the 20-iteration fixed-seed before/after loss comparison is **exactly equal**. State model config, **environment config (`basic/04-jump_attack_10x10.yaml`)**, node, GPU, seed and both SHAs. If it is not exactly equal, **stop and report** — do not substitute a tolerance — and first run the **attribution step** (Stage-A-minus-instrument worktree, §Verification) so the report says *which* change caused it.
 - [ ] **A8** — `CONFIG_CRITICAL_SETTINGS.md` updated (3 registry rows + change-log entry) in the same commit. Re-run `grep -c "agent\." docs/environment/CONFIG_GUIDE.md docs/environment/02_config_schema.md` and record the counts, confirming those two docs still have no `agent:`-block section.
-- [ ] **A-obs** — the ≥ 200-iteration diagnostic run; `tmp/..._before.md` written with the median clip factor and the seven new metrics; `loss/value_target_std ≈ 1.0` confirms the instrument is wired correctly.
+- [ ] **A-obs** — the **~1000-iteration** diagnostic run on `recurrent_ppo_nmn_het_film_g1.yaml` × **`configs/environment/experiment/basic/04-jump_attack_10x10.yaml`**, single fixed seed, one named node + GPU, SHA recorded. `grad_diagnostics.csv` exists and has ~1000 rows. `tmp/..._before.md` written with: `M`, `P10`, `P01`, `B` over the final 200 iterations; the 100-iteration-block trajectory; the four per-group gradient shares; and the seven scale metrics. `value_target_std ≈ 1.0` and the V9b algebraic identities both hold — these confirm the instrument is wired correctly. If either fails, **stop and fix the instrument before measuring anything**.
 - [ ] **B1** — `compute_mc_targets_and_advantages` extracted; `train_iteration`'s MC branch calls it; the GAE branch untouched (`git diff` on lines 381-396 must be empty).
 - [ ] **B2** — `tests/models/test_mc_return_units.py` written and shown **FAILING on the Stage-A tree via a `git worktree`**. Paste the failure output. A test that cannot fail proves nothing.
 - [ ] **B3** — the same three tests pass on the fixed tree.
 - [ ] **B4** — V8: all seven existing `test_mc_window_bootstrap.py` tests still pass, unchanged.
-- [ ] **B5** — the "after" diagnostic run, identical settings; `tmp/..._after.md` written; the before/after table filled in.
-- [ ] **B6** — **The Gate.** Compute `f_before` and `f_after`. If `f_after < f_before / 2`, STOP and escalate. Record the verdict either way.
-- [ ] **B7** — V10: speed numbers at HEAD vs after both stages, ≥ 200 iterations, same node/GPU/seed/config.
+- [ ] **B5** — the "after" diagnostic run, **identical in all six pinned settings** (model config, environment config, seed, iterations, node, GPU); `tmp/..._after.md` written; the before/after table filled in. Record `value_target_std` — this is the first in-situ measurement of return σ on `basic/04` (open item O3).
+- [ ] **B6** — **The Gate.** Compute `M`, `P10`, `P01`, `B` for both halves over the final 200 iterations. Evaluate all four trip conditions **G1, G2, G3, G4**. If **any** fires, STOP and escalate to the user with the numbers, the shares and the trajectory. Record the verdict, all eight numbers and the trajectory table either way — **including on a pass**. If the post-fix `P10` trajectory is still falling at iteration 1000, say so explicitly even on a pass.
+- [ ] **B7** — V10: speed numbers at HEAD vs after both stages, the same ~1000-iteration diagnostic, same node/GPU/seed/model config/environment config. Confirm specifically that the per-iteration CSV did **not** introduce a per-iteration host sync (that is the most likely source of a slowdown here).
 - [ ] **B8** — V11: `pytest tests/` green.
 - [ ] **B9** — `python scripts/claude/regen_dev_index.py` exits 0. **Leave `docs/develop/INDEX.md` unstaged** — it is dirty from a parallel session. Do not touch or stage `docs/develop/active/issues/KNOWN_BUGS.md`, which carries another session's uncommitted hunks; hand the registry updates to `bug-curator` instead.
 - [ ] **B10** — Confirm in the report that the [[MODULATION_SITE_REFACTOR]]'s C0a/C0b fixture capture has **not** started, and that both stages are committed before it does.
@@ -676,10 +851,27 @@ Ordered. A1–A8 must all be green before B1 begins.
 
 ## Open questions for the user
 
-1. **The Gate's fallback, if it trips.** If the actor's effective step is throttled more than 2× by the larger value gradients, which fallback: a stationary-scale value loss, or a symlog value target? Both are design changes; neither is pre-approved here.
+1. **The Gate's fallback, if it trips.** If the policy's effective update turns out to be throttled by the larger value gradients, which fallback: a stationary-scale value loss, or a symlog value target? Both are design changes; neither is pre-approved here.
 2. **The trunk's rate.** The shared trunk is assigned `lr_actor` (documented and test-pinned). Confirm — it is the choice that keeps behaviour identical today, but it is a genuine modelling decision the moment the rates diverge.
 3. **`--lr` semantics.** It currently overrides the single rate, so it is specified to override all three. Confirm that is wanted, rather than `--lr` meaning "actor only".
 4. **Plain PPO.** Included for `lr_critic` (2 lines of code, 2 config values), excluded for `lr_modulator` and excluded entirely from Fix 1. Confirm.
+5. **⚠️ How much policy-throttling is acceptable on a PASS?** *(Raised by plan-reviewer M4 — this one needs an answer before Stage A-obs runs, because the thresholds are pre-registered and cannot be changed after the measurement.)*
+
+   Plain English: this change is billed as a **bug fix**, which normally means "training behaves the same, only correctly". But the Gate as specified lets a real slowdown through. Condition **G1** only stops the work when the typical clip factor *halves* — so a run where every policy update is scaled down by, say, 1.6× would **pass the Gate and be treated as a clean bug fix**. Nobody would be told. That tolerance is a decision the user should own, not a number an implementer picks.
+
+   The same question applies to the other three thresholds, which are equally arbitrary until confirmed: **G2** (tail, halving of the 10th-percentile worst-update clip factor), **G3** (the clip starts binding on 10 percentage points more iterations than before), **G4** (an absolute floor — stop if the worst tenth of iterations is throttled below 0.25, i.e. more than 4×, regardless of the "before" value).
+
+   Three options:
+
+   | Option | What it means |
+   |---|---|
+   | **(a) Accept as written** | Up to a 2× typical throttle, and up to a 4× tail throttle, pass silently as "no behaviour change". Fastest; the risk is a real change in policy learning speed shipped inside a bug fix. |
+   | **(b) Tighten** | Require the clip regime to be *materially unchanged* — e.g. G1 trips at `M_after < 0.9 · M_before`, G2 at `P10_after < 0.8 · P10_before`, G4 floor raised to 0.5. Safest scientifically; most likely to trip and force the design-change conversation in Open question 1. |
+   | **(c) Accept explicitly, and say so downstream** | Keep the 2× tolerance, but require the measured throttle to be written into `CONFIG_CRITICAL_SETTINGS.md`'s change-log entry and into the first post-fix run's analysis, so no later reader mistakes "passed the Gate" for "provably identical". |
+
+   If the user does not answer, the implementer does **not** pick — Stage A-obs waits.
+
+**Already decided by the user, recorded here so it is not re-asked:** the diagnostic environment is `configs/environment/experiment/basic/04-jump_attack_10x10.yaml`, single seed (this closes plan-reviewer M3).
 
 ---
 
@@ -692,11 +884,25 @@ Ordered. A1–A8 must all be green before B1 begins.
      - HEAD SHA at A0 and the Stage-A SHA used for the B2 worktree
      - before/after `grep` inventories of lr_actor / lr_critic / lr_modulator
      - the A1 label -> leaf-count table for all three model variants
-     - the A7 exact-equality result (node, GPU, seed, both SHAs)
+     - the A7 exact-equality result, naming ALL SIX pinned settings (model config,
+       environment config, seed, iterations, node, GPU) plus both SHAs; if it mismatched,
+       the attribution-step result from the Stage-A-minus-instrument worktree
      - the B2 pre-fix FAILURE output for all three new tests
-     - the before/after diagnostic table and the B6 Gate verdict (f_before, f_after)
-     - speed numbers (B7) with node, GPU, config, seed, iteration count
-     - the `grep -c "agent\."` counts proving CONFIG_GUIDE / 02_config_schema stayed out of contract
+     - the before/after diagnostic table, with ALL EIGHT gate numbers
+       (M, P10, P01, B for each half), the four per-group gradient shares for each half,
+       and the 100-iteration-block trajectory table for both halves
+     - the B6 Gate verdict: which of G1/G2/G3/G4 fired (or that none did), and an explicit
+       statement of whether the post-fix P10 trajectory had settled by iteration 1000
+     - the measured `value_target_std` on basic/04 (first in-situ measurement of return
+       sigma on this environment — open item O3)
+     - the V9b instrument identities (clip_factor_min <= clip_factor <= 1; binding_frac > 0
+       iff clip_factor_min < 1) confirmed on the raw CSV
+     - speed numbers (B7) with node, GPU, model config, environment config, seed, iteration
+       count, and a statement that the per-iteration CSV added no host sync
+     - the L1 note: the optimizer-state pytree structure CHANGED (flat 3-tuple vs nested),
+       and warm-resuming a pre-Stage-A checkpoint will fail structurally
+     - the `grep -c "agent\."` counts proving CONFIG_GUIDE / 02_config_schema stayed out of
+       contract (expected 2 and 1 respectively)
      - confirmation that KNOWN_BUGS.md and INDEX.md were not staged -->
 
 ## Verification Report
@@ -759,3 +965,29 @@ Ordered. A1–A8 must all be green before B1 begins.
 If the gate's median-statistic hole lets a tail-binding clip regime through, every post-fix run — including the coming single-seed `basic/04` experiment — trains with its policy update crushed at exactly the death-heavy steps this project studies, and "the agent fails to learn nociceptive avoidance" becomes indistinguishable from "the optimizer clipped the lesson away": weeks of runs and a wrong scientific reading. Everything else found here costs at most a rerun of a 20-minute diagnostic or a one-line doc correction.
 
 *Reviewed by: plan-reviewer*
+
+---
+
+## Response to plan-reviewer — disposition of every finding
+
+> **Amended by**: senior-developer · 2026-09-01 · plan-only amendments, no code exists yet
+
+All ten findings are **accepted**. None was disputed. Summary of where each was addressed:
+
+| Finding | Disposition | Where in this doc |
+|---|---|---|
+| 🟡 **M1** — median cannot see tail binding; `loss/grad_norm` is a pre-smoothed epoch mean | **Accepted, largest amendment.** The Gate now has four OR-ed trip conditions (G1 median, G2 tenth-percentile tail, G3 binding frequency, G4 absolute floor). The clip factor is computed **per update** (`f(mean ‖g‖) ≠ mean f(‖g‖)`), and a new **per-iteration, unsmoothed CSV** replaces the 100-iteration WandB means as the Gate's data source | §The Gate → "The amended pre-registered decision rule"; §`train.py:1779-1804` — the clip statistics; V9 / V9b |
+| 🟡 **M2** — window unrepresentative in both directions; nothing watches after the gate | **Accepted.** ~1000 iterations, verdict on the final 200, trajectory reported in 100-iteration blocks, "still falling → tell the user even on a pass". Plus a pre-registered **post-launch obligation** on the first real run, with an explicit hand-off to `experiment-designer` / `experiment-analyzer` since `senior-developer` cannot write under `docs/experiments/` | §Stage A-obs → "Why ~1000 iterations…"; §The Gate → "The post-launch obligation" |
+| 🟡 **M3** — environment config unpinned | **Accepted; answered.** `configs/environment/experiment/basic/04-jump_attack_10x10.yaml`, single seed (user's decision). A six-row pinned-settings table now governs both halves of every comparison, and env config + node + GPU + seed + SHA are recorded per result. Open item O3 (σ unmeasured on this env) is carried as an explicit reporting requirement | §Stage A-obs → "The run — every setting pinned"; V2, V10, checkpoints A7 / A-obs / B5 / B7 |
+| 🟡 **M4** — a pass silently licenses a 2× throttle | **Accepted.** Surfaced as **Open question 5** with three named options (accept / tighten / accept-and-disclose), stated in plain language, and made **blocking**: the thresholds are pre-registered, so the user answers before the "before" run | §Open questions 5; §Sequencing item 5; the blocked-status callout at the top |
+| 🟢 **L1** — optimizer-state pytree structure claim false | **Accepted, claim retracted.** The false sentence is replaced by the verified structures (`(EmptyState, (ScaleByAdamState, EmptyState))` → flat 3-tuple) plus the warm-resume consequence, and the Implementation Report must restate it | §Design decision → Candidate B correction block |
+| 🟢 **L2** — "small value function" under-specified | **Accepted.** Test 3's critic is now specified as **tabular**: one free parameter per state in a `(T+1, B)` array, index `T` being the window-edge boot state that closes the loop | §Test 3 |
+| 🟢 **L3** — freeze tests need both directions + nonzero-gradient precheck | **Accepted.** Two binding requirements written into a shared helper, with an explicit "fail loudly with that diagnosis" rule for a legitimately zero gradient. The LayerNorm test is strengthened behaviourally as well as by label | §Deliberately-unequal-rate tests |
+| 🟢 **L4** — grep counts transposed | **Accepted.** Corrected to CONFIG_GUIDE = 2, 02_config_schema = 1; the exemption conclusion is unchanged and the re-run instruction stands | §Docs to update; checkpoint A8; Implementation Report checklist |
+| ❓ **O1** — bitwise equality across differently-compiled graphs is a bet | **Accepted.** STOP-on-mismatch retained; a four-step **attribution procedure** added (build Stage-A-minus-instrument in a worktree) so a mismatch is diagnosed as "instrument changed XLA fusion" vs "optimizer change broke it" rather than escalated ambiguously | §Verification → "If V2 mismatches — the attribution step"; checkpoint A7 |
+| ❓ **O2** — nnx key-path shape assumed | **No change needed**, as the reviewer noted: checkpoint A1 already pins it before anything depends on it | checkpoint A1 |
+| ❓ **O3** — return σ unmeasured on `basic/04` | **Accepted as a reporting requirement.** `value_target_std` from the post-fix run is the first in-situ measurement; the plan now states that a σ near 1 would materially weaken the units argument and must be raised to the user | §Stage A-obs (O3 callout); checkpoint B5; Implementation Report checklist |
+
+Not revisited, per the reviewer's own independent verification: the optax identity, the plain-PPO exclusion from Fix 1, the `mod_*_ln` → trunk labelling, the stage sequencing, the config inventory, and the Fix-1 test design.
+
+*Amended by: senior-developer*
