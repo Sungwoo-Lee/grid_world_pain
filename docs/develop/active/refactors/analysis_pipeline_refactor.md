@@ -14,6 +14,38 @@ revision: 3 — two Criticals from the second review fixed; one of them fixed in
 **Republish:** publish that file to the URL above. From a session that did not publish it, read
 the URL first and pass it as `url`; publishing without it makes a separate artifact.
 
+---
+
+## Status: parked, 2026-09-01 — not rejected, not scheduled
+
+**Nothing in this plan has been built.** There is no `core/` package; the three programs still each
+reach into the store and re-implement the scan. What exists is this document, at revision 3, after
+two adversarial reviews that both returned NOT READY.
+
+It is parked because the case for doing it *now* got weaker while the case for writing it down got
+stronger. The refactor produces no new scientific result. The study it would have protected is
+finished and published. And all three bugs it was justified by have since been fixed in the existing
+scripts — the absent-animal binning, the stale-population rebuild, and the contemporaneous
+dose-response pairing (`c20ff5db`), which this very plan's review is what surfaced. The duplication
+it targets is real and has already drifted, but drift costs nothing until someone writes against it.
+
+**What should wake it up**, in rough order of how strongly:
+
+1. **A fourth program needs to scan the store.** This is the real trigger. Writing a fourth
+   hand-rolled scan means choosing which of the seven guards to remember, which is exactly how the
+   first three ended up disagreeing.
+2. **A fifth instance of a guard-class bug**, or a first instance in a *new* study. The class is
+   recurrence-prone by demonstration, not by argument.
+3. **Someone needs to re-run a published figure and cannot**, because the store finder's three
+   implementations have drifted further apart.
+
+**What should NOT wake it up**: that the plan exists and is nearly ready. It has been through two
+reviews and would need a third; resuming on momentum is how a no-output refactor eats a week.
+
+**If it is resumed**, start by re-reviewing revision 3 rather than implementing it. Revisions 1 and 2
+were both rejected, and revision 3's own guard-count table was wrong three times before it was
+generated instead of typed — this document has not earned the benefit of the doubt.
+
 ## What this proposes, and why
 
 Every study in this project has written its own scan of the trajectory store: open the shards in
