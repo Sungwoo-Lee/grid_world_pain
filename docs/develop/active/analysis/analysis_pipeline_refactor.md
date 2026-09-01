@@ -249,3 +249,52 @@ for every new analysis). Four things must change before implementation:
    `(unit, seed)` in from the start, and sequence this to land before that analysis.
 
 — plan-reviewer, 2026-09-01
+
+### Second review — revision 2 (2026-09-01)
+
+**Verdict: NOT READY** — for new reasons, not the old ones. Full round-2 findings, the
+per-cell re-audit, and the empirical tolerance test:
+[plan_analysis_pipeline_refactor](../../../../reviews/plan_analysis_pipeline_refactor.md)
+(`docs/reviews/plan_analysis_pipeline_refactor.md`, Round 2 section).
+
+Revision 2 genuinely fixed round 1: the tiered criterion replaces an impossible gate with an
+achievable one (verified on a real shard — the three summation primitives are **bit-exact** on this
+store's float columns, and the most order-sensitive quantity, the nociception convolution
+reordered, differs by ~6e-16, four orders inside the pre-registered `rtol=1e-12`; the tolerance
+will not need renegotiating). Scope, the dependency-map obligation, golden freshness, `(unit,
+seed)`, and the 2–4-day estimate are all genuinely addressed. Two new Criticals live in the
+redesign itself:
+
+1. 🔴 **The driver's guarantee and the golden gate contradict each other in exactly the guard
+   table's "no" cells.** `build_time_course`'s dose-response pairs the outcome row's bush state
+   with the *same row's* perceived-nociception value (`build_time_course.py:332-334`) — the
+   contemporaneous-binning class the Known Bugs registry already carries as LATENT for
+   `timectrl.py`, feeding the published lad09 figure. A port that takes the guaranteed
+   previous-row shift changes those numbers and fails the gate; a port that passes the gate
+   reproduces the bug and falsifies "a check every study gets, including the ones already
+   written". Fix: a per-"no"-cell **divergence register** (reproduce bug-for-bug, gate on the
+   reproduction, fix as a follow-up with a pre-declared expected diff), and reword the guarantee
+   as asserts (data properties, enforced) vs provisions (`is_step`/`prev`/masks, opt-in).
+2. 🔴 **The population contract deadlocks its own workflow.** Asserting at `open_run` that the
+   store matches every derived product on disk means that after the next collection pass every
+   product is stale and the rebuild that would refresh them cannot open the store; regenerating
+   one product alone is impossible by construction. Fix: `open_run` asserts store-internal
+   properties only; `provenance.py` stamps each product with its population; the cross-product
+   check moves to **read** time in core's loaders — the pattern `_ladder.load_time_course`
+   already implements correctly.
+3. 🟡 The "nine of seventeen empty cells" headline contradicts the printed table (6 "no" + 1
+   "partial" of 17) — the population row was dropped from the table after the count was taken,
+   and the prose still cites "the missing bottom-row check". Restore the row; the honest count is
+   9 of 20. Also row 5's time-course "yes" is wrong per the point above. Other cells re-verified
+   correct. Plus: the frame contract is under-specified for two of the three sweeps (global
+   episode index, t=0-row view, per-slot active masks, `estart`, accumulator allocation);
+   deleting `hiding_drivers.py` in step 5 breaks the frozen folders' reproduce-as-published
+   rationale and the ported version must keep writing `results/analysis/lad/<arm>/*.csv` verbatim
+   (`lad06` silently drops arms whose CSV is missing); golden protection must also cover
+   `results/analysis/lad/` and `results/analysis/hiding_drivers/`; and each output field's
+   comparison tier should be enumerated up front with tier-1 integer-valuedness asserted by the
+   harness.
+
+Exit conditions are the two Criticals; both are plan edits.
+
+— plan-reviewer (round 2), 2026-09-01
