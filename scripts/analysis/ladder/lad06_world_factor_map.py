@@ -73,6 +73,15 @@ cb.set_label("effect on bush dwell of moving this feature by one standard deviat
 ax.set_title("Adjusted for all the other features in the same regression. The number printed in "
              "each cell is the exact value,\nso rows that saturate the colour scale can still be "
              "read and compared.", fontsize=9, color=PL.MUTED, loc="left", pad=10)
+P = L.population()
+_n = sum(int(r["n"]) for a in arms
+         for r in csv.DictReader(open(f"{GLM_ROOT}/{a}/multivariate.csv"))
+         if r["model"] == MODEL and r["term"] == "const")
+L.record_samples("lad06_world_factor_map", [
+    dict(what="episodes entering the regressions", used=_n, total=P["episodes"],
+         note="one regression per arm over that arm's whole population; no episode is excluded"),
+    dict(what="arms shown", used=len(arms), total=P["arms"], note="")])
+
 PL.finish(fig, f"{L.FIG_ROOT}/lad06_world_factor_map.png")
 print(f"{'feature':32}" + "".join(f"{a[:9]:>10}" for a in arms))
 for i, t in enumerate(terms):

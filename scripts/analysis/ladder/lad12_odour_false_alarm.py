@@ -85,6 +85,16 @@ h = [plt.Line2D([], [], color=PL.GROUP_YES, lw=2.6, label=L.GROUP_LABEL[True] + 
 ax[0].legend(handles=h, loc="lower center", bbox_to_anchor=(1.03, 1.10), ncol=2, fontsize=8.2)
 fig.text(0.5, -0.03, "Bold lines pool the counts within each group; the faint lines behind them are "
          "the fourteen individual arms.", ha="center", fontsize=8, color=PL.MUTED)
+P = L.population()
+_r = sum(int(np.asarray(D[a]["odour"]["rab_tot"], float).sum()) for a in arms)
+_p = sum(int(np.asarray(D[a]["odour"]["pred_tot"], float).sum()) for a in arms)
+L.record_samples("lad12_odour_false_alarm", [
+    dict(what="step rows, rabbit panel", used=_r, total=P["steps"],
+         note="the first 25 steps of every episode that contains a rabbit, across all four "
+              "starting-wound quarters"),
+    dict(what="step rows, predator panel", used=_p, total=P["steps"],
+         note="same, for episodes containing a predator")])
+
 PL.finish(fig, f"{L.FIG_ROOT}/lad12_odour_false_alarm.png")
 print(f"{'arm':22}{'rabbit slope':>14}{'  (unhurt)':>12}{'rabbit slope':>14}{'  (wounded)':>13}"
       f"{'predator slope':>16}")

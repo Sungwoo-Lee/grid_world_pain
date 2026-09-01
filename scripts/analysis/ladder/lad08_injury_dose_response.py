@@ -54,6 +54,15 @@ for i, q in enumerate(v):
                ha="left" if q >= 0 else "right", fontsize=7.6, color=PL.INK)
 m = max(abs(v)) * 1.55
 ax[1].set_xlim(-m, m)
+P = L.population()
+_used = sum(int(np.asarray(D[a]["grids"]["dwt_early"], float).sum()) for a in arms)
+L.record_samples("lad08_injury_dose_response", [
+    dict(what="step rows in the 25-step window", used=_used, total=P["steps"],
+         note="the first 25 steps of every episode of every arm; episodes shorter than 25 steps "
+              "contribute all the steps they have"),
+    dict(what="episodes contributing", used=P["episodes"], total=P["episodes"],
+         note="every episode has a randomised starting wound, so none is excluded")])
+
 PL.finish(fig, f"{L.FIG_ROOT}/lad08_injury_dose_response.png")
 print(f"{'arm':22}" + "".join(f"{n:>10}" for n in L.INJ_NAMES) + f"{'slope':>10}")
 for a in arms:

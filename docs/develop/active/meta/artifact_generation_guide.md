@@ -3,7 +3,7 @@ title: Artifact generation guide — what went wrong and what to do instead
 topic: meta
 status: active
 created: 2026-08-26
-last_updated: 2026-08-30
+last_updated: 2026-09-01
 ---
 
 # Artifact generation guide
@@ -267,6 +267,59 @@ Neither existed until a reader asked for them.
 One further habit worth keeping: the reviewer checked each figure *with the prose covered up*. A
 figure whose units are only in its caption fails that test, and several here did.
 
+## 11. Three standing requirements for every results artifact (2026-09-01)
+
+These were asked for directly and are now **enforced at build time** by `build_artifact.py`, which
+refuses to publish a page that violates any of them. They are requirements, not preferences.
+
+### 11a. Every figure caption states both axes, in words
+
+The caption of every figure carries an `**Axes.**` sentence naming what is on the x-axis and what is
+on the y-axis, with units, for every panel. **Repetition across figures is wanted, not avoided** — a
+reader who lands on figure 11 should not have to scroll back to figure 4 to learn the convention. If
+two panels share a scale, say so; if an axis does not start at zero, say so; if an axis is a
+difference rather than a rate, say that too.
+
+*Enforcement:* the build fails if a `<figcaption>` lacks an `<b>Axes.</b>` sentence.
+
+### 11b. Every figure declares how much data it used
+
+Several figures filter — a third of episodes contain no predator, one regression needs exactly one
+predator and one rabbit — and a number cannot be judged without the denominator it came from. Every
+figure carries a **used / available / percentage** breakdown with one row per distinct subset, and a
+plain-English reason for each subset.
+
+The counts are **emitted by the figure script**, never typed: each script calls
+`L.record_samples(stem, rows)` with `{what, used, total, note}`, and the percentage is derived. A
+figure that records nothing is a hard build error, exactly like a figure with no generating script.
+Written by hand, these would drift the first time a filter changed — which is the F15 lesson applied
+before it bites.
+
+*Real numbers this surfaced on the sensor-ladder page:* the predator-distance panels use 38.9% of
+step rows; the odour regression uses 11.1% of episodes; Figure 15's correlation rests on **14 points**.
+None of those were visible before.
+
+### 11c. "How it is computed" is written for a colleague who was not in the room
+
+The method block is the part a reader forwards to a collaborator, so it is written for someone who
+knows the science but not this analysis. Target **150–250 words**, covering: what quantity is
+computed, in plain terms; the exact subset and why; the conventions that would otherwise surprise
+(the `t=0` row is not a step; predictors come from the previous row); any statistical machinery named
+*and glossed in one clause* (what quasi-binomial means, what overdispersion is, what "per standard
+deviation" means and what it is not); and what the figure does **not** show. Before this rule the
+blocks averaged 50 words and five figures had none at all; they now average about 185.
+
+*Enforcement:* the build fails if a figure has no "How it is computed" block.
+
+### A trap found while implementing these
+
+Inserting a block into each of fifteen repeated `<figure>` elements with a `.*?` regex under
+`re.DOTALL` **crosses element boundaries**: the pattern for figure 3, finding no block of its own,
+matched forward into figure 4 and overwrote that one instead. Figure 4's own pass then rewrote it,
+so the net effect was one figure silently left without a method block and no error anywhere. When
+editing one of N repeated structures, slice out that element first and operate inside it — never let
+the pattern span them. The build check now catches this class regardless.
+
 ## 8. Pre-publication checklist
 
 - [ ] Every term matches its config name, or is defined at first use
@@ -291,6 +344,9 @@ figure whose units are only in its caption fails that test, and several here did
 - [ ] Findings box present: the opening questions, answered together
 - [ ] Each figure read once with the prose covered — do its own labels carry it?
 - [ ] No retracted values left in the shipped data
+- [ ] Every caption carries an **Axes.** sentence naming x and y, with units (11a)
+- [ ] Every figure declares used / available / percentage, emitted by its script (11b)
+- [ ] Every 'How it is computed' block is 150-250 words and glosses its jargon (11c)
 
 ---
 

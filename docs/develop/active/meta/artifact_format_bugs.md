@@ -246,6 +246,32 @@ fix it.
 
 ---
 
+### F16 — a regex that edits one of N repeated elements, and reaches into the next
+
+**Saw:** one figure shipped with no "How it is computed" block, and no error anywhere.
+
+**Cause:** a `re.DOTALL` pattern of the form `FIG:lad03.*?<div><h5>How it is computed</h5>...` was
+used to replace that figure's method block. Figure 3 had no such block, so `.*?` ran forward into
+figure 4 and replaced *its* block instead. Figure 4's own pass then rewrote it correctly, leaving no
+trace except a silently missing block.
+
+**Rule:** to edit one of N repeated structures, first slice out that element (`re.finditer` over
+`<figure ...>.*?</figure>`, pick the one you want, edit inside it, splice back), so no pattern can
+span two of them. And assert the postcondition: the build now fails if any figure lacks an axes
+sentence or a method block.
+
+### F17 — content inside a closed `<details>` is laid out but never painted
+
+**Saw:** the layout checker reported 24 text-on-text overlaps on a clean page, all of them a table
+cell inside a collapsed panel against the paragraph above it.
+
+**Cause:** a closed `<details>` does not paint its content, but the content still has a layout box —
+`getComputedStyle` reports `display: table-cell` and `getBoundingClientRect` returns real
+coordinates. Any geometry check that walks the DOM will see it.
+
+**Rule:** a renderer-based checker must skip content inside a closed `<details>`, the same way it
+skips `display:none`. `check_artifact_layout.py` now does.
+
 ## Checklist
 
 - [ ] `check_artifact_layout.py` exits 0
@@ -266,6 +292,8 @@ fix it.
 - [ ] Every `hidden`-toggled element carries its own `[hidden]{display:none!important}` (F14)
 - [ ] The screenshots are as tall as the page — the tool now says so
 - [ ] Every number quoted in prose AND in alt text re-checked against its figure (F15)
+- [ ] Edits to one of N repeated elements are scoped to that element (F16)
+- [ ] Geometry checks skip closed `<details>` content (F17)
 - [ ] Every figure has exactly one generating script, and the page says which
 
 ## Related

@@ -54,13 +54,21 @@ Read tool. If a region looks suspicious, crop it with PIL and read the crop — 
 navigate by locating a distinctive colour (a heading accent, a counter numeral) with numpy rather
 than guessing pixel offsets.
 
-**4. Check the things the tool cannot see.** Colour used for two different meanings across figures.
-Panels a reader is asked to compare drawn on different scales. More than about six series
-distinguished by colour alone. A clipped or truncated axis label in a figure PNG. A figure with no
-caption, or a caption that does not say what the axes are. Whether every figure names the script that
-regenerates it.
+**4. Check the three standing requirements** (guide §11, build-enforced but verify them rendered):
 
-**5. Verify both themes.** The page renders in the viewer's theme. Confirm every colour comes from a
+- every caption carries an **Axes.** sentence naming x and y with units, for every panel;
+- every figure shows a **used / available / percentage** data breakdown with a reason per subset;
+- every "How it is computed" block reads for a colleague who was not in the room &mdash; roughly
+  150&ndash;250 words, jargon glossed in place, and it says what the figure does *not* show.
+
+**5. Check the things the tool cannot see.** Colour used for two different meanings across figures.
+Panels a reader is asked to compare drawn on different scales. More than about six series
+distinguished by colour alone. A clipped or truncated axis label in a figure PNG. Whether every
+figure names the script that regenerates it. And spot-check at least one bar chart's value labels
+against the table they come from &mdash; a figure whose labels were left on the wrong rows is
+internally plausible and geometry checks cannot see it (F13).
+
+**6. Verify both themes.** The page renders in the viewer's theme. Confirm every colour comes from a
 token defined on bare `:root`, that the dark media query is guarded as `:root:not([data-theme="light"])`,
 and that `[data-theme="dark"]` and `[data-theme="light"]` define the same token set. A colour whose
 only definition is inside a dark block is a defect.

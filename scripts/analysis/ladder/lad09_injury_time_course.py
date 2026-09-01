@@ -119,6 +119,17 @@ ax[3].legend(fontsize=7.4, loc="lower right")
 for a_ in ax[:2]: a_.set_xlabel("step within the episode")
 ax[3].set_xlabel("step within the episode")
 for a_ in (ax[0], ax[1], ax[3]): a_.set_xlim(0, XMAX)
+P = L.population()
+_tc = sum(int(np.asarray(T[a]["n"], float).sum()) for a in arms)
+_dose = sum(int(np.asarray(T[a]["dose_n"], float).sum()) for a in arms)
+L.record_samples("lad09_injury_time_course", [
+    dict(what="step rows in panels A, B and D", used=_tc, total=P["steps"],
+         note="steps 0-119 of every episode; later steps are outside the window these panels plot"),
+    dict(what="step rows in panel C", used=_dose, total=P["steps"],
+         note="every step of every episode - panel C is not restricted to a window, which is "
+              "why it is the only panel drawing on the entire population"),
+    dict(what="episodes contributing", used=P["episodes"], total=P["episodes"], note="")])
+
 PL.finish(fig, f"{L.FIG_ROOT}/lad09_injury_time_course.png")
 
 print(f"reference arm {REF}\n")

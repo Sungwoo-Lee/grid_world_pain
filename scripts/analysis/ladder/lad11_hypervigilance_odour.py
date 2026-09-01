@@ -81,6 +81,20 @@ hh = [plt.Rectangle((0, 0), 1, 1, color=CY, label="RABBIT smell - arm whose sigh
       plt.Rectangle((0, 0), 1, 1, color=CN, label="RABBIT smell - arm whose sight does not"),
       plt.Rectangle((0, 0), 1, 1, color=PL.GRID, label="PREDATOR smell (control, all arms)")]
 ax[1].legend(handles=hh, loc="lower center", bbox_to_anchor=(0.5, 1.01), ncol=1, fontsize=8)
+P = L.population()
+def _o(kind, q):
+    return sum(int(np.asarray(D[a]["odour"][f"{kind}_tot"], float)[:, q].sum()) for a in arms)
+L.record_samples("lad11_hypervigilance_odour", [
+    dict(what="step rows, rabbit odour, lightest wound quarter", used=_o("rab", 0),
+         total=P["steps"],
+         note="the first 25 steps of episodes that contain a rabbit and began with a wound of 0-25"),
+    dict(what="step rows, rabbit odour, heaviest wound quarter", used=_o("rab", 3),
+         total=P["steps"], note=""),
+    dict(what="step rows, predator odour control, lightest quarter", used=_o("pred", 0),
+         total=P["steps"], note="episodes containing no predator are excluded"),
+    dict(what="step rows, predator odour control, heaviest quarter", used=_o("pred", 3),
+         total=P["steps"], note="")])
+
 PL.finish(fig, f"{L.FIG_ROOT}/lad11_hypervigilance_odour.png")
 print(f"{'arm':22}{'rab unhurt':>12}{'rab wounded':>13}{'amplified':>11}   "
       f"{'pred amplified':>15}   resolves identity")

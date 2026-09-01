@@ -12,7 +12,7 @@ table that does not exist is a hard error rather than a silently empty slot - a 
 nobody noticed is the single most common way one of these pages ships broken.
 """
 from __future__ import annotations
-import base64, io, os, re, subprocess, sys
+import base64, io, json, os, re, subprocess, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
@@ -80,6 +80,33 @@ def inline_code(cells: str) -> str:
     return re.sub(r"`([^`]+)`", r"<code>\1</code>", cells)
 
 
+def samples_block(name: str) -> str:
+    """The data accounting for one figure, rendered from what the figure script recorded.
+
+    Several figures filter - a third of episodes contain no predator, the odour regression needs
+    exactly one predator and one rabbit - and a reader cannot judge a number without knowing the
+    denominator it came from. The figure script emits these counts; nothing here is typed by hand,
+    and a figure that recorded none is a hard error rather than a silent omission.
+    """
+    p = os.path.join(ROOT, "results/analysis/ladder", f"samples_{name}.json")
+    if not os.path.exists(p):
+        raise SystemExit(f"figure {name} recorded no data accounting. Its script must call "
+                         f"L.record_samples(...) - see scripts/analysis/ladder/_ladder.py.")
+    rows = json.load(open(p))
+    if not rows:
+        raise SystemExit(f"figure {name} recorded an empty data accounting")
+    body = "".join(
+        f'<tr><td class="txt">{r["what"]}</td>'
+        f'<td>{r["used"]:,}</td><td>{r["total"]:,}</td><td>{r["pct"]:.1f}%</td>'
+        f'<td class="txt">{r["note"] or "&mdash;"}</td></tr>' for r in rows)
+    return ('<details class="samples"><summary>Data behind this figure &mdash; '
+            f'{rows[0]["used"]:,} of {rows[0]["total"]:,} ({rows[0]["pct"]:.1f}%)</summary>'
+            '<div class="scroll"><table><thead><tr>'
+            '<th class="txt">what</th><th>used</th><th>available</th><th>share</th>'
+            '<th class="txt">why this subset</th></tr></thead>'
+            f'<tbody>{body}</tbody></table></div></details>')
+
+
 def attach_provenance(html: str) -> tuple[str, dict[str, str]]:
     """Name the generating script under every figure, and prove there is exactly one.
 
@@ -109,9 +136,18 @@ def attach_provenance(html: str) -> tuple[str, dict[str, str]]:
             raise SystemExit(f"figure {name} appears on the page more than once")
         seen[name] = script
         prov = (f'<p class="prov">Reproduce this figure: '
-                f'<code>python scripts/analysis/ladder/{script}</code></p>')
+                f'<code>python scripts/analysis/ladder/{script}</code></p>'
+                + samples_block(name))
         if "</figcaption>" not in block:
             raise SystemExit(f"figure {name} has no <figcaption> to attach provenance to")
+        # Every figure states its axes and how it was computed. Both were requested explicitly, and
+        # both have gone missing before - once because a regex written to insert a method block
+        # reached across a figure boundary and overwrote a neighbour's instead.
+        if "<b>Axes.</b>" not in block:
+            raise SystemExit(f"figure {name}'s caption does not state its axes "
+                             "(the caption must contain an '<b>Axes.</b>' sentence)")
+        if "How it is computed" not in block:
+            raise SystemExit(f"figure {name} has no 'How it is computed' block")
         return block.replace("</figcaption>", "</figcaption>\n  " + prov, 1)
 
     out = re.sub(r"<figure\b.*?</figure>", one_figure, html, flags=re.S)

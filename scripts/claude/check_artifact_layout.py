@@ -39,6 +39,16 @@ HOST_SKELETON_HEAD = (
 # Collected in the page and printed as one JSON line the driver greps out of the DOM dump.
 PROBE = r"""
 <script>
+// Content inside a CLOSED <details> is laid out and reports a real bounding box, but is never
+// painted. Without this the probe reports every collapsed panel as overlapping whatever sits above
+// it - 24 false positives on the first page that used one.
+function inClosedDetails(el) {
+  for (var n = el.parentElement; n && n !== document.body; n = n.parentElement) {
+    if (n.tagName === 'DETAILS' && !n.hasAttribute('open')) return true;
+  }
+  return false;
+}
+
 // A box that overflows its own scroll container is not a defect - that is what the container is
 // for. Only report a box that escapes to the PAGE.
 function clipped(el) {
@@ -61,6 +71,7 @@ window.__probe = function () {
   for (var i = 0; i < all.length; i++) {
     var el = all[i], r = el.getBoundingClientRect(), cs = getComputedStyle(el);
     if (cs.display === 'none' || cs.visibility === 'hidden' || el.closest('[hidden]')) continue;
+    if (inClosedDetails(el)) continue;      // laid out, but never painted
     var tag = el.tagName.toLowerCase();
     var id = tag + (el.className && typeof el.className === 'string'
                     ? '.' + el.className.trim().split(/\s+/).join('.') : '');

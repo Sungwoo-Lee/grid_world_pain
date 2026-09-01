@@ -53,6 +53,14 @@ for k, (vals, xl, ttl) in enumerate([
                    va="center", ha="left" if v >= 0 else "right", fontsize=8, color=PL.INK)
 ax[0].set_yticks(y); ax[0].set_yticklabels(lab, fontsize=8)
 ax[0].set_ylabel("single-variable sensor change")
+P = L.population()
+used_arms = sorted({a for p in pairs for a in p})
+L.record_samples("lad02_single_variable_steps", [
+    dict(what="arms entering at least one pair", used=len(used_arms), total=P["arms"],
+         note="two arms are references only and appear on no row of their own"),
+    dict(what="episodes behind the 12 contrasts", used=len(used_arms) * 1_000_000,
+         total=P["episodes"], note="each contrast is two arms' full populations differenced")])
+
 PL.finish(fig, f"{L.FIG_ROOT}/lad02_single_variable_steps.png")
 print(f"{'change':34}{'vs':16}{'d survival':>12}{'d dwell':>11}")
 for (a, r), s, d in zip(pairs, d_surv, d_dwell):

@@ -59,6 +59,16 @@ ax.set_xlim(lo - 0.35 - abs(lo) * 0.5, hi * 1.42 + 0.35)
 ax.legend(loc="lower center", bbox_to_anchor=(0.5, 1.02), ncol=1, fontsize=8.5)
 fig.text(0.5, -0.08, "'(n.s.)' marks an effect that is not distinguishable from zero at p < 0.001 "
          "after scaling for overdispersion", ha="center", fontsize=7.6, color=PL.MUTED)
+P = L.population()
+_n = sum(int(r["n"]) for a in arms
+         for r in csv.DictReader(open(f"{GLM_ROOT}/{a}/multivariate.csv"))
+         if r["model"] == MODEL and r["term"] == "const")
+L.record_samples("lad07_odour_regression", [
+    dict(what="episodes entering the regressions", used=_n, total=P["episodes"],
+         note="restricted to episodes with EXACTLY one predator and one rabbit, so that each "
+              "animal's odour is a single number rather than an average over several animals. "
+              "This is the smallest sample behind any figure on the page")])
+
 PL.finish(fig, f"{L.FIG_ROOT}/lad07_odour_regression.png")
 print(f"{'arm':22}{'predator smell':>16}{'rabbit smell':>15}")
 for i, a in enumerate(arms):

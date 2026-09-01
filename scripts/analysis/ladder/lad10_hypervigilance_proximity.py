@@ -74,6 +74,22 @@ ax[0].set_yticks(y); ax[0].set_yticklabels(PL.arm_ylabels(arms), fontsize=8)
 ax[0].set_ylabel("sensor-ladder arm  (poorest senses at the bottom)")
 ax[0].legend(loc="lower center", bbox_to_anchor=(1.03, 1.14), ncol=2, fontsize=8.5)
 ax[2].legend(loc="lower center", bbox_to_anchor=(0.5, 1.14), ncol=1, fontsize=8.5)
+P = L.population()
+def _q(key, bins, q):
+    return sum(int(np.asarray(D[a]["grids"][f"{key}_tot"], float)[list(bins)][:, list(q)].sum())
+               for a in arms)
+L.record_samples("lad10_hypervigilance_proximity", [
+    dict(what="step rows, rabbit panel, lightest wound quarter",
+         used=_q("rd", L.NEAR_BINS, LOW) + _q("rd", L.FAR_BINS, LOW), total=P["steps"],
+         note="near and far bins together, for episodes that began with a wound of 0-25"),
+    dict(what="step rows, rabbit panel, heaviest wound quarter",
+         used=_q("rd", L.NEAR_BINS, HIGH) + _q("rd", L.FAR_BINS, HIGH), total=P["steps"], note=""),
+    dict(what="step rows, predator panel, lightest wound quarter",
+         used=_q("pd", L.NEAR_BINS, LOW) + _q("pd", L.FAR_BINS, LOW), total=P["steps"],
+         note="smaller than the rabbit rows because a third of episodes contain no predator"),
+    dict(what="step rows, predator panel, heaviest wound quarter",
+         used=_q("pd", L.NEAR_BINS, HIGH) + _q("pd", L.FAR_BINS, HIGH), total=P["steps"], note="")])
+
 PL.finish(fig, f"{L.FIG_ROOT}/lad10_hypervigilance_proximity.png")
 print(f"{'arm':22}{'rab lo':>9}{'rab hi':>9}{'shift':>8}  |{'pred lo':>9}{'pred hi':>9}{'shift':>8}")
 for i, a in enumerate(arms):

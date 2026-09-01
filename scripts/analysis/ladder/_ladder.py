@@ -338,3 +338,43 @@ def load_time_course(require=("injury", "noci", "bush", "nutrition", "ate", "n")
             raise SystemExit(f"{arm}: time course holds {sizes[arm]:,} episodes but the aggregate "
                              f"holds {agg:,} - one of the two is stale")
     return out
+
+
+def record_samples(figure_stem: str, rows: list[dict]):
+    """Write the data accounting for one figure: what was available, what was used, and why.
+
+    Every figure on the published page carries a line saying how much of the data it actually
+    drew on. Several figures filter - a third of episodes contain no predator, the odour
+    regression needs exactly one predator and one rabbit - and a reader cannot judge a number
+    without knowing the denominator it came from. Writing it by hand would drift the first time a
+    filter changed, so each figure script emits it and `build_artifact.py` refuses to publish a
+    figure that has not.
+
+    `rows` is a list of {what, used, total, note}. `used`/`total` are counts (episodes or step
+    rows); the percentage is derived, never typed.
+    """
+    import json
+    out = []
+    for r in rows:
+        used, total = int(r["used"]), int(r["total"])
+        if used > total:
+            raise SystemExit(f"{figure_stem}: {r['what']!r} claims {used:,} of {total:,}")
+        out.append({"what": r["what"], "used": used, "total": total,
+                    "pct": (100.0 * used / total) if total else 0.0,
+                    "note": r.get("note", "")})
+    os.makedirs(OUT_ROOT, exist_ok=True)
+    json.dump(out, open(f"{OUT_ROOT}/samples_{figure_stem}.json", "w"), indent=1)
+    print(f"\ndata behind this figure:")
+    for r in out:
+        print(f"  {r['what']:44}{r['used']:>15,} of {r['total']:>15,}  ({r['pct']:5.1f}%)"
+              + (f"   {r['note']}" if r["note"] else ""))
+
+
+def population() -> dict:
+    """The denominators every figure is a fraction of: the whole collected population."""
+    eps = sum(load_arm(a)["n_episodes"] for a in ARM_ORDER)
+    steps = 0
+    for a in ARM_ORDER:
+        z = np.load(f"{OUT_ROOT}/{a}_episodes.npz")
+        steps += int(z["n_steps"].sum())
+    return {"arms": len(ARM_ORDER), "episodes": eps, "steps": steps}

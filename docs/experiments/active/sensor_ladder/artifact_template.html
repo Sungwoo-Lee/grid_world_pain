@@ -122,6 +122,18 @@ figure img:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
   color:var(--muted);margin:9px 0 0;text-align:right;max-width:1120px}
 .prov{max-width:730px;margin:8px auto 0;font-family:var(--mono);font-size:11.5px;
   color:var(--muted);line-height:1.5}
+.samples{max-width:730px;margin:10px auto 0;font-size:13px;border:1px solid var(--rule);
+  border-radius:4px;background:var(--card)}
+.samples summary{cursor:pointer;padding:9px 14px;font-family:var(--mono);font-size:11.5px;
+  letter-spacing:.04em;color:var(--muted);list-style:none}
+.samples summary::-webkit-details-marker{display:none}
+.samples summary::before{content:'\25B8  ';color:var(--accent)}
+.samples[open] summary::before{content:'\25BE  '}
+.samples summary:hover{color:var(--ink)}
+.samples .scroll{border:0;border-top:1px solid var(--rule);border-radius:0}
+.samples table{font-size:12.5px}
+.samples td,.samples th{padding:6px 14px}
+.samples td.txt,.samples th.txt{min-width:0;max-width:330px;white-space:normal}
 .prov code{background:none;padding:0;font-size:11.5px;color:var(--muted)}
 figcaption{margin-top:14px;font-size:14.5px;color:var(--muted);line-height:1.55;
   max-width:730px;margin-left:auto;margin-right:auto}
@@ -462,14 +474,11 @@ third no rabbit, so the distance and odour analyses use about 200,000; the odour
 <figure class="wide">
   <img src="{{FIG:lad01_ladder_overview}}" alt="Two horizontal bar charts. Left: mean survival per arm, from 166 steps for A_baseline to 264 for V4_blur05. Right: bush dwell per arm, from 14.0% to 20.2%.">
   <figcaption><b>Figure 1.</b> Left: mean survival. Right: bush dwell. Both pooled over each arm's
-  1,000,000 episodes.</figcaption>
+  1,000,000 episodes. <b>Axes.</b> Both panels: <b>y</b> = the fourteen sensor-ladder arms, poorest senses at the bottom. <b>x</b>, left = mean survival in steps per episode; <b>x</b>, right = bush dwell as a percentage of an episode's steps. Both x-axes start at zero.</figcaption>
   <div class="fig-blocks">
     <div><h5>Why look</h5><p>The most basic question about a sense is whether having it helps. If
     it does, the agents that have it should live longer.</p></div>
-    <div><h5>How it is computed</h5><p>Survival is the mean episode length. Bush dwell is
-    (bush steps) &divide; (steps), pooled over every episode. The <code>t=0</code> row is the world as
-    handed to the agent, not a step it took, so it is excluded from both numerator and
-    denominator.</p></div>
+    <div><h5>How it is computed</h5><p>Two numbers per arm, each pooled over that arm's entire population of one million episodes. <b>Mean survival</b> is simply the average episode length: how many steps the agent took before it was killed, starved, or reached the 500-step limit. <b>Bush dwell</b> is the number of steps the agent spent standing inside a bush divided by the number of steps it took, expressed as a percentage. Both are pooled across episodes rather than averaged per episode, so a long episode contributes more steps than a short one &mdash; this is the honest thing to do when the question is "what fraction of its life does this agent spend hidden", and it avoids letting a two-step episode count as much as a four-hundred-step one. One convention matters throughout this page: the row recorded at <code>t=0</code> is the world as it was handed to the agent, before it has acted. It is not a step the agent took, so it appears in neither the numerator nor the denominator of any rate. Getting that wrong in an earlier analysis produced episodes with more bush steps than steps.</p></div>
     <div><h5>What it shows</h5><p>Survival runs 166 to 264 steps &mdash; the best arm lives about
     1.6 times as long as the worst, produced entirely by sensory settings. Bush dwell moves far less,
     14.0% to 20.2%. The two are <em>anti</em>-correlated: the agents that hide most die soonest. First
@@ -487,13 +496,9 @@ reference, and those pairs are what Figure 2 shows.</p></div>
 <figure class="wide">
   <img src="{{FIG:lad02_single_variable_steps}}" alt="Two diverging bar charts of single-variable sensor changes. Giving smell a direction is +45.3 steps; collapsing appearance channels to one is -46.8 steps; disabling blur is -25.3 steps; halving the visual range is -8.0 steps.">
   <figcaption><b>Figure 2.</b> Each row is one arm minus its reference arm &mdash; a change of exactly
-  one setting.</figcaption>
+  one setting. <b>Axes.</b> Both panels: <b>y</b> = the twelve single-setting changes, each labelled with the arm it compares and the reference it is compared against. <b>x</b>, left = change in mean survival in steps; <b>x</b>, right = change in bush dwell in percentage points. Both x-axes are differences and are centred on zero, so a bar left of the line means the change made that quantity smaller.</figcaption>
   <div class="fig-blocks">
-    <div><h5>How it is computed</h5><p>The difference of the two arms' pooled values from Figure 1.
-    Both members of a pair were handed the same 1,000,000 worlds, so they met identical predators, food
-    and starting wounds. The claim that each pair differs in exactly one setting is
-    <strong>asserted in code</strong>, not merely intended &mdash; see the correction
-    below.</p></div>
+    <div><h5>How it is computed</h5><p>Each row takes one arm, subtracts its reference arm, and reports the difference. The reference is the arm that differs from it in exactly one sensory setting &mdash; so the row labelled "visual blur disabled" is <code>V5_sharp</code> minus <code>V4_blur05</code>, two agents identical in every respect except that one has the blur switched off. The numbers being differenced are the same pooled values shown in Figure 1. Because every arm was run on the same one million evaluation worlds, seeded identically, both members of a pair met the same predators in the same places, the same food, and the same randomised starting wounds; the difference between them therefore cannot be explained by one arm having had easier worlds. The claim that each pair differs in exactly one setting is not a matter of trust: <code>check_single_variable_pairs()</code> compares the two saved configurations and refuses to draw the figure if any pair differs in more than one. That guard exists because one pairing had silently drifted to two settings and inflated a headline number fourfold.</p></div>
     <div><h5>What it shows</h5><p><strong>Direction beats acuity.</strong> Giving smell a direction
     is worth +45.3 steps, the biggest single win, even though the agent still has no useful sight.
     <strong>Identity beats sharpness.</strong> Collapsing eight appearance channels to one costs
@@ -529,8 +534,9 @@ sensory setting buys down, and which it buys up, is more informative than the ne
 <figure class="wide">
   <img src="{{FIG:lad03_how_it_ends}}" alt="Stacked horizontal bars showing per arm the share of episodes ending in predation, starvation, or reaching the step limit. Predation falls from 46-47% in the near-blind arms to 26% in the reference agent while starvation rises from 24% to 37%.">
   <figcaption><b>Figure 3.</b> Every arm's 1,000,000 episodes split into the three ways an episode can
-  end.</figcaption>
+  end. <b>Axes.</b> <b>y</b> = the fourteen arms, poorest senses at the bottom. <b>x</b> = share of that arm's episodes, 0 to 100 percent; the three coloured segments of each bar sum to 100 percent by construction.</figcaption>
   <div class="fig-blocks">
+    <div><h5>How it is computed</h5><p>Every episode ends in exactly one of three ways, recorded by the environment in the episode table: the agent was killed by a predator, it starved because its nutrition ran out, or it survived to the 500-step limit. This figure counts those three outcomes for each arm and expresses them as shares of that arm's one million episodes, so the three segments of every bar sum to 100 percent by construction. No filtering or weighting is applied. The reason this is worth a figure of its own is that survival alone hides a trade-off: an agent can raise its mean survival either by avoiding predators or by avoiding starvation, and those two pull in opposite directions, since the bushes that hide it from predators contain no food. Splitting the outcome shows which of the two a sensory change actually bought.</p></div>
     <div><h5>What it shows</h5><p>Predation is where the senses pay: 46&ndash;47% in the two arms
     with no useful sight, down to 26% in the reference agent. Starvation moves the <em>other</em> way,
     24% up to 37% &mdash; the better-sighted agents trade some starvation risk for a much larger
@@ -578,13 +584,9 @@ scale goes 4.0 &rarr; 2.0 &rarr; 1.0 &rarr; 0.5 &rarr; off. There is an optimum 
   <img src="{{FIG:lad04_threat_distance_curve}}" alt="Two line charts of bush dwell against distance to the nearest predator and nearest rabbit. Lines are coloured green if the arm's sight resolves identity and orange if not; four discussed arms are drawn thick and labelled.">
   <figcaption><b>Figure 4.</b> Bush dwell against how far the nearest predator (left) or rabbit (right)
   was when the agent chose its move. Colour is the grouping of Section 4; the four arms the text
-  discusses are thick and named.</figcaption>
+  discusses are thick and named. <b>Axes.</b> Both panels: <b>x</b> = distance from the agent to the nearest animal at the moment it chose its move, in chebyshev steps, from 1 (adjacent) to 8 or more. <b>y</b> = bush dwell as a percentage of those steps. Both panels share one y-scale.</figcaption>
   <div class="fig-blocks">
-    <div><h5>How it is computed</h5><p>Distance to the nearest <em>active</em> predator in
-    chebyshev steps. The action producing step <code>t</code> was chosen while looking at step
-    <code>t&minus;1</code>, so distance is read off the previous row and bush occupancy off the current
-    one. Distances of 8 or more are pooled. Episodes containing no predator are excluded from the
-    predator panel.</p></div>
+    <div><h5>How it is computed</h5><p>For every step of every episode, the distance from the agent to the nearest <i>active</i> animal of each class is measured in chebyshev steps &mdash; the number of moves a chess king would need, which is the right metric here because the agent also moves diagonally. Steps are then grouped by that distance and, within each group, bush dwell is computed as bush steps over steps. Two filters apply. First, the action that produced a given row was chosen while the agent was looking at the <i>previous</i> row, so the distance is read from row <code>t&minus;1</code> and the bush occupancy from row <code>t</code>; each episode's first step therefore has no predictor and is dropped. Second, about a third of episodes contain no predator at all and a third contain no rabbit; those episodes have no "distance to the nearest predator" and are excluded from the corresponding panel. Leaving them in would have been worse than a rounding error: an absent animal reads as infinitely far away, so every no-predator episode would have piled into the farthest distance bin and quietly become the comparison group that everything else was measured against.</p></div>
     <div><h5>What it shows</h5><p>Every arm hides far more with a predator close. The rise is not
     perfectly monotone at the very closest bin &mdash; in six arms bush dwell is <em>higher</em> at
     distance 2 than at distance 1. That is expected rather than puzzling: at distance 1 the agent is
@@ -606,12 +608,9 @@ remove it tells us what discrimination actually requires.</p></div>
   <img src="{{FIG:lad05_discrimination}}" alt="Left: for each arm, the response to a nearby predator and to a nearby rabbit joined by a line. Right: the rabbit response alone, positive for five arms and negative for nine.">
   <figcaption><b>Figure 5.</b> Left: each arm's response to a nearby predator and to a nearby rabbit,
   joined by a line whose length is that arm's discrimination. Right: the rabbit response alone,
-  coloured by whether the arm's sight can resolve identity.</figcaption>
+  coloured by whether the arm's sight can resolve identity. <b>Axes.</b> Both panels: <b>y</b> = the fourteen arms, poorest senses at the bottom. <b>x</b> = a DIFFERENCE in percentage points &mdash; bush dwell when the animal is 1-2 cells away minus bush dwell when it is 6 or more cells away. Left panel shows that difference for a predator and for a rabbit; right panel shows the rabbit one alone. Below zero means the agent hides LESS when the animal is near.</figcaption>
   <div class="fig-blocks">
-    <div><h5>How it is computed</h5><p>For each arm and animal class, the <em>proximity effect</em>
-    is the probability of being in a bush when the nearest animal is 1&ndash;2 cells away, minus that
-    probability when it is 6 or more cells away, in percentage points. Counts are pooled before the
-    ratio is taken, so a distance bin holding more steps carries more weight.</p></div>
+    <div><h5>How it is computed</h5><p>For each arm and each class of animal, one number is computed: the probability of being in a bush when the nearest animal of that class is 1&ndash;2 cells away, minus the same probability when it is 6 or more cells away. Distances of 3&ndash;5 are deliberately left out of the contrast, so the two ends are cleanly separated; they are visible in Figure 4. The counts from the two "near" distance bins are added together before the division, and likewise for the three "far" bins, rather than averaging the per-bin percentages &mdash; pooling counts weights each bin by how much evidence it actually carries, whereas averaging rates would let a sparse bin swing the result. As in Figure 4, the distance is read from the row before the action, and episodes lacking the animal class in question are excluded. A bin with fewer than 1,000 steps behind it is treated as unsupported and dropped rather than plotted as a noisy point; in practice, at this sample size, none is.</p></div>
     <div><h5>What it shows</h5><p>The fourteen split cleanly, and the split is <strong>not</strong>
     sight against no sight. Nine arms whose sight resolves identity have a <em>negative</em> rabbit
     response (&minus;1.0 to &minus;3.6) &mdash; they hide slightly <em>less</em> when a rabbit is near.
@@ -651,14 +650,9 @@ which says range matters too.</li>
 <figure class="wide">
   <img src="{{FIG:lad06_world_factor_map}}" alt="A heatmap of nine randomised world features against fourteen arms. The number-of-predators row dominates everywhere. The number-of-rabbits row is around +3 for the five arms without identity-resolving sight and near zero for the nine with it.">
   <figcaption><b>Figure 6.</b> Every feature of the world randomised before the agent acts, against
-  every arm. Red means the agent hides more; blue, less.</figcaption>
+  every arm. Red means the agent hides more; blue, less. <b>Axes.</b> <b>y</b> = the nine features of the world that are randomised before the agent acts. <b>x</b> = the fourteen arms, poorest senses on the left. The colour of each cell, and the number printed in it, is the effect on bush dwell in percentage points of moving that feature by one standard deviation &mdash; red for more hiding, blue for less.</figcaption>
   <div class="fig-blocks">
-    <div><h5>How it is computed</h5><p>A quasi-binomial regression per arm on the episode-level
-    bush-dwell rate, with all nine exogenous features entered together so each is adjusted for the
-    others. Standard errors are scaled by the Pearson overdispersion. Plotted is the effect of moving a
-    feature by one standard deviation of its own spread &mdash; <strong>not</strong> one more predator
-    or rabbit. One standard deviation of the rabbit count is 0.82 rabbits, so a per-rabbit effect would
-    be about 22% larger than shown.</p></div>
+    <div><h5>How it is computed</h5><p>One regression per arm, fitted on that arm's million episodes. The outcome is the episode's bush-dwell rate &mdash; bush steps over steps &mdash; and all nine world features are entered together, so each coefficient is the effect of that feature with the other eight held fixed. The model is <b>quasi-binomial</b>: a model for a proportion that, unlike an ordinary binomial one, does not assume every step is an independent coin flip. Steps within one episode obviously are not independent, and ignoring that would make every confidence interval far too narrow. How much too narrow is measured by the <b>Pearson overdispersion</b>, which runs 13&ndash;27 here, meaning the data are over a dozen times more variable than the idealised model allows; every standard error is multiplied by its square root to compensate. The plotted number is the effect of moving a feature by one standard deviation of its own spread across episodes, converted into percentage points of bush dwell. That is <i>not</i> the effect of one more predator or one more rabbit &mdash; one standard deviation of the rabbit count is 0.82 rabbits, so a per-rabbit effect would be about 22 percent larger. Only features drawn at reset are included; anything the agent's own behaviour produced would be a consequence rather than a cause and would swamp the comparison.</p></div>
     <div><h5>What it shows</h5><p>The <em>number of rabbits</em> row reproduces the Figure 5 split:
     +3.6, +3.7 and +2.5 for the three arms without identity-resolving sight, +3.1 and +3.1 for the two
     presence-only arms, against &minus;0.0 to +1.1 for the nine that resolve identity.
@@ -686,13 +680,9 @@ exactly how much the choice of window changes the answer.</p>
 <figure class="wide">
   <img src="{{FIG:lad07_odour_regression}}" alt="Paired horizontal bars per arm for the adjusted effect of predator odour and rabbit odour on bush dwell. A_baseline shows +4.33 and +3.81; the reference agent shows effects indistinguishable from zero.">
   <figcaption><b>Figure 7.</b> The effect of a predator's and a rabbit's odour strength on bush dwell,
-  with the rest of the world held fixed.</figcaption>
+  with the rest of the world held fixed. <b>Axes.</b> <b>y</b> = the fourteen arms, poorest senses at the bottom. <b>x</b> = the effect on bush dwell, in percentage points, of a one-standard-deviation stronger smell, with everything else in the regression held fixed. Centred on zero; right of the line means the agent hides more when that animal smells stronger.</figcaption>
   <div class="fig-blocks">
-    <div><h5>How it is computed</h5><p>Restricted to the &asymp;111,200 episodes per arm with exactly
-    one predator and one rabbit, so each smell is one number rather than an average. Adjusted for the
-    number of bushes, rocks, food patches and ambush predators, the distance the agent spawned from
-    cover, the predator's detection range, attack delay, attack range and stamina, the predator's own
-    smell, and the agent's starting wound and hunger.</p></div>
+    <div><h5>How it is computed</h5><p>The same quasi-binomial machinery as Figure 6, but restricted to the episodes in which there is exactly one predator and exactly one rabbit. That restriction is what makes the question answerable: with two predators in a world, "the predator's smell" would have to be an average over two independently drawn odours, and the regression would be relating behaviour to a quantity that does not correspond to anything the agent encountered. Requiring exactly one of each costs a great deal of data &mdash; it is the smallest sample behind any figure here, about 11 percent of episodes &mdash; but it buys a well-defined regressor. Each animal's odour is redrawn at random every episode, independently of everything else, which is what makes this a causal contrast rather than a correlation: the agent cannot choose what a rabbit smells like. The coefficients shown are adjusted for the number of bushes, rocks, food patches and ambush predators, the distance the agent spawned from cover, the predator's detection range, attack delay, attack range and stamina, the predator's own smell, and the agent's starting wound and hunger.</p></div>
     <div><h5>What it shows</h5><p>The same split, on a different cue and with the world held fixed.
     <code>A_baseline</code> hides +3.81 points harder for a strong-smelling rabbit; the reference agent
     is at &minus;0.00 and not distinguishable from zero.</p></div>
@@ -738,11 +728,9 @@ which is float32 rounding.</p>
 <figure class="wide">
   <img src="{{FIG:lad08_injury_dose_response}}" alt="Left: bush dwell over the first 25 steps against the assigned starting wound, one line per arm coloured by whether its sight resolves identity; thirteen rise and A_baseline falls. Right: the slope per arm, from -2.34 to +6.69 percentage points.">
   <figcaption><b>Figure 8.</b> Bush dwell over each episode's first 25 steps, against the injury level
-  the environment handed the agent at <code>t=0</code>.</figcaption>
+  the environment handed the agent at <code>t=0</code>. <b>Axes.</b> Left: <b>x</b> = the injury level the environment handed the agent at t=0, in four equal quarters of the 0-100 range; <b>y</b> = bush dwell over the episode's first 25 steps, as a percentage of those steps. Right: <b>y</b> = the fourteen arms; <b>x</b> = the difference between that arm's heaviest and lightest quarter, in percentage points.</figcaption>
   <div class="fig-blocks">
-    <div><h5>How it is computed</h5><p>Episodes split into four equal quarters of the starting wound;
-    bush dwell pooled over the <strong>first 25 steps only</strong>. Figure 9 explains why 25, and
-    Figure 14 shows what happens if you choose otherwise.</p></div>
+    <div><h5>How it is computed</h5><p>Episodes are sorted into four equal quarters by the injury level the environment handed the agent at <code>t=0</code> &mdash; 0&ndash;25, 25&ndash;50, 50&ndash;75, 75&ndash;100 &mdash; and within each quarter bush dwell is pooled over the first 25 steps of every episode. The starting wound is drawn uniformly at random before the agent has acted, which is what makes this a causal contrast rather than a correlation: nothing the agent did could have influenced which quarter it landed in. Episodes shorter than 25 steps contribute whatever steps they have. The window matters and is not arbitrary; Figure 9 explains where 25 comes from, and Figure 14 shows how different the answer looks if you choose otherwise. One caveat to carry into the next figure: this bins by the injury level in the agent's body, which the agent has no sensor for. What it can actually feel is a delayed, smoothed trace of that number, and the two behave quite differently in the first dozen steps.</p></div>
     <div><h5>What it shows</h5><p>Thirteen of the fourteen arms hide more when handed a bigger wound,
     by +2.6 to +6.7 percentage points across the full range. The exception is <code>A_baseline</code>
     at &minus;2.3, the one agent with neither directional smell nor useful sight. Note that this bins
@@ -761,14 +749,9 @@ tracking how long the agent can <em>feel</em> the wound.</p>
   <img src="{{FIG:lad09_injury_time_course}}" alt="Four panels. A: injury level and the perceived signal over time; the perceived curve starts at zero and peaks around step 12 while the injury curve is already falling. B: the injury gap, perceived gap and extra hiding as fractions of their own peaks, peaking at steps 0, 12 and 15 respectively. C: bush dwell rising with how hurt the agent feels right now. D: the nutrition gap opening to about -16 and closing by step 100.">
   <figcaption><b>Figure 9.</b> A: the injury level and the perceived signal. B: the three quantities as
   fractions of their own peak, so their timing can be compared. C: bush dwell against how hurt the
-  agent feels <i>right now</i>. D: the food the caution cost.</figcaption>
+  agent feels <i>right now</i>. D: the food the caution cost. <b>Axes.</b> Panels A, B and D: <b>x</b> = step number within the episode, 0 to 100. <b>y</b> in A = injury level and perceived signal, both on the same 0-100 scale; <b>y</b> in B = each curve as a fraction of its own maximum, so only shape and timing are comparable, not size; <b>y</b> in D = the nutrition difference between the heaviest and lightest starting-wound quarters, on the 0-100 nutrition scale. Panel C: <b>x</b> = the perceived nociception the agent is receiving right now, in four equal quarters of the 0-100 range; <b>y</b> = bush dwell as a percentage of those steps.</figcaption>
   <div class="fig-blocks">
-    <div><h5>How it is computed</h5><p>A step-by-step sweep records, per arm and per quarter of the
-    assigned starting wound, the injury still carried, the reconstructed perceived signal, bush dwell
-    and nutrition at every step to 120. Panels A, B and D are keyed to the <strong>randomised</strong>
-    starting wound and are causal. Panel C is keyed to the <strong>contemporaneous</strong> perceived
-    signal and is associational &mdash; an agent feels hurt because it got hurt, which depends on what
-    it was doing.</p></div>
+    <div><h5>How it is computed</h5><p>A step-by-step sweep records, for each arm and each quarter of the assigned starting wound, four things at every step up to 120: the injury level still in the body, the perceived nociception signal, bush dwell, and nutrition. The perceived signal is not recorded by the environment as a column, so it is reconstructed exactly as the environment builds it: a twelve-slot buffer holding the last twelve injury levels, convolved with a normalised alpha kernel, with the current step's slot weighted zero and the whole buffer zeroed at reset. The reconstruction was checked against the observation vector the environment itself wrote &mdash; perceptual noise is disabled in this configuration, so the recorded channel <i>is</i> the policy's input &mdash; and agreed to within 2.2 &times; 10<sup>&minus;7</sup> over 1.36 million rows, which is float32 rounding. Panels A, B and D are keyed to the randomised starting wound and are therefore causal; the perceived signal is a deterministic function of that assigned wound, so describing the response in terms of one or the other does not change what was manipulated. Panel C is keyed to the perceived signal the agent is receiving <i>at that moment</i>, which is a consequence of its own behaviour, and is associational.</p></div>
     <div><h5>What it shows</h5><p>The injury gap peaks at <strong>step 0</strong> in all fourteen
     arms; the perceived gap at <strong>step 12</strong> in all fourteen; extra hiding at
     <strong>step 14&ndash;16</strong> in thirteen. At step 0 the wound is at its most extreme &mdash;
@@ -815,10 +798,9 @@ become more defensive across the board &mdash; a gain change, not a criterion ch
 <figure class="wide">
   <img src="{{FIG:lad10_hypervigilance_proximity}}" alt="Three panels. A: response to a nearby rabbit at light and heavy starting wound. B: the same for a nearby predator, on the same scale, and much larger. C: the two shifts, where the predator shift exceeds the rabbit shift in most arms.">
   <figcaption><b>Figure 10.</b> Panels A and B: response to a nearby rabbit and to a nearby predator, at
-  the lightest and heaviest starting wound, <b>on one shared scale</b>. Panel C: the two shifts.</figcaption>
+  the lightest and heaviest starting wound, <b>on one shared scale</b>. Panel C: the two shifts. <b>Axes.</b> All three panels: <b>y</b> = the fourteen arms, poorest senses at the bottom. <b>x</b> in A and B = a DIFFERENCE in percentage points, bush dwell with the animal 1-2 cells away minus 6 or more cells away, drawn once for the lightest and once for the heaviest starting wound, and A and B share one scale. <b>x</b> in C = the difference between those two, in percentage points.</figcaption>
   <div class="fig-blocks">
-    <div><h5>How it is computed</h5><p>Within each starting-wound quarter separately, the same
-    proximity effect as Figure 5. The shift is the heaviest quarter minus the lightest.</p></div>
+    <div><h5>How it is computed</h5><p>Within each starting-wound quarter separately, the same proximity effect as Figure 5 is computed: bush dwell with the nearest animal 1&ndash;2 cells away minus bush dwell with it 6 or more cells away. Panels A and B show that quantity for the lightest quarter and the heaviest, for a rabbit and for a predator; panel C is the difference between those two, that is, how much waking up wounded moved each response. Panels A and B deliberately share one x-scale. An earlier version gave them their own, which made the rabbit response &mdash; a few percentage points &mdash; look comparable to the predator response, which is around forty. The comparison in panel C is the actual test: hiding harder from a predator when wounded is ordinary caution that almost any account predicts, so the question is whether the <i>harmless</i> cue is amplified more than the real one. Only that would be a change in what the agent treats as evidence of danger, rather than a general increase in defensiveness.</p></div>
     <div><h5>What it shows</h5><p><strong>No criterion shift on this channel.</strong> The rabbit
     shift is between +0.0 and +0.8 percentage points in every arm; the predator shift is larger in most,
     up to +3.5. A wounded agent becomes more responsive to the animal that can actually kill it &mdash;
@@ -838,13 +820,9 @@ the channel where it should show.</p></div>
   <img src="{{FIG:lad11_hypervigilance_odour}}" alt="Left: each arm's response to a strong rabbit smell, unhurt versus badly wounded. Right: the difference between the two, alongside a grey predator-smell control; the difference is positive in twelve of the fourteen arms and the two negative ones are close to zero.">
   <figcaption><b>Figure 11.</b> Left: how strongly each arm responds to a strong rabbit smell, having
   begun the episode nearly unhurt or badly wounded. Right: the difference, with the predator smell as a
-  control.</figcaption>
+  control. <b>Axes.</b> Both panels: <b>y</b> = the fourteen arms, poorest senses at the bottom. <b>x</b>, left = a DIFFERENCE in percentage points, bush dwell in the strongest-smelling quarter of episodes minus the weakest, drawn once for episodes begun unhurt and once for begun badly wounded. <b>x</b>, right = the difference between those two.</figcaption>
   <div class="fig-blocks">
-    <div><h5>How it is computed</h5><p>Episodes split into quartiles of the odour intensity drawn
-    for their rabbits. The <em>slope</em> is bush dwell in the strongest-smelling quarter minus the
-    weakest, over the first 25 steps, computed once over episodes that began nearly unhurt and once over
-    those that began badly wounded. The bar is the difference. Episodes containing no rabbit are
-    excluded.</p></div>
+    <div><h5>How it is computed</h5><p>Within each arm, episodes are sorted into quartiles by the odour intensity drawn for their rabbits &mdash; intensity being the sum of the two olfactory channels that separate predators from rabbits, with those two channels derived from each run's own saved configuration rather than assumed. The <i>slope</i> is then bush dwell in the strongest-smelling quarter minus the weakest, pooled over the first 25 steps. That slope is computed twice for each arm: once over the episodes that began nearly unhurt (starting wound 0&ndash;25) and once over those that began badly wounded (75&ndash;100). The bar in the right panel is the difference between those two, so it is a difference of differences: how much the wound amplified the agent's response to a smell that carries no danger at all. The predator-smell slope is computed identically and shown as a control. Episodes containing no rabbit are excluded from the rabbit measure, and likewise for the predator; an animal that is not in the world has no odour draw, and letting those episodes fall into a bin would make "there was no rabbit" the comparison group.</p></div>
     <div><h5>What it shows</h5><p>In <strong>12 of the 14 arms</strong> the wound amplifies the
     rabbit-smell response more than the predator-smell response; the gap runs &minus;0.34 to +1.67
     points, and the two arms below zero are small enough to be noise. The predator-smell response
@@ -893,8 +871,9 @@ seed replication.</p>
   <img src="{{FIG:lad12_odour_false_alarm}}" alt="Two line charts of bush dwell against the randomised odour quartile. Bold lines are the two groups; the rabbit panel rises much more steeply for the five arms that cannot resolve identity, and the predator panel dips at the loudest quartile.">
   <figcaption><b>Figure 12.</b> Bush dwell against how strongly this episode's rabbits (left) and
   predators (right) happened to smell. Bold lines pool the counts within each group; faint lines are the
-  fourteen individual arms.</figcaption>
+  fourteen individual arms. <b>Axes.</b> Both panels: <b>x</b> = how strongly that episode's animals happened to smell, in four quartiles of the randomised odour draw, weakest on the left. <b>y</b> = bush dwell over the episode's first 25 steps, as a percentage of those steps. Both panels share one y-scale.</figcaption>
   <div class="fig-blocks">
+    <div><h5>How it is computed</h5><p>The same quartiles of the randomised odour draw as Figure 11, but plotted as curves rather than collapsed into a slope, so the shape is visible. Each arm contributes two faint lines &mdash; one for episodes begun nearly unhurt, one for begun badly wounded &mdash; and the bold lines pool the counts of all the arms within each of the two sensory groups. Pooling counts rather than averaging the arms' percentages matters: an arm contributes to the bold line in proportion to how much evidence it actually carries in that bin. Bush dwell is again taken over the first 25 steps, and episodes lacking the animal in question are excluded. One feature of the predator panel is worth understanding before reading it as a behavioural result: odour intensity is the <i>sum</i> of the two channels while what marks an animal as a predator is their <i>difference</i>, so an episode whose predators smell very loudly has both channels near their ceiling and the difference squeezed toward zero. The loudest predators are therefore also the least distinguishable ones, which is why that curve turns down at the top quartile.</p></div>
     <div><h5>Why the predator panel dips at the loudest quartile</h5><p>That dip is real behaviour,
     not an artefact. Intensity is the <strong>sum</strong> of the two odour channels while what marks an
     animal out as a predator is their <strong>difference</strong>, so an episode whose predators smell
@@ -918,8 +897,9 @@ reset, so both can be tested causally and on the same footing.</p></div>
 <figure class="wide">
   <img src="{{FIG:lad13_two_internal_drives}}" alt="Two line charts on a shared y-scale. Left: bush dwell against starting nutrition, rising steeply. Right: bush dwell against starting wound, rising far less.">
   <figcaption><b>Figure 13.</b> Bush dwell over the first 25 steps against the two internal states the
-  environment assigns at random, on a shared y-scale.</figcaption>
+  environment assigns at random, on a shared y-scale. <b>Axes.</b> Both panels: <b>x</b> = the internal state the environment assigned at t=0, in four equal quarters of the 0-100 range &mdash; nutrition on the left (so the left end is an agent that woke starving) and injury on the right. <b>y</b> = bush dwell over the episode's first 25 steps, as a percentage of those steps. Both panels share one y-scale so their slopes can be compared directly.</figcaption>
   <div class="fig-blocks">
+    <div><h5>How it is computed</h5><p>Episodes are sorted into four equal quarters by the internal state the environment assigned at <code>t=0</code> &mdash; nutrition for the left panel, injury for the right &mdash; and within each quarter bush dwell is pooled over the first 25 steps. Both are randomised before the agent acts, so both are causal contrasts, and both panels use exactly the same step rows; the only difference between them is which number each episode is filed under. The two panels share one y-scale, deliberately, so that the slopes can be compared by eye rather than by arithmetic. Read the hunger axis carefully: it plots <i>nutrition</i>, so the left end is an agent that woke up starving and the right end one that woke up well fed, and the positive slope therefore means a well-fed agent hides more &mdash; equivalently, a hungry one hides less, because it has to go and eat. One qualification belongs with this figure: nutrition reaches the agent through satiation, an instantaneous transform of it, while injury reaches it through a twelve-step convolution, so part of the ratio between the two slopes is sensor dynamics rather than the relative strength of the two drives.</p></div>
     <div><h5>Read the hunger axis carefully</h5><p>It plots <em>nutrition</em>, so the left end is an
     agent that woke up starving and the right end one that woke up well fed. The slope is positive,
     meaning a <strong>well-fed</strong> agent hides more &mdash; equivalently, a hungry one hides less,
@@ -944,8 +924,9 @@ to conflate, and because a reader who reproduced either one deserves to know why
   <img src="{{FIG:lad14_window_and_variable}}" alt="Three line charts on one shared y-scale. A: assigned wound over the first 25 steps, rising. B: assigned wound over the whole episode, nearly flat. C: carried wound over the whole episode, rising steeply.">
   <figcaption><b>Figure 14.</b> The same question answered three ways, on one shared y-scale. All three
   use identical bins and the identical outcome; they differ only in which injury number a step is filed
-  under, and over which steps the average is taken.</figcaption>
+  under, and over which steps the average is taken. <b>Axes.</b> All three panels: <b>x</b> = an injury level in four equal quarters of the 0-100 range &mdash; the wound assigned at t=0 in panels A and B, the wound the agent was carrying when it decided in panel C. <b>y</b> = bush dwell as a percentage of steps. All three share one y-scale, which is the point of the figure.</figcaption>
   <div class="fig-blocks">
+    <div><h5>How it is computed</h5><p>Three ways of asking the same question, drawn on one shared y-scale so their sizes are directly comparable. All three use identical bins &mdash; four equal quarters of an injury level on the 0&ndash;100 range &mdash; and the identical outcome, bush dwell with the <code>t=0</code> row excluded. They differ in only two respects. Panel A files each step under the wound the environment <i>assigned</i> at reset and averages over the first 25 steps. Panel B files it under the same assigned wound but averages over the whole episode. Panel C files it under the wound the agent was <i>carrying</i> at the moment it decided, over the whole episode. Panel A is the honest measurement. Panel B changes only the window and shows how much a transient effect is diluted by averaging over 250 steps. Panel C changes the variable to one that is a consequence of behaviour rather than a cause of it &mdash; an agent carries a large wound precisely because it was out in the open near a predator, which is also where the bushes are not &mdash; and so measures where the agent was while appearing to measure what it decided.</p></div>
     <div><h5>A &mdash; the honest measurement</h5><p>The randomised wound, measured while the
     assigned dose is still largely present. Positive in thirteen of fourteen arms.</p></div>
     <div><h5>B &mdash; same cause, wrong window</h5><p>The same randomised wound averaged over the
@@ -977,8 +958,9 @@ that directly is the cleanest way to say what the senses are actually for.</p></
   <img src="{{FIG:lad15_price_of_hiding}}" alt="Two scatter plots, one point per arm. Left: bush dwell against mean survival, r = -0.62. Right: bush dwell against eating rate, r = -0.70. A_baseline and B_olf_only sit detached in the lower right of both.">
   <figcaption><b>Figure 15.</b> One point per arm, over that arm's 1,000,000 episodes. The dashed line is a
   least-squares fit across the fourteen <b>arm-level</b> points, and <code>r</code> is the correlation
-  across those fourteen points &mdash; not across 1,000,000 episodes.</figcaption>
+  across those fourteen points &mdash; not across 1,000,000 episodes. <b>Axes.</b> Both panels: <b>x</b> = bush dwell as a percentage of an episode's steps, one point per arm. <b>y</b>, left = mean survival in steps per episode; <b>y</b>, right = eating rate in food items per 100 steps. Neither axis starts at zero; both are cropped to the range the fourteen points occupy.</figcaption>
   <div class="fig-blocks">
+    <div><h5>How it is computed</h5><p>One point per arm, each pooling that arm's entire million episodes into three numbers: bush dwell as bush steps over steps, eating rate as food items consumed per 100 steps, and mean survival in steps. The dashed line is an ordinary least-squares fit across the fourteen arm-level points, and the correlation quoted is across those fourteen points &mdash; <i>not</i> across fourteen million episodes. That distinction carries the whole weight of how much the figure can be trusted. Fourteen points is a very small sample; the points are not independent of one another, since all fourteen arms share a training seed and replayed identical worlds; and no confidence interval is given. The relationship is also visibly driven by the two arms in the lower right, and covering them leaves a much weaker one among the remaining twelve. What the figure is offered as is a summary picture of a direction that is established independently elsewhere &mdash; by Figure 3, where predation and starvation move in opposite directions across the ladder, and by Figure 9, where extra hiding is followed by a measured food debt in every arm.</p></div>
     <div><h5>What it shows</h5><p>More hiding goes with <strong>shorter</strong> life
     (r = &minus;0.62) and <strong>less</strong> eating (r = &minus;0.70).</p></div>
     <div><h5>How much weight that correlation can bear: not much on its own</h5><p>It is computed on

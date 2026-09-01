@@ -65,6 +65,20 @@ for i in range(len(arms)):
 h = [plt.Rectangle((0, 0), 1, 1, color=CY, label="sight resolves WHAT it sees\n(visual range 2, 8 appearance channels)"),
      plt.Rectangle((0, 0), 1, 1, color=CN, label="sight cannot resolve WHAT it sees\n(range < 2, or a single channel)")]
 ax[1].legend(handles=h, loc="lower center", bbox_to_anchor=(0.5, 1.01), fontsize=8, ncol=1)
+P = L.population()
+def _bins(key, bins):
+    return sum(int(np.asarray(D[a]["grids"][f"{key}_tot"], float)[list(bins)].sum()) for a in arms)
+L.record_samples("lad05_discrimination", [
+    dict(what="step rows with a predator 1-2 cells away", used=_bins("pd", L.NEAR_BINS),
+         total=P["steps"], note="the 'near' half of the predator contrast"),
+    dict(what="step rows with a predator 6+ cells away", used=_bins("pd", L.FAR_BINS),
+         total=P["steps"], note="the 'far' half"),
+    dict(what="step rows with a rabbit 1-2 cells away", used=_bins("rd", L.NEAR_BINS),
+         total=P["steps"], note="the 'near' half of the rabbit contrast"),
+    dict(what="step rows with a rabbit 6+ cells away", used=_bins("rd", L.FAR_BINS),
+         total=P["steps"], note="the 'far' half. Distances 3-5 are plotted in Figure 4 but are "
+                               "not part of this contrast")])
+
 PL.finish(fig, f"{L.FIG_ROOT}/lad05_discrimination.png")
 print(f"{'arm':22}{'predator':>10}{'rabbit':>9}{'gap':>8}   resolves identity")
 for i, a in enumerate(arms):

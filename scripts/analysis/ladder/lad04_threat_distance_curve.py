@@ -53,6 +53,16 @@ h = [plt.Line2D([], [], color=PL.GROUP_YES, lw=2.2, label=L.GROUP_LABEL[True] + 
      plt.Line2D([], [], color=PL.MUTED, lw=2.4, marker="o", ms=4,
                 label="thick + named = an arm the text discusses; thin = the other ten")]
 ax[0].legend(handles=h, loc="lower center", bbox_to_anchor=(1.03, 1.10), ncol=1, fontsize=8.3)
+P = L.population()
+pd_used = sum(int(np.asarray(D[a]["grids"]["pd_tot"], float).sum()) for a in arms)
+rd_used = sum(int(np.asarray(D[a]["grids"]["rd_tot"], float).sum()) for a in arms)
+L.record_samples("lad04_threat_distance_curve", [
+    dict(what="step rows, predator panel", used=pd_used, total=P["steps"],
+         note="excludes episodes containing no predator, and each episode's first step, "
+              "which has no previous row to read the distance from"),
+    dict(what="step rows, rabbit panel", used=rd_used, total=P["steps"],
+         note="same, for episodes containing no rabbit")])
+
 PL.finish(fig, f"{L.FIG_ROOT}/lad04_threat_distance_curve.png")
 print(f"{'arm':22}" + "".join(f"{d:>7}" for d in L.DIST_NAMES) + "   (predator, % in bush)")
 for a in arms:

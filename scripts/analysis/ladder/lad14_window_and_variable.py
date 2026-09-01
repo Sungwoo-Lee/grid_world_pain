@@ -75,6 +75,17 @@ for j, (dat, ttl, xl) in enumerate(panels):
     ax[j].set_ylabel("bush dwell  (% of those steps spent in a bush)")
     ax[j].set_title(ttl, fontsize=9.3, loc="left", pad=8)
 ax[0].legend(handles=h, loc="upper left", fontsize=7.6)
+P = L.population()
+_early = sum(int(np.load(f"{L.OUT_ROOT}/{a}_episodes.npz")["steps_early"].sum()) for a in arms)
+_all = sum(int(np.asarray(D[a]["grids"]["dwt_carried"], float).sum()) for a in arms)
+L.record_samples("lad14_window_and_variable", [
+    dict(what="step rows, panel A (first 25 steps)", used=_early, total=P["steps"],
+         note="the honest measurement"),
+    dict(what="step rows, panel B (whole episode)", used=_all, total=P["steps"],
+         note="the same episodes, but every step of them - which is the whole point of the panel"),
+    dict(what="step rows, panel C (whole episode)", used=_all, total=P["steps"],
+         note="identical rows to panel B; only the injury number each row is filed under differs")])
+
 PL.finish(fig, f"{L.FIG_ROOT}/lad14_window_and_variable.png")
 print(f"{'arm':22}{'A assigned/early':>18}{'B assigned/whole':>18}{'C carried/whole':>18}"
       "   (quarter 4 minus quarter 1, percentage points)")
