@@ -8,6 +8,12 @@ last_updated: 2026-08-30
 
 # What each sense buys
 
+**Shareable page:** https://claude.ai/code/artifact/3d191a81-2aec-4f97-a3e8-993568936b5b
+**Republish:** rebuild with `python scripts/analysis/ladder/build_artifact.py`, then publish
+`docs/experiments/active/sensor_ladder/sensor_ladder.html` to the URL above. From a session that
+did not publish it, read that URL first and pass it as `url` &mdash; publishing without it makes a
+second, separate artifact instead of a new version of this one.
+
 ## Question
 
 An agent lives in a 10&times;10 grid world. It walks one square at a time, in any of eight

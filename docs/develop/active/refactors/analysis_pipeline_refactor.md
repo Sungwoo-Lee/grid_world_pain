@@ -9,6 +9,11 @@ revision: 3 — two Criticals from the second review fixed; one of them fixed in
 
 # A reusable analysis pipeline
 
+**Shareable page:** https://claude.ai/code/artifact/db00bfca-be2d-436e-bdb9-b19c894f663d
+&mdash; the visualization of this plan, source at [`scripts/analysis/pipeline_layout.html`](../../../../scripts/analysis/pipeline_layout.html).
+**Republish:** publish that file to the URL above. From a session that did not publish it, read
+the URL first and pass it as `url`; publishing without it makes a separate artifact.
+
 ## What this proposes, and why
 
 Every study in this project has written its own scan of the trajectory store: open the shards in
