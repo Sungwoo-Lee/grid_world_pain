@@ -709,3 +709,53 @@ Ordered. A1–A8 must all be green before B1 begins.
 | | | | |
 
 **Conclusion**: [one-line summary]
+
+---
+
+## Feedback from plan-reviewer
+
+> **Reviewed by**: plan-reviewer · 2026-09-01 · plan at commit `c62e0eef`, code at `549db684` (branch v3.0)
+> **Verdict**: **SOUND WITH CONCERNS** — no Critical findings; four Moderate findings, all on the Gate and the diagnostic-run specification, resolvable by editing this doc before implementation.
+
+**Plain-language summary.** The two repairs themselves are sound: training the value estimator in raw reward units (matching the file's own GAE branch) is the standard formulation and removes the defect at its root, and the learning-rate wiring was verified to be exactly equivalent to today's optimizer. The concerns are all about the safety net around the one acknowledged risk — that the much larger value-gradient could eat the shared gradient-clipping budget and silently slow the policy's learning. The pre-registered STOP gate is the right idea, but as specified it uses a statistic (the median) that cannot see the failure mode it guards against (clipping that binds only on the death-heavy iterations that matter most to this project), and it measures the least representative 200 iterations of a run that will train orders of magnitude longer.
+
+### Independently verified (not just read)
+
+- **The load-bearing optax identity holds.** Installed optax 0.2.6: `adam(lr)` is literally `chain(scale_by_adam(...), scale_by_learning_rate(lr))`, and `scale_by_learning_rate(lr)` with a static float is `scale(-lr)` (`optax/_src/transform.py::scale_by_learning_rate`). Numerically confirmed: 10 update steps of `chain(clip_by_global_norm(0.5), adam(5e-4))` vs `chain(clip_by_global_norm(0.5), scale_by_adam(), per-leaf * -lr)` produce **bitwise-identical parameters**.
+- **Plain PPO genuinely has no units bug**: `src/models/ppo_trainer.py:216-221` calls its `compute_mc_returns` with `(rewards, dones, gamma)` only — no critic seed folds into the accumulation. The Fix-1 exclusion is correct.
+- **`mod_unimodal_ln` / `mod_multimodal_ln` / `mod_flat_ln` → trunk is correct**: `src/models/recurrent_ppo_network.py:242-245` constructs them as LayerNorms on the task-side encoder pre-activations, independent of the modulator.
+- **Config inventory correct**: 23 files declare `lr_critic` (20 rPPO + 2 PPO + the archived testbed), zero `extends:` among the rPPO files, zero existing `lr_modulator`, and the per-file values match the migration table (including the `ppo.yaml` 0.0003 trap).
+- **Aux-tuple append is safe**: the only index consumers are `train.py:1780-1784` (`l[1][0..4]`); nothing else in `src/` or `scripts/` reads the tuple.
+- **No downstream consumer assumes z-scored critic output**: grep over `scripts/eval/` and analysis code found nothing reading the value head's numeric scale, so Fix 1's side-effect surface is as small as claimed.
+- **Sequencing satisfied**: `MODULATION_SITE_REFACTOR.md` (C0b note, ~line 590) requires this fix strictly before C0b or after V4; landing both stages before C0a satisfies it, and that doc already cross-links here.
+- **Registry check clean**: KNOWN_BUGS rows A1 (line 86, "wire or remove") and P1 #5 (line 94) are both OPEN and match this plan's premises; no prior fix collides. `compute_mc_returns` is untouched, so the seven `test_mc_window_bootstrap.py` tests (7 confirmed) pass trivially — V8 is sound.
+- **The circular-verification escape is genuine**: with one group's rate zeroed, a mislabelled leaf either moves when it must be frozen or freezes when it must move; either way an assertion fails without relying on the labeller. See L3 for a specification tightening.
+
+### Findings
+
+| Sev | Location | Issue | Suggested fix |
+|---|---|---|---|
+| 🟡 M1 | §The Gate (decision rule) | **The median clip factor cannot see tail binding.** If the clip binds only on death-containing update steps (the learning signal this project studies), median `f` stays 1.0 before and after and the gate passes while the actor's update at exactly those steps is crushed ~25×. Also, the logged `loss/grad_norm` used to compute `f` is an epoch-**mean** per iteration (`train.py:1783`), which smooths the tail further. | Gate on tail statistics too: STOP if p10(`f_after`) < p10(`f_before`)/2 **or** the fraction of iterations with `f < 1` grows by more than a stated amount. State the rule numerically before Stage A-obs runs. |
+| 🟡 M2 | §Stage A-obs / §The Gate | **200 iterations is the least representative window, in both directions.** Post-fix, iterations 1–200 are the lifetime maximum of critic error (V≈0 vs targets σ≈23–25), so the value-grad share is transiently maximal — the gate can trip on a self-resolving transient. Conversely, a pass says nothing about iteration 50k after reward composition drifts. Nothing watches after the gate. | Lengthen to ~1000 iterations and evaluate `f` on the final segment, reporting its trajectory; pre-register that the first real run's analysis must report full-run median+p10 clip factor and the per-group norm shares under the same halving rule (the instrument is permanent — use it). |
+| 🟡 M3 | §Stage A-obs, V2, V10 | **The diagnostic and speed runs never name the environment config.** Only the model config is pinned; "identical settings" is implicit. The σ≈23–25 magnitudes come from restpremium-era trajectories, while the next experiment runs on `basic/04` — reward composition (death frequency, drive scale) is env-dependent, so the gate's verdict transfers only if measured on the env that will actually be used. | Pin the env config explicitly in Stage A-obs (recommend the coming experiment's `basic/04`), and record it alongside node/GPU/seed/SHA. |
+| 🟡 M4 | §The Gate | **A gate pass silently licenses up to a 2× actor-step throttle** (`f_after ≥ f_before/2` proceeds without further ceremony) inside a change billed as a bug fix. That tolerance is a user decision, not an implementer default. | Add to §Open questions: "a pass may still mean the actor's effective step shrank up to 2× — accept?" |
+| 🟢 L1 | §Candidate B | "keeps the optimizer-state pytree structurally the same as today" is **false**: old state is `(EmptyState, (ScaleByAdamState, EmptyState))` (adam is itself a chain), new is flat `(EmptyState, ScaleByAdamState, EmptyState)` — verified against optax 0.2.6. Harmless here (all runs retrained; V6 round-trips the new shape), but correct the sentence, and note that warm-resuming any pre-Stage-A checkpoint's optimizer state will fail structurally. | Reword; keep V6 as-is. |
+| 🟢 L2 | §Test 3 | "Fit a small value function" is under-specified — a function approximator over unspecified features could miss the 5 % tolerance flakily. | Specify a tabular critic: one free parameter per state, including the window-edge boot state. |
+| 🟢 L3 | §Deliberately-unequal-rate tests | Two implicit requirements should be explicit: each test asserts **both** directions (frozen set bitwise unchanged AND complement changed), and asserts every leaf's gradient is nonzero before the update — a zero gradient (e.g. a saturated/clipped modulator output) makes "changed" fail for the wrong reason. | Write both into the test spec. |
+| 🟢 L4 | §Docs table, A8 | The recorded grep counts are transposed: actual `grep -c "agent\."` is **2** for `CONFIG_GUIDE.md` and **1** for `02_config_schema.md` (plan says 1 and 2). The re-run instruction already covers it; the exemption conclusion stands. | Fix the numbers. |
+| ❓ O1 | V2 / A7 | Bitwise equality of the five losses across **differently compiled graphs** (Stage A adds outputs; XLA may fuse differently) is an empirical bet. The STOP-on-mismatch handling is right; what's missing is attribution. | If V2 mismatches, first build Stage A *minus the instrument* in a worktree to separate "optimizer change" from "instrument changed the graph". |
+| ❓ O2 | A1 | The nnx `tree_map_with_path` key-path shape (`.key` vs `.name`) is assumed; the plan itself pins it with checkpoint A1. No action — noted as the one structural assumption Stage A rests on. | — |
+| ❓ O3 | §Magnitude | Return σ on `basic/04` is unmeasured (magnitudes come from restpremium recordings). Mitigated: `loss/value_target_std` measures it in situ post-fix; M3 makes the measurement land on the right env. | — |
+
+### Decisions the user should make before implementation (not before launch)
+
+1. The plan's own four open questions (gate fallback, trunk rate, `--lr` semantics, plain-PPO scope) — all well-posed; no objection to the defaults chosen.
+2. M4: accept (or tighten) the up-to-2× actor-throttle tolerance implied by a gate pass.
+3. M1/M2 gate amendments: tail statistic + longer window + pre-registered post-launch check.
+4. M3: which environment config the diagnostic runs use (recommend `basic/04`).
+
+### Cost of being wrong
+
+If the gate's median-statistic hole lets a tail-binding clip regime through, every post-fix run — including the coming single-seed `basic/04` experiment — trains with its policy update crushed at exactly the death-heavy steps this project studies, and "the agent fails to learn nociceptive avoidance" becomes indistinguishable from "the optimizer clipped the lesson away": weeks of runs and a wrong scientific reading. Everything else found here costs at most a rerun of a 20-minute diagnostic or a one-line doc correction.
+
+*Reviewed by: plan-reviewer*
