@@ -195,8 +195,11 @@ wrong number rather than an error:</p>
 written. One has since been filled: <code>build_time_course</code> was pairing each row's felt
 nociception with the <em>same</em> row's behaviour, when the action that produced the row was chosen
 while feeling the row before it. That was fixed at source on 2026-09-01 rather than carried into the
-refactor, which moves the published dose spread from +24.68 to +25.03 percentage points. Ten cells
-remain empty.</p>
+refactor. Rebuilding all fourteen arms moves the published range from 12.6&ndash;17.8% bush dwell in
+the lowest quarter of felt nociception and 31.3&ndash;49.6% in the highest, to 12.6&ndash;17.9% and
+31.7&ndash;49.5% &mdash; a largest single change of 0.4 percentage points. It is small because the
+felt signal is a twelve-step convolution, so adjacent rows barely differ; but that was not knowable
+before measuring it. Ten cells remain empty.</p>
 <p>All three bugs this analysis hit sit in an empty cell: the time course was silently rebuilt from
 stale data because nothing cross-checked its population, a third of episodes containing no predator
 were binned into the comparison group because nothing filtered absent animals, and the dose-response
@@ -429,7 +432,7 @@ those are not bitwise equivalent on floating-point data, so a <em>correct</em> p
 test. The workable version is bit-exact for integer-valued counts, a pre-registered tolerance for
 float accumulations, and equality of plotted data rather than image bytes.</p>
 <p class="foot">This page lives at <code>scripts/analysis/pipeline_layout.html</code>, beside the
-code it describes. Full plan: <code>docs/develop/active/analysis/analysis_pipeline_refactor.md</code>
+code it describes. Full plan: <code>docs/develop/active/refactors/analysis_pipeline_refactor.md</code>
 (revision 2). Review: <code>docs/reviews/plan_analysis_pipeline_refactor.md</code> — a second
 adversarial pass on revision 2 is in flight, and anything it finds will land here.</p>
 </section>

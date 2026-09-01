@@ -1,7 +1,7 @@
 ---
 title: A reusable analysis pipeline — one guarded scan instead of three
-topic: analysis
-status: proposed
+topic: refactors
+status: active
 created: 2026-09-01
 last_updated: 2026-09-01
 revision: 3 — two Criticals from the second review fixed; one of them fixed in code, not deferred
@@ -46,7 +46,10 @@ and the row fixed today. That count is now *generated* from an explicit cell lis
 revision 1 claimed twelve of twenty-one, revision 2 claimed nine of seventeen, and both were wrong —
 the second because the population row was dropped from the table after the count was taken. Three
 wrong counts of one small table is itself an argument for generating the numbers that go into
-documents. Two of the three bugs this analysis hit sit in an
+documents. (The second review independently arrived at nine of twenty; recounting cell by cell gives
+eleven — six `no` plus one `partial` in the printed six-row table, plus three for the restored
+population row, plus the time-course previous-row cell that the review itself showed was mislabelled
+`yes`. With that cell now fixed in code, **ten** remain.) Two of the three bugs this analysis hit sit in an
 empty cell: the time course was rebuilt from stale data because nothing cross-checked its population
 against the other products, and episodes containing no predator became the comparison group because
 nothing filtered absent animals.
@@ -122,14 +125,37 @@ bypassed, a provision can — a callback is free to index raw arrays. The guaran
 > while feeling row *t−1*. Porting it with the guaranteed shift would change a **published** number
 > and fail the gate; porting it bug-for-bug would pass the gate while making the guarantee false.
 > Rather than carry that into the refactor, **the bug was fixed at source on 2026-09-01**, before any
-> porting. Measured impact: the dose spread moves from +24.68 to +25.03 percentage points — small,
-> because the signal is a twelve-step convolution and adjacent rows barely differ, but it was the
-> wrong convention.
+> porting. Measured impact, after rebuilding all fourteen arms: the published panel-C range moves
+> from 12.6–17.8% bush dwell in the lowest quarter of felt nociception and 31.3–49.6% in the highest,
+> to 12.6–17.9% and 31.7–49.5%. The largest single change is 0.4 percentage points. It is small
+> because the felt signal is a twelve-step convolution and adjacent rows barely differ — but the
+> convention was wrong, and the smallness was not knowable before measuring.
 >
 > Any *remaining* cell where porting a guard would move a published number goes into a **divergence
 > register**: reproduce the old behaviour, gate on the reproduction, then fix it afterwards as an
 > adjudicated change with a pre-declared expected diff. What must not happen is the gate being
 > renegotiated at porting time on numbers behind a published page.
+
+**What the frame must actually expose.** Revision 2 named three accessors, which is not enough for
+two of the three sweeps — the review listed what is missing, and each is a real need in existing
+code:
+
+| need | why it exists | accessor |
+|---|---|---|
+| the outcome row | the row whose behaviour is being counted | `frame.step` |
+| the row the action was chosen on | every predictor in this analysis | `frame.prev` |
+| mask out `t=0` | the world as handed to the agent is not a step | `frame.is_step` |
+| the `t=0` row itself | `build_arm_data` reads the starting world configuration | `frame.initial` |
+| episode start index | `perceived_nociception` must not convolve across a reset | `frame.estart` |
+| global episode index | `hiding_drivers` writes one CSV row per episode across shards | `frame.episode_id` |
+| per-entity presence | a third of episodes have no predator | `frame.present('predator')` |
+| per-slot active mask | multi-slot entity columns are ragged | `frame.active(slot)` |
+| accumulator allocation | shard callbacks accumulate into study-owned arrays | `scan.sweep(..., init=)` |
+| everything else | the escape hatch, deliberately conspicuous | `frame.raw(col)` |
+
+Each ported sweep gets a row in a **frame-contract audit table** in the plan's verification section
+naming which accessors it uses and, if it calls `frame.raw()`, why. That is what makes "auditable"
+mean something more than "we intend to".
 `perceived_nociception` moves into `core/env.py` *with a regression test for its reset boundary* —
 the `src > estart` guard was a real bug with published impact (Known Bugs, 2026-08-25).
 
