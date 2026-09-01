@@ -6,7 +6,7 @@
 
 **Last updated**: 2026-08-20
 **Active folders**: 10
-**Total insights**: 209
+**Total insights**: 214
 **Last audit**: (none)
 
 ---
@@ -17,11 +17,11 @@
 |---|---|---|---|---|
 | `wiki_system_design` | Claude LLM Wiki's own design decisions | 14 | 2026-07-28 | [wiki, design, decision, skill, meta, learned_lesson] |
 | `subagent_engineering` | Subagent + worktree usage gotchas | 22 | 2026-07-28 | [meta, learned_lesson, worktree, subagent, decision, design] |
-| `nmn_diagnosis` | NMN performance diagnosis findings | 17 | 2026-07-23 | [nmn, hypervigilance, film, learned_lesson, design, meta, training_runner, refutation, decision, config] |
+| `nmn_diagnosis` | NMN performance diagnosis findings | 21 | 2026-09-01 | [nmn, hypervigilance, film, learned_lesson, design, meta, training_runner, refutation, decision, config] |
 | `dreamer_diagnosis` | DreamerV3 failure investigation | 30 | 2026-08-06 | [dreamer, decision, learned_lesson, refutation, meta, design, rl] |
 | `cluster_ops` | Lab cluster ops and env mgmt | 45 | 2026-08-19 | [meta, training_runner, learned_lesson, decision, design, dreamer, wandb] |
 | `hypervigilance` | Hypervigilance experiments | 28 | 2026-07-27 | [hypervigilance, dreamer, design, learned_lesson, decision, refutation, meta, noise, rl] |
-| `env_entities` | Env entity architecture decisions | 19 | 2026-08-20 | [design, decision, learned_lesson, meta, config, hypervigilance, dreamer, refutation] |
+| `env_entities` | Env entity architecture decisions | 20 | 2026-09-01 | [design, decision, learned_lesson, meta, config, hypervigilance, dreamer, refutation] |
 | `config_system` | Config loader/layering/schema | 11 | 2026-08-18 | [config, design, decision, meta, learned_lesson] |
 | `curriculum_learning` | Curriculum/continual training | 3 | 2026-06-24 | [learned_lesson, decision, refutation] |
 | `behavior_measures` | Behavior-measure platform & probes | 20 | 2026-08-19 | [design, decision, meta, learned_lesson, hypervigilance, refutation, noise, dreamer] |
@@ -55,6 +55,7 @@ Surface a merge proposal to the user when:
 ---
 
 ## Change history
+- 2026-09-01: Captured 5 insights from the FiLM-in-RL corpus + modulation-site refactor session: 4 into `nmn_diagnosis` (`reward_is_function_of_injury_licenses_critic_mod` - corrects a false claim that had propagated into a refactor plan; `mc_bootstrap_units_measured_sigma_25` - measured sigma 23-25, H4 delivers ~4%; `lr_critic_dead_across_all_rppo_per_file_migration` - widens the dead-key finding to all rPPO and records the ppo.yaml migration trap; `film_literature_verdict_grouping_and_self_conditioning` - grouping unsupported, self-conditioning now actively negative), 1 into `env_entities` (`interoceptive_channel_is_two_dims_by_design` - injury and nutrition hidden by design, felt channel is 2 dims via a 3-step alpha kernel). All tags reused (nmn, film, rl, config, design, decision, learned_lesson, refutation); no new tags, no new folders.
 - 2026-08-20: Captured 1 insight into `env_entities` (`20260820_1606_reset_ulp_divergence_is_compiler_fusion` - the sampled animal-property column differs by at most one float32 last bit (5.96e-08) between two runs of the same reset code, because XLA may or may not fuse `mean + std * noise` into a fused multiply-add depending on the neighbouring scatter; the cause was first misattributed to `vmap` batching and disproved by reproducing the same divergence through the shipped parity-fixture generator, which uses unbatched `jax_reset` with no `vmap` at all). Promoted tag `refutation` into env_entities top-tags. No new tags, no new folders.
 - 2026-08-19: Captured 4 insights from the no-hiding-predator-verdict + cluster-teardown session: 1 into `cluster_ops` (`20260819_1944_run_command_parallel_race_and_remote_pkill_self_kill` - five parallel `run_command.py` calls all returned node 112's PIDs via a shared SSH control socket, so node fan-out must be SEQUENTIAL; and a remote `pkill -f PAT` kills its own bash -c wrapper, silently swallowing any chained verification), 2 into `behavior_measures` (`20260819_1945_ambush_risk_refuted_normalize_gap_floor_effect` - removing the 2-12 ambush predators did NOT restore injured cover use, gap positive in 10/10 arms, absolute gap +5.9->+3.0 pp but relative gap only 41%->34% because the baseline halved; `20260819_1946_probe_snapshot_staleness_verdict_on_partial_training` - the watermark-incremental probe only ever covered ~40M of the runs' full 100M-episode budget, and 154 stale `running` diary rows made completion invisible), and 1 into `env_entities` (`20260819_1947_basic04_predator_combinatorics_fully_latent` - basic04's mobile predator has 42 discrete per-episode types / 1,807 scene loadouts, none of which reach the observation: only a fixed visual one-hot plus an independently-drawn 2-D smell). Promoted tag `hypervigilance` into env_entities top-tags. No new tags, no new folders. NOTE: the running total was corrected 203 -> 208 (+4 new, +1 pre-existing off-by-one; `wiki_system_design/_state.md` is not an insight).
 - 2026-08-18: Captured 3 insights from the rest-premium / no-hiding-predator / log_code session: 1 into `behavior_measures` (`20260818_1620_rest_premium_sweep_refuted` - a 1x-129962x rest-streak-premium sweep with the injured window held matched does NOT drive injured agents to cover; flat at ~20M (rho=+0.10) and ~36-40M steps (rho=-0.19), and the uninjured-minus-injured gap stays positive in all 10 arms), 1 into `cluster_ops` (`20260818_1621_wandb_log_code_walks_whole_repo` - log_code('.') never prunes dirs so it stats ~372k files under results/ before training; include_fn/exclude_fn do not help; 8min->45min->1h40m escalation; fixed 657c87a with anchored globs + InternalArtifact, 1.37s), and 1 into `config_system` (`20260818_1622_yaml_list_replace_and_runtime_env_test` - removing a YAML list entry needs a full restatement, and verify by BUILDING the env: obs_dim stayed 27 because sensors sum over resources). Promoted tag `wandb` into cluster_ops top-tags. No new folders.

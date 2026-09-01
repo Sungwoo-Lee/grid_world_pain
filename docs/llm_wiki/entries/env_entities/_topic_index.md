@@ -6,8 +6,8 @@
 > To improve a row, set a `headline:` field on the entry itself.
 
 **Folder definition**: Env entity architecture decisions
-**Insights**: 19
-**Last updated**: 2026-08-20
+**Insights**: 20
+**Last updated**: 2026-09-01
 
 ---
 
@@ -15,6 +15,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-09-01 | 15:31 | [20260901_1528_interoceptive_channel_is_two_dims_by_design](20260901_1528_interoceptive_channel_is_two_dims_by_design.md) | Injury and nutrition are deliberately NOT observable. |
 | 2026-08-20 | 16:06 | [20260820_1606_reset_ulp_divergence_is_compiler_fusion](20260820_1606_reset_ulp_divergence_is_compiler_fusion.md) | Two runs of the same environment-reset code can disagree by one float32 last-bit (about 6e-08) on the sampled animal property, because the… |
 | 2026-08-19 | 19:47 | [20260819_1947_basic04_predator_combinatorics_fully_latent](20260819_1947_basic04_predator_combinatorics_fully_latent.md) | At basic level 04 the mobile predator has 42 distinct DISCRETE per-episode types (detection_range 7 x attack_delay 3 x attack_range 2), giv… |
 | 2026-07-03 | 15:08 | [20260703_1508_eval_video_drops_true_obs_no_noise_contrast](20260703_1508_eval_video_drops_true_obs_no_noise_contrast.md) | The training-time VIDEO eval pass does not record the clean true_obs, so perceptual-noise videos show NO noise in the sensory panel. |

@@ -1,0 +1,84 @@
+---
+id: 20260901_1528_film_literature_verdict_grouping_and_self_conditioning
+date: 2026-09-01
+time: "15:30"
+folder: nmn_diagnosis
+tags: [nmn, film, refutation, learned_lesson]
+summary: "Full-text review of 10 FiLM-in-RL papers: grouped modulation has no refereed support and loses in the one controlled RL test, and self-conditioning now has active negative evidence, not merely absence."
+related: []
+session_origin: claude_code
+session_label: "FiLM-in-RL corpus + modulation-site refactor planning"
+importance: high
+status: settled
+valid_until: null
+confidence: high
+supersedes: []
+raw_source: claude_data/.claude/projects/-media-nas01-projects-Interoceptive-AI-grid-world-pain/96e71c7b-dc03-44c9-a98c-1c2acc86e0d9.jsonl
+raw_completeness: full
+---
+
+# Literature verdict on our two most unusual design choices
+
+## Key conclusion
+Across two syntheses, two surveys and full-text review of 10 FiLM-style RL papers: our
+**contiguous-block grouping** has no refereed precedent and loses in the only controlled RL
+comparison, and our **self-conditioning** (a modulator reading the same observation as the
+pathway it modulates) now has active negative evidence. The parts of our design that look
+exotic — multiple heads, per-site parameters, identity init — are the conventional parts.
+
+## Evidence, measurements, facts
+- **The two literatures converge on opposite conventions**: per-unit in the FiLM family
+  (14/15 modulating papers), one global scalar in computational neuromodulation (15/~24).
+  "One scalar per layer" is unattested in both. "Each site has its own parameter set" IS the
+  standard, and is what we already do.
+- **Grouping, three independent negatives**: (1) AlKilany & Goodman 2025 is the sole precedent
+  in ~100 papers and is a **bioRxiv preprint** whose own G-sweep came out **flat**;
+  (2) EquAct's iFiLM does group, but **Schur's lemma forces it** — a per-component gain
+  commutes with rotation only if all entries are equal — so it is a by-product of equivariance,
+  not a designed regulariser, and its group boundaries cannot be swept; (3) **GEAR supplies the
+  missing control**: substituting iFiLM for ordinary FiLM in an RL policy **loses**, 95.46% vs
+  98.85% mean (Roll 87.70 vs 99.71).
+- Extracted rule: **grouping pays only where the tied units are genuinely interchangeable.**
+  EquAct's are (components of one irreducible representation). Contiguous index blocks are not.
+- **Self-conditioning**: HyperMARL (NeurIPS 2025) shows coupling the conditioner into the
+  observation stream causes cross-agent gradient interference, and its `w/o GD` ablation **is
+  our configuration** and degrades on both environments; self-conditioning also violates
+  assumption (A3) of its own policy-gradient-variance proof.
+- The Diffusion Policy component study, initially read as a self-conditioning precedent, is on
+  full text a **routing** comparison — its denoiser has no other route to the observation.
+  Its numbers verified exactly (80/44, 64/2) but it has no seeds, no error bars, and a broken
+  bibliography; cite as suggestive single-preprint evidence.
+- **Gain blow-up is unreported across all 10 papers.** FLOWER's NaN report was corrected: its
+  own appendix heading is "Mixture-of-Experts Approaches" — the failing design was expert MLPs,
+  not affine gain.
+- **No top-tier paper** does FiLM-style modulation for a single-task RL policy conditioned on a
+  sensed internal state. PAPL (ICRA 2026) is closest; its own FiLM citations are Perez 2018
+  (AAAI), Bauersfeld 2023 (ICRA), Chi 2023 (IJRR).
+
+## Decisions and actions
+- `grouping_size` fixed at **1** (per-neuron) for the coming experiment — the field convention,
+  and the earlier per-neuron crash mechanism (temperature railing at its ceiling) is removed
+  now that temperature defaults off.
+- Grouping is NOT a factor in the 2-factor design; the evidence does not justify spending arms
+  on it.
+- Better-supported axes named by both curators: injection-site placement, modulator input, and
+  a functional (not contiguous) partition.
+
+## Open questions and follow-ups
+- e-nmRNN (NeurIPS 2025, OpenReview S9Y89poypx) remains unread — the last candidate for a
+  *designed* grouping precedent. Needs a headed browser past Cloudflare.
+- A confound recorded but untested: the per-neuron learned baseline restores static per-neuron
+  freedom at every grouping size, so `grouping_size` controls dynamic resolution only — a null
+  from any grouping screen is therefore uninterpretable.
+
+## References
+- `docs/project/references/modulation_in_rl/modulation_in_rl_lit_review.md` (10 papers)
+- `docs/project/references/FiLM/film_modulation_granularity_synthesis.md`
+- `docs/project/references/neuromodulatory_algorithms/neuromod_modulation_scope_synthesis.md`
+- `docs/project/ideas/20260805_film_rl_context_dependent_policy_discussion.md`
+- Raw conversation: synced via `./sync-agent-data.sh claude push`; `claude --resume 96e71c7b-dc03-44c9-a98c-1c2acc86e0d9`.
+
+<!-- BACKLINKS — auto-generated by scripts/regen_wiki_graph.py; do not edit -->
+## Backlinks
+- _no inbound links yet_
+<!-- END BACKLINKS -->

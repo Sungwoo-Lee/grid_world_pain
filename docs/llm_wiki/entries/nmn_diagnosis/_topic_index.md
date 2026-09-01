@@ -6,8 +6,8 @@
 > To improve a row, set a `headline:` field on the entry itself.
 
 **Folder definition**: NMN performance diagnosis findings
-**Insights**: 17
-**Last updated**: 2026-07-23
+**Insights**: 21
+**Last updated**: 2026-09-01
 
 ---
 
@@ -15,6 +15,10 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-09-01 | 15:30 | [20260901_1528_film_literature_verdict_grouping_and_self_conditioning](20260901_1528_film_literature_verdict_grouping_and_self_conditioning.md) | Full-text review of 10 FiLM-in-RL papers: grouped modulation has no refereed support and loses in the one controlled RL test, and self-cond… |
+| 2026-09-01 | 15:29 | [20260901_1528_lr_critic_dead_across_all_rppo_per_file_migration](20260901_1528_lr_critic_dead_across_all_rppo_per_file_migration.md) | lr_critic has zero code consumers and affects ALL recurrent PPO, not just NMN. |
+| 2026-09-01 | 15:28 | [20260901_1528_mc_bootstrap_units_measured_sigma_25](20260901_1528_mc_bootstrap_units_measured_sigma_25.md) | Measured the open MC-return bootstrap units bug: raw return sigma is 23-25, so the H4 window-edge fix delivers about 4% of its intended cor… |
+| 2026-09-01 | 15:28 | [20260901_1528_reward_is_function_of_injury_licenses_critic_mod](20260901_1528_reward_is_function_of_injury_licenses_critic_mod.md) | CORRECTION: the homeostatic reward IS a function of injury, so the published precondition for modulating the critic is met, not unmet. |
 | 2026-07-23 | 19:11 | [20260723_1911_rppo_nmn_config_boundary_traps](20260723_1911_rppo_nmn_config_boundary_traps.md) | The rPPO-NMN modulated forward is train-equals-eval correct (probe-verified), but the config boundary hides silent traps: dead lr_critic me… |
 | 2026-05-28 | 02:17 | [20260528_0217_episode_direction_4x3_framework_two_papers](20260528_0217_episode_direction_4x3_framework_two_papers.md) | project_plan.md rewritten from 760-line Nature MI staged plan to 138-line stable direction context. |
 | 2026-05-16 | 15:09 | [20260516_1509_na_lc_natural_target_for_r2_anchor](20260516_1509_na_lc_natural_target_for_r2_anchor.md) | Given the refined target-one constraint, NA/LC (noradrenergic / locus coeruleus) is the natural targeted system for the NMN paper because t… |
