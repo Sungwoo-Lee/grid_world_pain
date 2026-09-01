@@ -92,9 +92,16 @@ def sweep(arm: str) -> dict:
         np.add.at(acc["injury"], (ib, t[m]), inj[m])
         np.add.at(acc["noci"], (ib, t[m]), noci[m])
 
-        # the perceptual dose-response, over every step of every episode (not just the first 120)
-        step = np.arange(len(t)) > estart
-        nb = np.digitize(noci[step], L.INJ_EDGES)
+        # The perceptual dose-response, over every step of every episode (not just the first 120).
+        # The PREDICTOR comes from the PREVIOUS row, as everywhere else in this analysis: the action
+        # that put the agent in a bush at row t was chosen while it was feeling row t-1's signal.
+        # An earlier version paired noci[t] with bush[t] - the same row - which relates the state
+        # AFTER the action to the action, the same mistake the "carried wound" panel exists to
+        # illustrate. It changed the published spread by 0.35 pp (the signal is a twelve-step
+        # convolution, so adjacent rows barely differ), but it was the wrong convention.
+        idx = np.arange(len(t))
+        step = idx > estart + 1              # needs a previous row that is itself a step
+        nb = np.digitize(noci[idx[step] - 1], L.INJ_EDGES)
         np.add.at(dose["bush"], nb, num("agent_in_bush")[step])
         np.add.at(dose["n"], nb, 1.0)
         np.add.at(acc["bush"], (ib, t[m]), num("agent_in_bush")[m])
