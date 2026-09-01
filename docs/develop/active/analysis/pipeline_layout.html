@@ -1,0 +1,367 @@
+<title>Analysis Pipeline Layout</title>
+<style>
+:root{
+  color-scheme:light dark;
+  --paper:#f8f7f5; --card:#ffffff; --ink:#1b1b1d; --ink-2:#3d3c3a; --muted:#6f6d69;
+  --rule:#e3e0db; --rule-2:#efedea;
+  --core:#2d6a4f; --core-soft:#e7efea;
+  --warn:#b3322b; --warn-soft:#f7e9e8;
+  --amber:#8a6d1f; --amber-soft:#f6f0dd;
+  --study:#2f6f9f; --study-soft:#e7eff5;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#141416; --card:#1b1b1e; --ink:#e9e6e1; --ink-2:#c8c4bd; --muted:#918d86;
+    --rule:#2d2d32; --rule-2:#232327;
+    --core:#6fbf95; --core-soft:#18291f;
+    --warn:#e0736a; --warn-soft:#2b1d1c;
+    --amber:#d9b64e; --amber-soft:#292417;
+    --study:#79b2d8; --study-soft:#17232b;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#141416; --card:#1b1b1e; --ink:#e9e6e1; --ink-2:#c8c4bd; --muted:#918d86;
+  --rule:#2d2d32; --rule-2:#232327;
+  --core:#6fbf95; --core-soft:#18291f;
+  --warn:#e0736a; --warn-soft:#2b1d1c;
+  --amber:#d9b64e; --amber-soft:#292417;
+  --study:#79b2d8; --study-soft:#17232b;
+}
+:root[data-theme="light"]{
+  color-scheme:light;
+  --paper:#f8f7f5; --card:#ffffff; --ink:#1b1b1d; --ink-2:#3d3c3a; --muted:#6f6d69;
+  --rule:#e3e0db; --rule-2:#efedea;
+  --core:#2d6a4f; --core-soft:#e7efea;
+  --warn:#b3322b; --warn-soft:#f7e9e8;
+  --amber:#8a6d1f; --amber-soft:#f6f0dd;
+  --study:#2f6f9f; --study-soft:#e7eff5;
+}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:16.5px;
+  line-height:1.62;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1060px;margin:0 auto;padding:0 26px 110px}
+.col{max-width:720px;margin-left:auto;margin-right:auto}
+header{padding:70px 0 34px;border-bottom:1px solid var(--rule);margin-bottom:44px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--core);margin:0 0 18px}
+h1{font-family:var(--serif);font-weight:600;font-size:clamp(34px,5.4vw,52px);line-height:1.05;
+  letter-spacing:-.02em;margin:0 0 20px;text-wrap:balance}
+.standfirst{font-family:var(--serif);font-size:clamp(18px,2.2vw,21px);line-height:1.48;
+  color:var(--ink-2);margin:0;text-wrap:pretty}
+h2{font-family:var(--serif);font-weight:600;font-size:clamp(25px,3.2vw,31px);line-height:1.16;
+  letter-spacing:-.014em;margin:72px 0 10px;text-wrap:balance}
+h3{font-family:var(--serif);font-weight:600;font-size:20px;margin:38px 0 6px;letter-spacing:-.01em}
+p{margin:0 0 17px}
+a{color:var(--core)}
+code{font-family:var(--mono);font-size:.85em;background:var(--rule-2);padding:1px 5px;
+  border-radius:4px;overflow-wrap:anywhere}
+ul,ol{margin:0 0 17px;padding-left:21px}
+li{margin-bottom:8px}
+figure{margin:34px 0}
+/* A wide diagram scaled to phone width takes its 11px labels down to about 5px. Give it a
+   legible floor and let the container scroll instead of shrinking below readability. */
+figure .dia{overflow-x:auto}
+figure svg{display:block;width:100%;min-width:660px;height:auto;color:var(--ink)}
+figcaption{margin-top:14px;font-size:14.5px;color:var(--muted);line-height:1.55;
+  max-width:720px;margin-left:auto;margin-right:auto}
+figcaption b{color:var(--ink);font-weight:640}
+.callout{border:1px solid var(--rule);border-left:3px solid var(--amber);background:var(--card);
+  border-radius:4px;padding:20px 24px;margin:30px 0}
+.callout.fix{border-left-color:var(--warn);background:var(--warn-soft)}
+.callout h4{font-family:var(--mono);font-size:11px;letter-spacing:.11em;text-transform:uppercase;
+  margin:0 0 10px;color:var(--muted)}
+.callout p{font-size:15.5px;line-height:1.57;margin:0 0 12px}
+.callout p:last-child{margin-bottom:0}
+pre{background:var(--card);border:1px solid var(--rule);border-radius:4px;padding:16px 18px;
+  overflow-x:auto;font-family:var(--mono);font-size:12.5px;line-height:1.62;margin:22px auto;
+  max-width:720px}
+pre code{background:none;padding:0;font-size:inherit}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px;font-variant-numeric:tabular-nums}
+caption{caption-side:top;text-align:left;padding:0 0 10px;font-size:13.5px;color:var(--muted)}
+th,td{padding:7px 12px;text-align:left;border-bottom:1px solid var(--rule-2);vertical-align:top}
+thead th{font-weight:600;font-size:12px;color:var(--muted);border-bottom:1px solid var(--rule)}
+td.y{color:var(--core);font-weight:600}
+td.n{color:var(--warn);font-weight:600}
+td.na{color:var(--muted)}
+.foot{margin-top:70px;padding-top:22px;border-top:1px solid var(--rule);font-size:13.5px;
+  color:var(--muted)}
+</style>
+
+<div class="wrap">
+<header class="col">
+  <p class="eyebrow">Interoceptive AI &middot; analysis tooling</p>
+  <h1>Analysis Pipeline Layout</h1>
+  <p class="standfirst">Three programs read the same trajectory store today, each re-implementing the
+  same scan and each carrying a different subset of the safety checks. Here is what that looks like,
+  and what one shared scan would look like instead.</p>
+</header>
+
+<main>
+<section class="col">
+<h2>Where the code is now</h2>
+<p>Every study so far has written its own scan of the trajectory store: open the shards in order,
+work out where each episode begins, line up predictors with outcomes, filter, accumulate. The three
+that exist were written months apart, and each picked up whichever correctness checks its author had
+in mind that day.</p>
+</section>
+
+<figure>
+<div class="dia"><svg viewBox="0 0 1000 430" role="img" aria-label="Three separate programs each read the trajectory store directly and each re-implement the scan, carrying different subsets of six safety checks between them.">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+    </marker>
+    <marker id="aw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--warn)"/>
+    </marker>
+  </defs>
+
+  <rect x="20" y="150" width="150" height="118" rx="5" fill="var(--card)" stroke="currentColor" stroke-width="1.4"/>
+  <text x="95" y="196" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor">trajectory</text>
+  <text x="95" y="214" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor">stores</text>
+  <text x="95" y="238" text-anchor="middle" font-size="11" fill="var(--muted)">452 GB, read-only</text>
+
+  <line x1="170" y1="180" x2="330" y2="70"  stroke="currentColor" stroke-width="1.2" marker-end="url(#a)"/>
+  <line x1="170" y1="209" x2="330" y2="209" stroke="currentColor" stroke-width="1.2" marker-end="url(#a)"/>
+  <line x1="170" y1="238" x2="330" y2="348" stroke="currentColor" stroke-width="1.2" marker-end="url(#a)"/>
+  <text x="248" y="120" text-anchor="middle" font-size="10.5" fill="var(--muted)">reads</text>
+  <text x="248" y="201" text-anchor="middle" font-size="10.5" fill="var(--muted)">reads</text>
+  <text x="248" y="315" text-anchor="middle" font-size="10.5" fill="var(--muted)">reads</text>
+
+  <g>
+    <rect x="332" y="26" width="300" height="88" rx="5" fill="var(--card)" stroke="var(--warn)" stroke-width="1.4"/>
+    <text x="348" y="50" font-size="12.5" font-family="ui-monospace,monospace" fill="currentColor">build_arm_data.py</text>
+    <text x="348" y="70" font-size="10.5" fill="var(--muted)">its own scan loop &middot; 235 lines</text>
+    <text x="348" y="94" font-size="11" fill="var(--core)">6 of 6 checks</text>
+  </g>
+  <g>
+    <rect x="332" y="165" width="300" height="88" rx="5" fill="var(--card)" stroke="var(--warn)" stroke-width="1.4"/>
+    <text x="348" y="189" font-size="12.5" font-family="ui-monospace,monospace" fill="currentColor">build_time_course.py</text>
+    <text x="348" y="209" font-size="10.5" fill="var(--muted)">its own scan loop &middot; 126 lines</text>
+    <text x="348" y="233" font-size="11" fill="var(--warn)">1 of 6 checks</text>
+  </g>
+  <g>
+    <rect x="332" y="304" width="300" height="88" rx="5" fill="var(--card)" stroke="var(--warn)" stroke-width="1.4"/>
+    <text x="348" y="328" font-size="12.5" font-family="ui-monospace,monospace" fill="currentColor">hiding_drivers.py</text>
+    <text x="348" y="348" font-size="10.5" fill="var(--muted)">its own scan loop &middot; 387 lines</text>
+    <text x="348" y="372" font-size="11" fill="var(--amber)">4 of 6 checks</text>
+  </g>
+
+  <line x1="632" y1="70"  x2="790" y2="70"  stroke="currentColor" stroke-width="1.2" marker-end="url(#a)"/>
+  <line x1="632" y1="209" x2="790" y2="209" stroke="currentColor" stroke-width="1.2" marker-end="url(#a)"/>
+  <line x1="632" y1="348" x2="790" y2="348" stroke="currentColor" stroke-width="1.2" marker-end="url(#a)"/>
+
+  <rect x="792" y="40" width="188" height="60" rx="5" fill="var(--rule-2)" stroke="currentColor" stroke-width="1"/>
+  <text x="886" y="65" text-anchor="middle" font-size="11.5" fill="currentColor">per-arm aggregates</text>
+  <text x="886" y="83" text-anchor="middle" font-size="10.5" fill="var(--muted)">15 figures</text>
+  <rect x="792" y="179" width="188" height="60" rx="5" fill="var(--rule-2)" stroke="currentColor" stroke-width="1"/>
+  <text x="886" y="204" text-anchor="middle" font-size="11.5" fill="currentColor">time course</text>
+  <text x="886" y="222" text-anchor="middle" font-size="10.5" fill="var(--muted)">1 figure</text>
+  <rect x="792" y="318" width="188" height="60" rx="5" fill="var(--rule-2)" stroke="currentColor" stroke-width="1"/>
+  <text x="886" y="343" text-anchor="middle" font-size="11.5" fill="currentColor">regressions</text>
+  <text x="886" y="361" text-anchor="middle" font-size="10.5" fill="var(--muted)">2 figures</text>
+
+  <text x="482" y="139" text-anchor="middle" font-size="11" fill="var(--warn)" font-style="italic">the same scan, written three times</text>
+  <text x="482" y="278" text-anchor="middle" font-size="11" fill="var(--warn)" font-style="italic">— and the checks diverge</text>
+</svg></div>
+<figcaption><b>Today.</b> Each program reaches into the store itself and re-implements the scan. The
+count on each box is how many of six shared safety checks it actually performs — the checks are
+listed in the table below. Nothing forces them to agree, and they do not.</figcaption>
+</figure>
+
+<section class="col">
+<p>Those six checks are not stylistic. Each exists because getting it wrong produces a plausible
+wrong number rather than an error:</p>
+<div class="scroll">
+<table>
+  <caption>Which of the six checks each program performs, read from the code rather than inferred</caption>
+  <thead><tr><th>check</th><th>build_arm_data</th><th>build_time_course</th><th>hiding_drivers</th></tr></thead>
+  <tbody>
+    <tr><td>seeds contiguous, no duplicates</td><td class="y">yes</td><td class="n">no</td><td class="n">partial</td></tr>
+    <tr><td>episodes never split across shards</td><td class="y">yes</td><td class="n">no</td><td class="y">yes</td></tr>
+    <tr><td>step count matches the episode table</td><td class="y">yes</td><td class="n">no</td><td class="n">no</td></tr>
+    <tr><td>the <code>t=0</code> row is not a step</td><td class="y">yes</td><td class="n">no</td><td class="y">yes</td></tr>
+    <tr><td>predictors read from the previous row</td><td class="y">yes</td><td class="y">yes</td><td class="n">no</td></tr>
+    <tr><td>absent animals excluded</td><td class="y">yes</td><td class="na">n/a</td><td class="y">yes</td></tr>
+  </tbody>
+</table>
+</div>
+<p style="margin-top:16px">Nine of the seventeen applicable cells are empty. Two of the three bugs
+this analysis hit sit in an empty cell: the time course was silently rebuilt from stale data because
+nothing cross-checked its population, and a third of episodes containing no predator were binned into
+the comparison group because nothing filtered absent animals.</p>
+
+<div class="callout fix">
+<h4>An earlier version of this page was wrong here</h4>
+<p>I first generated that table by pattern-matching the source, and it reported twelve of twenty-one
+cells empty — overstating the problem by three cells. <code>hiding_drivers.py</code> does exclude the
+<code>t=0</code> row (line 208, <code>m = t &gt;= 1</code>) and does filter absent animals; my patterns
+missed both because they use different spellings. The table above was read from the code.</p>
+<p>The duplication that motivates the change is not in doubt: <code>slot_layout</code> is implemented
+three times, <code>smell_channels</code> three times, <code>listcol</code> three times,
+<code>nociception_kernel</code> twice, and the two copies of the store finder have already drifted
+apart — one handles a single root, the other several.</p>
+</div>
+</section>
+
+<section class="col">
+<h2>What it would look like instead</h2>
+<p>One program owns the scan. Everything a study writes sits above it and never touches a shard.</p>
+</section>
+
+<figure>
+<div class="dia"><svg viewBox="0 0 1000 470" role="img" aria-label="A single core layer reads the store and runs one guarded scan; per-study code supplies only a manifest and a callback, and receives validated frames.">
+  <defs>
+    <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+    </marker>
+    <marker id="bc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--core)"/>
+    </marker>
+  </defs>
+
+  <rect x="16" y="14" width="560" height="300" rx="6" fill="var(--core-soft)" stroke="var(--core)" stroke-width="1.2" stroke-dasharray="4 3"/>
+  <text x="32" y="36" font-size="11" font-family="ui-monospace,monospace" letter-spacing="1.2" fill="var(--core)">CORE — KNOWS NOTHING ABOUT ANY STUDY</text>
+
+  <rect x="36" y="52" width="148" height="86" rx="5" fill="var(--card)" stroke="currentColor" stroke-width="1.3"/>
+  <text x="110" y="76" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="currentColor">store.py</text>
+  <text x="110" y="97" text-anchor="middle" font-size="10.5" fill="var(--muted)">finds shards across</text>
+  <text x="110" y="112" text-anchor="middle" font-size="10.5" fill="var(--muted)">collection passes</text>
+  <text x="110" y="130" text-anchor="middle" font-size="10.5" fill="var(--core)">asserts the population</text>
+
+  <rect x="212" y="52" width="188" height="86" rx="5" fill="var(--card)" stroke="var(--core)" stroke-width="2"/>
+  <text x="306" y="76" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="currentColor">scan.py</text>
+  <text x="306" y="97" text-anchor="middle" font-size="10.5" fill="var(--muted)">the one scan loop</text>
+  <text x="306" y="112" text-anchor="middle" font-size="10.5" fill="var(--muted)">shard order, estart,</text>
+  <text x="306" y="130" text-anchor="middle" font-size="10.5" fill="var(--core)">all six checks, always</text>
+
+  <rect x="428" y="52" width="130" height="86" rx="5" fill="var(--card)" stroke="currentColor" stroke-width="1.3"/>
+  <text x="493" y="76" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="currentColor">env.py</text>
+  <text x="493" y="97" text-anchor="middle" font-size="10.5" fill="var(--muted)">slot layout, odour</text>
+  <text x="493" y="112" text-anchor="middle" font-size="10.5" fill="var(--muted)">channels, nociceptor</text>
+  <text x="493" y="130" text-anchor="middle" font-size="10.5" fill="var(--muted)">from the saved config</text>
+
+  <rect x="36" y="164" width="167" height="62" rx="5" fill="var(--card)" stroke="currentColor" stroke-width="1.1"/>
+  <text x="119" y="188" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="currentColor">stats.py</text>
+  <text x="119" y="208" text-anchor="middle" font-size="10.5" fill="var(--muted)">rates, contrasts, fits</text>
+  <rect x="215" y="164" width="167" height="62" rx="5" fill="var(--card)" stroke="currentColor" stroke-width="1.1"/>
+  <text x="298" y="188" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="currentColor">plot.py</text>
+  <text x="298" y="208" text-anchor="middle" font-size="10.5" fill="var(--muted)">house style, label guards</text>
+  <rect x="394" y="164" width="164" height="62" rx="5" fill="var(--card)" stroke="currentColor" stroke-width="1.1"/>
+  <text x="476" y="188" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="currentColor">publish.py</text>
+  <text x="476" y="208" text-anchor="middle" font-size="10.5" fill="var(--muted)">page build + assertions</text>
+
+  <rect x="36" y="248" width="522" height="50" rx="5" fill="var(--card)" stroke="currentColor" stroke-width="1.1"/>
+  <text x="297" y="270" text-anchor="middle" font-size="12" font-family="ui-monospace,monospace" fill="currentColor">provenance.py</text>
+  <text x="297" y="288" text-anchor="middle" font-size="10.5" fill="var(--muted)">how much data each figure used &middot; which script made it</text>
+
+  <rect x="620" y="14" width="364" height="300" rx="6" fill="var(--study-soft)" stroke="var(--study)" stroke-width="1.2" stroke-dasharray="4 3"/>
+  <text x="636" y="36" font-size="11" font-family="ui-monospace,monospace" letter-spacing="1.2" fill="var(--study)">ONE FOLDER PER STUDY</text>
+
+  <rect x="640" y="52" width="324" height="76" rx="5" fill="var(--card)" stroke="var(--study)" stroke-width="1.4"/>
+  <text x="656" y="76" font-size="12" font-family="ui-monospace,monospace" fill="currentColor">study.py</text>
+  <text x="656" y="96" font-size="10.5" fill="var(--muted)">which runs, what the units are called,</text>
+  <text x="656" y="112" font-size="10.5" fill="var(--muted)">bin edges, groupings — facts, not code</text>
+
+  <rect x="640" y="146" width="324" height="76" rx="5" fill="var(--card)" stroke="var(--study)" stroke-width="1.4"/>
+  <text x="656" y="170" font-size="12" font-family="ui-monospace,monospace" fill="currentColor">collect.py</text>
+  <text x="656" y="190" font-size="10.5" fill="var(--muted)">a callback: given one validated frame,</text>
+  <text x="656" y="206" font-size="10.5" fill="var(--muted)">add to my accumulators</text>
+
+  <rect x="640" y="240" width="324" height="58" rx="5" fill="var(--card)" stroke="var(--study)" stroke-width="1.4"/>
+  <text x="656" y="264" font-size="12" font-family="ui-monospace,monospace" fill="currentColor">figNN_*.py</text>
+  <text x="656" y="284" font-size="10.5" fill="var(--muted)">one per figure, as now</text>
+
+  <line x1="400" y1="95" x2="424" y2="95" stroke="currentColor" stroke-width="1.2" marker-end="url(#b)"/>
+  <line x1="184" y1="95" x2="208" y2="95" stroke="currentColor" stroke-width="1.2" marker-end="url(#b)"/>
+  <path d="M638,92 C604,92 592,95 566,95" fill="none" stroke="var(--study)" stroke-width="1.3" marker-end="url(#b)"/>
+  <text x="612" y="72" text-anchor="middle" font-size="10" fill="var(--study)">names its runs</text>
+  <path d="M636,184 C580,184 420,150 400,138" fill="none" stroke="var(--core)" stroke-width="1.6" marker-end="url(#bc)" marker-start="url(#bc)"/>
+  <text x="530" y="150" text-anchor="middle" font-size="10" fill="var(--core)">validated frames &harr; counts</text>
+
+  <line x1="800" y1="298" x2="800" y2="340" stroke="currentColor" stroke-width="1.2" marker-end="url(#b)"/>
+  <rect x="640" y="342" width="324" height="52" rx="5" fill="var(--rule-2)" stroke="currentColor" stroke-width="1"/>
+  <text x="802" y="364" text-anchor="middle" font-size="11.5" fill="currentColor">derived JSON &rarr; figures &rarr; page</text>
+  <text x="802" y="382" text-anchor="middle" font-size="10.5" fill="var(--muted)">assertions already in place</text>
+
+  <rect x="16" y="342" width="560" height="52" rx="5" fill="var(--card)" stroke="currentColor" stroke-width="1"/>
+  <text x="296" y="364" text-anchor="middle" font-size="11.5" fill="currentColor">trajectory stores &mdash; read-only, reached only through <tspan font-family="ui-monospace,monospace">store.py</tspan></text>
+  <text x="296" y="382" text-anchor="middle" font-size="10.5" fill="var(--muted)">no study code opens a shard</text>
+  <line x1="296" y1="342" x2="296" y2="302" stroke="currentColor" stroke-width="1.2" marker-end="url(#b)"/>
+
+  <text x="500" y="428" text-anchor="middle" font-size="11.5" fill="var(--core)" font-style="italic">a check added to scan.py is a check every study gets, including the ones already written</text>
+</svg></div>
+<figcaption><b>Proposed.</b> The scan exists once. A study supplies two things — a manifest of facts
+and a callback that receives already-validated frames — and never opens a shard itself. The green
+double arrow is the only interface a new analysis has to learn.</figcaption>
+</figure>
+
+<section class="col">
+<div class="callout">
+<h4>What changed after review, and why</h4>
+<p>The first draft proposed a declarative mini-language — a study would <em>describe</em> its
+accumulators and never write a loop. The reviewer showed that will not survive contact: the existing
+sweeps build crossed two-dimensional grids, composite geometry conditions, quantile-derived bin edges,
+and a within-episode convolution with a reset boundary that no per-row primitive expresses. Either the
+language grows a dozen constructs or the escape hatch becomes the normal path — and an abstraction
+everybody bypasses is worse than none.</p>
+<p>So the design above is a <strong>scan driver with a callback</strong>, not a language. The driver
+owns everything that has gone wrong before — shard order, episode boundaries, the <code>t=0</code>
+rule, the previous-row rule, the population contract — and hands the study a frame it can trust. What
+the study does with that frame is ordinary NumPy, written in the study's own folder, where its author
+can see it.</p>
+</div>
+</section>
+
+<section class="col">
+<h2>What a new study costs</h2>
+<p>Today: re-implement the scan, and hope you remember six checks that are not written down anywhere
+as a set. Under the proposal, a manifest and a callback.</p>
+</section>
+
+<pre><code># studies/seed_replication/study.py — the entire fixed cost of a new study
+
+RUNS  = "results/JAX_RecurrentPPO/*_ladseed_*/"
+ROOTS = ["results/trajectories_ladseed"]
+
+# (unit, seed) from the start: the ladder is the one-seed case, and the next
+# study is a 2-3 seed replication that would otherwise force this open again
+UNITS = ["A_baseline", "B_olf_only", "V4_blur05", ...]
+SEEDS = [42, 7, 1337]
+
+BIN_EDGES = {"injury": [25, 50, 75], "distance": [1, 2, 3, 4, 5, 6, 7, 8]}
+GROUPS    = {"resolves_identity": lambda cfg: cfg["visual_sensor_range"] &gt;= 2
+                                          and cfg["visual_vector_size"] &gt; 1}
+</code></pre>
+
+<section class="col">
+<h3>Two decisions that are yours, not mine</h3>
+<p><strong>Scope.</strong> Two older folders — <code>scripts/analysis/figures/</code> (9 scripts) and
+<code>scripts/analysis/supplementary/</code> (19) — hold the third copies of the duplicated helpers and
+back the earlier trajectory-factors study. Porting them makes the day estimate fiction; freezing them
+as archived reproductions is defensible, but then two copies survive rather than one. I lean toward
+freezing them and saying so in their READMEs.</p>
+<p><strong>Timing.</strong> The seed replication is the natural first client of this core, which
+argues for building it now, before a fourth scan gets written for it. It is also days that are not
+spent on the replication itself. That trade is a portfolio call.</p>
+</section>
+
+<section class="col">
+<h3>Honest cost</h3>
+<p>The reviewer's estimate, which I accept over my own: <strong>two to four days</strong>, not one. My
+figure budgeted nothing for the verification sweeps — three sweeps across fourteen arms, run twice, to
+compare old output against new — nor for porting fifteen gated figure scripts.</p>
+<p>And the verification gate needs restating. I proposed requiring byte-identical output, which cannot
+hold: the three programs use three different NumPy summation primitives for the same logical sum, and
+those are not bitwise equivalent on floating-point data, so a <em>correct</em> port would fail the
+test. The workable version is bit-exact for integer-valued counts, a pre-registered tolerance for
+float accumulations, and equality of plotted data rather than image bytes.</p>
+<p class="foot">Full plan, including the migration order and what it explicitly does not fix:
+<code>docs/develop/active/analysis/analysis_pipeline_refactor.md</code>. Review:
+<code>docs/reviews/plan_analysis_pipeline_refactor.md</code>.</p>
+</section>
+</main>
+</div>
