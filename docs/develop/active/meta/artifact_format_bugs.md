@@ -330,7 +330,40 @@ details is closed and must stay in the default pass.
 - [ ] Geometry checks skip closed `<details>` content (F17)
 - [ ] Every axis label measured against its own panel at draw time (F18)
 - [ ] The checker run twice: default, and `--open-details` (F19)
+- [ ] Breakout wrappers are siblings of the column, not children (F20)
+- [ ] Mono-block column alignment uses `&nbsp;` or `pre`, not plain spaces (F21)
 - [ ] Every figure has exactly one generating script, and the page says which
+
+### F20 — a nested max-width silently caps a designed-wider element
+
+**Saw:** a four-step pipeline diagram given its own `.wide` wrapper (`max-width:940px`) to break out
+of the 720px prose column rendered its step columns at ~130px — three words per line — at *every*
+desktop viewport. The layout checker flagged "squeezed column" four times at 834/1100/1440 but named
+the symptom, not the cause.
+
+**Cause:** the breakout wrapper was placed **inside** the column it was meant to escape. A child can
+never exceed its parent's `max-width`, so the wrapper was inert and the diagram silently inherited
+720px. Nothing in the stylesheet looks wrong; the defect lives entirely in the nesting.
+
+**Rule:** a breakout wrapper must be a **sibling** of the column, never a child — close the column
+element, emit the wide block, reopen the column. Verify by measuring the element's *rendered* width
+against its own `max-width`; if they disagree, an ancestor is capping it. And because closing and
+reopening a wrapper is exactly where a spacing artefact would appear, check the **margins at both
+boundaries** after the fix, not just the width.
+
+### F21 — column alignment built from collapsible spaces
+
+**Saw:** a monospace block aligning two labelled values with runs of plain spaces
+(`value  =  29.0` / `value   =   1.2`) rendered with its `=` signs and values off by a character at
+every viewport width. A second block in the same page, built with `&nbsp;`, aligned correctly.
+
+**Cause:** HTML collapses consecutive whitespace. Monospace makes the *glyphs* equal width, which is
+easy to mistake for alignment being handled — but the spacing between them is still collapsed to one
+space.
+
+**Rule:** in a mono block, build column alignment from `&nbsp;` runs or `white-space: pre`, never
+plain spaces. The symptom is subtle — it reads as sloppiness rather than as an error — so it survives
+proofreading and only shows up on render.
 
 ## Related
 
