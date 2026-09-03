@@ -31,7 +31,7 @@ Most PI decisions are some variant of "does this fit one of the active tracks, o
 
 | Date | Call | One-line outcome | Call log |
 |---|---|---|---|
-| 2026-09-01 | Sensor-ladder seed replication — commit the cluster, probe cheaply, or hold? | **Pending user decision.** PI recommends the cheap seed-stability probe (subset of arms, 2 extra seeds, ~50-100k eval episodes) over the full 28-run / ~900 GB replication, because two drafted fixes to the rPPO trainer (value-bootstrap units, `lr_critic` wiring) and the still-open discount-factor question from 2026-07-27 both change what the baseline agent is. Also flags that the ladder IS Paper 1's pure-nociception control arm, not a side study | [2026-09-01_sensor_ladder_replication](calls/2026-09-01_sensor_ladder_replication.md) |
+| 2026-09-01 | Sensor-ladder seed replication — commit the cluster, probe cheaply, or hold? | **Decided: Hold (Option 4) + role (b).** Replication deferred, not abandoned — it runs once, later, on fixed trainer code at the final discount rate, folded into the modulator experiment as its control arms. Ladder's paper role set to design-rationale appendix, **against the PI's read** that it is already Paper 1's pure-nociception control; both positions and four reopen-conditions logged. Nothing launched | [2026-09-01_sensor_ladder_replication](calls/2026-09-01_sensor_ladder_replication.md) |
 | 2026-05-14 | D-013 / parity-launch disposition (single-GPU OOM on the dreamer-srl "XS" config) | User picked "Go with XS" — config-correction (not substrate-change): the 14.38 GB OOM was an XL-equivalent config mis-labeled "XS default"; fix `01_food_only.yaml` to mirror real sheeprl XS (256/256/mlp_layers=1/cnn_multiplier=24); single-GPU is the natural substrate, multi-GPU + gradient-checkpointing both rejected; senior-developer scopes the config-fix + correction-note sweep next | [2026-05-14_d013_parity_launch_disposition](calls/2026-05-14_d013_parity_launch_disposition.md) |
 | 2026-05-12 | Dreamer backend: in-house JAX rebuild vs. sheeprl-direct | User picked sheeprl-direct (minimal bridge); `dreamer-srl` v2 plan and 6 reviewer files shelved; `senior-developer` drafts sheeprl-bridge integration plan next | [2026-05-12_dreamer_backend](calls/2026-05-12_dreamer_backend.md) |
 
@@ -45,4 +45,9 @@ Most PI decisions are some variant of "does this fit one of the active tracks, o
 
 ## PI follow-up queue
 
-- **First-track ratification.** The active publication tracks have never been formally named. Until they are, every other PI call (including the 2026-05-12 dreamer-backend call above) is structurally illegible — there is no portfolio for the call to anchor against. The neuromodulation / pain-modeling paper is the obvious candidate for Track A. A separate PI call to ratify Track A (and decide whether a Track B exists) should land soon.
+- **First-track ratification — still open, now by explicit choice.** On 2026-09-01 the user
+  was offered "defer and ratify the portfolio first" as a framing and did not take it, so the
+  tracks stay unratified deliberately rather than by drift. Third call to flag it
+  (2026-05-12, 2026-07-27, 2026-09-01). Consequence: role and scope calls are being made
+  against the working anchors in `project_plan.md` §4–§5 rather than a ratified table here.
+- **First-track ratification (original entry).** The active publication tracks have never been formally named. Until they are, every other PI call (including the 2026-05-12 dreamer-backend call above) is structurally illegible — there is no portfolio for the call to anchor against. The neuromodulation / pain-modeling paper is the obvious candidate for Track A. A separate PI call to ratify Track A (and decide whether a Track B exists) should land soon.

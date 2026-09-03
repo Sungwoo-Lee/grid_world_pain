@@ -3,7 +3,7 @@ title: "PI call — do we replicate the sensor ladder at multiple seeds, and whe
 date: 2026-09-01
 session: 2026-09-01_sensor_ladder_replication
 caller: pi
-status: pending-decision
+status: decided
 trigger: "Post-analysis PI consultation. The fourteen-arm sensor-ladder study is finished, published as an artifact, and as of today fully reproducible. Its own Limitation 1 names seed replication as the single change that would move it from exploratory to confirmatory. The cluster is idle."
 inputs:
   - docs/experiments/active/sensor_ladder/sensor_ladder.md
@@ -16,6 +16,16 @@ inputs:
 ---
 
 # PI call — do we replicate the sensor ladder at multiple seeds, and when?
+
+> **Outcome (2026-09-01): decided.** Replication is **held** — it happens once, later, on
+> fixed trainer code at the final discount rate, folded into the modulator experiment as
+> its control arms. The ladder's paper role is a **design-rationale appendix**, which went
+> *against* the PI's own recommendation. Full decision in [§8](#8-user-decision); both
+> sides of the disagreement and what would reopen it in [§9](#9-rationale-captured); the
+> concrete trigger for the deferred replication in [§10](#10-hand-off).
+>
+> **Sections §1–§7 are the pre-decision framing and are left as written.** They record what
+> the PI recommended and why, before the user chose. They are not retrofitted to the outcome.
 
 ## §1 Plain-English entry point
 
@@ -270,34 +280,145 @@ It *is* sufficient for the sensory findings if they stay an appendix.
 
 ## §8 User decision
 
-_Pending._
+Relayed by the coordinator on 2026-09-01. No launches were made; no configs were touched.
+
+**Decision 1 — replication: Option 4, "Hold."** Replicate once, later, on fixed code at
+the final discount rate, as the modulator experiment's control arms. Not now.
+
+**Decision 2 — paper role: (b) design-rationale appendix.** The ladder justifies the
+sensor configuration choices and carries no headline Paper 1 claim.
 
 ## §9 Rationale captured
 
-_Pending._
+### 9.1 How the two decisions read together
+
+The user chose **Hold** (Option 4) rather than **Leave exploratory** (Option 5), while
+also placing the ladder in the role — design-rationale appendix — under which the PI had
+said replication is *optional* and "exploratory, honestly labelled" would suffice for the
+sensory findings.
+
+The two together are therefore **defer, do not abandon**. The ladder is not being written
+off as a permanently-exploratory result; it is being taken off the critical path for now
+and queued to be replicated properly once the things that would invalidate a replication
+have settled. The distinction matters for anyone reading the study later: Limitation 1
+stands *for the moment*, not *forever*, and no ladder sentence should be rewritten as if
+the replication had been declined.
+
+The PI notes this is a coherent and slightly conservative combination — it declines the
+cheapest option (the probe) while also declining to close the question. It buys one
+replication instead of two, at the cost of spending today's idle window on nothing and of
+carrying the exploratory caveat for longer.
+
+### 9.2 The disagreement on Decision 2, both positions
+
+Decision 2 went **against the PI's own read**. Both positions are recorded here so a
+future reader can see the disagreement was visible at the time, and on what reasoning.
+
+**PI's position — (a), the ladder is already Paper 1's control arm.** The argument was
+that this is true structurally rather than by choice. `project_plan.md` §3.1 defines each
+of the four pain-like behavioural categories as a signature that *exceeds what a
+pure-nociception agent produces*. The ladder agents run with `modulation.type: null` —
+the cognitive layer entirely absent — so they **are** that pure-nociception agent, and
+the ladder is the only measurement of it the project has. Findings 5, 6 and 7 (the agent
+responds to what it feels rather than to the wound it has; a weak hypervigilance effect
+on the ambiguous smell channel; hunger outweighing the wound, with hiding as a cost) land
+on three of the four categories — Recovery, Hypervigilance, and Managing conflicting
+needs. On that reading the ladder is the floor Paper 1's modulator has to clear, and a
+single shared-seed run per configuration is not a floor a Nature Machine Intelligence
+reviewer would accept.
+
+**User's position — (b), design-rationale appendix.** The ladder justifies the sensor
+configuration choices and carries no headline Paper 1 claim. The specific rationale beyond
+that was not relayed, and the PI does not speculate about it here.
+
+**Where the PI thinks the disagreement actually sits.** Not on the facts — both positions
+agree the ladder agents are modulator-free and that findings 5–7 measure them. The
+difference is whether Paper 1's pure-nociception floor will be established by *this*
+ladder or by the modulator experiment's **own** no-modulator control arms, which do not
+exist yet. Under (b) the floor comes from that future control set and the ladder is
+upstream design evidence. That is a perfectly serviceable structure, and it also happens
+to be what Decision 1 sets up — the deferred replication folds the ladder arms into the
+modulator experiment as conditions, which is exactly where a (b)-role ladder should end
+up. **So the two decisions are more consistent with each other than the disagreement on
+its own suggests**, and the practical divergence between (a) and (b) is smaller than it
+looks right now. It grows only if the modulator experiment ships without its own
+no-modulator arms.
+
+**What would reopen Decision 2.** Any one of these should escalate back to PI rather than
+being resolved in a draft:
+
+1. Any of ladder findings 5, 6 or 7 appearing in a Paper 1 draft as evidence about what
+   the pure-nociception agent does — at that point the ladder is carrying a headline
+   claim and the role has silently reverted to (a).
+2. The modulator experiment being designed **without** its own modulator-off control
+   arms, which would leave the ladder as the only pure-nociception measurement and force
+   role (a) by elimination.
+3. The modulator experiment's own control arms **disagreeing** with the ladder on any of
+   findings 5–7 — a conflict between two measurements of the same floor is a
+   PI-level problem, not an analysis-level one.
+4. A coauthor or reviewer asking "what does this agent do without the modulator?" and the
+   ladder being the answer given.
+
+### 9.3 Portfolio ratification — not chosen, and that is on the record
+
+The user did **not** select the "Defer — ratify `PORTFOLIO.md` first" framing. The active
+publication tracks therefore remain unratified **by explicit choice, not by drift**. This
+is the third call to flag it (2026-05-12, 2026-07-27, and this one). The PI records it
+without pressing it further: Decision 2 was made against the working anchors in
+`project_plan.md` §4–§5 rather than against a ratified track table, which is workable, and
+the cost is only that a future reader must reconstruct the track context from the project
+plan rather than from a single ledger.
 
 ## §10 Hand-off
 
-_Pending user decision._ Provisional routing per option:
+**Nothing launches from this call.** No configs, scripts or `src/` files were touched;
+`scripts/lab/launch_ladder_arm.sh` keeps its single-seed-by-design contract and gains no
+seed argument at this time.
 
-- **Option 1 / 2** → `senior-developer` (add the seed argument to
-  `scripts/lab/launch_ladder_arm.sh` and scope the seed-axis extension to the figure
-  scripts) → `plan-reviewer` → `experiment-designer` (pre-register which claims the
-  replication is testing and what would falsify them, *before* launch) →
-  `training-runner`.
-  **Stop rule:** if the value-bootstrap fix lands before collection begins, escalate back
-  to PI before spending a single collection-hour on the pre-fix seeds.
-- **Option 3** → `experiment-designer` (choose the minimal arm subset and episode count,
-  and pre-register the per-finding seed-stability threshold — what magnitude of change
-  counts as "the headline did not survive") → `plan-reviewer` → `training-runner`.
-  **Stop rule:** if any headline finding reverses sign or loses its group separation under
-  a new seed, stop and escalate to PI before the finding is cited anywhere else.
-- **Option 4** → `senior-developer` (sequence the two pre-refactor fixes) and, in
-  parallel, `experiment-designer` (design the modulator experiment with the ladder control
-  arms folded in as conditions rather than as a separate study).
-  **Stop rule:** escalate to PI when the trainer fixes land, to confirm the ladder is
-  re-run as part of the modulator experiment rather than as a standalone repeat.
-- **Option 5** → `experiment-analyzer` (soften every arm-count sentence in the report and
-  the artifact to exploratory phrasing) → `artifact-format-reviewer` before republish.
-- **Either way** → a short follow-on PI call to ratify `PORTFOLIO.md`, and
-  `experiment-analyzer` on the hiding-direction contradiction in §6.
+### 10.1 The deferred replication — concrete precondition
+
+The replication is queued, not cancelled. It is triggered when **all three** of the
+following hold:
+
+1. **The two pre-refactor rPPO trainer fixes have landed and been verified** — the
+   Monte-Carlo bootstrap-units fix, and the wiring of the currently-dead `lr_critic`
+   (both drafted and plan-reviewed by session `96e71c7b`). These change what an
+   rPPO Monte-Carlo agent is, and every ladder arm is one.
+2. **The discount-factor question is decided** — the open item from
+   [`2026-07-27_dreamer_investigation_disposition`](2026-07-27_dreamer_investigation_disposition.md),
+   whether the baseline's γ = 0.95 is defensible against a survival-steps metric. The
+   replication must run at whatever discount the modulator experiment uses, not at
+   today's value by default.
+3. **The modulator experiment is being designed** — the ladder control arms are folded
+   into that design as conditions, sharing its trainer, discount and seed set, rather
+   than being re-run as a standalone repeat of this study.
+
+**The trigger moment is (3).** When `experiment-designer` opens the modulator
+experiment's design, the ladder arms are considered at that point and not before.
+
+### 10.2 Next agents
+
+- **`senior-developer`** — sequence the two pre-refactor fixes. Already in flight in
+  session `96e71c7b`; this call adds no new scope, it only records that the deferred
+  ladder replication is downstream of them.
+- **`experiment-designer`** — when the modulator experiment is designed, fold the
+  modulator-off ladder arms in as control conditions at 2–3 seeds. **Escalate to PI at
+  that moment** to confirm arm selection and seed count.
+- **`experiment-analyzer`** — the hiding-direction contradiction flagged in §6 (the
+  ladder's "extra hiding peaks 14–16 steps post-injury in 13 of 14 arms" versus session
+  `96e71c7b`'s "the target behaviour is currently the OPPOSITE of what the agent does").
+  **Already routed by the coordinator**; recorded here for completeness, no further PI
+  action.
+
+### 10.3 Standing stop rules
+
+- **If the modulator experiment is designed without its own modulator-off control arms**,
+  escalate to PI before it launches — that is reopen-condition 2 in §9.2 and it changes
+  the ladder's role.
+- **If any ladder finding is drafted into Paper 1 as a claim about the pure-nociception
+  agent**, escalate to PI before the draft circulates — that is reopen-condition 1, and
+  under role (b) the ladder is not currently replicated well enough to carry it.
+- **Until the replication happens**, every arm-count sentence in the study
+  ("14 of 14 arms", "13 of 14") stays exploratory. Limitation 1 stands. Nothing in the
+  published report or artifact needs rewriting as a result of this call — the study
+  already labels itself correctly.
