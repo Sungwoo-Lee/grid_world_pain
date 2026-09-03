@@ -3,7 +3,7 @@ title: What each sense buys - the fourteen-arm sensor ladder
 topic: sensor_ladder
 status: active
 created: 2026-08-30
-last_updated: 2026-08-30
+last_updated: 2026-09-03
 ---
 
 # What each sense buys
@@ -1021,26 +1021,43 @@ into circulation:
    the time course explicit and shows that the 25-step window matches the dose's lifetime, but any
    single number quoted for the wound is a statement about a window, and the hypervigilance gap in
    Section 5 changes sign in several arms at 50 steps.
-3. **Proximity is not randomised.** The distance curves in Figures 4, 5 and 10 describe a real
+
+   **This applies to the dose-response itself, not only to the hypervigilance measure**
+   (added 2026-09-03). Figure 14 panel B already shows it; stating it here because the limitations
+   list is what a hurried reader reads. Recomputed at three windows: the wound's effect on bush dwell
+   is positive in 13 of 14 arms over 25 steps, in 2 of 14 over 100 steps, and no larger than
+   +0.003 percentage points in any arm over the whole episode. So "this agent hides more when
+   injured" is a claim about a 25-step window and must always be quoted with it.
+3. **The 25-step "extra hiding" is extra RESTING that lands in cover, not travel to cover**
+   (added 2026-09-03; this limitation qualifies finding 5). A wound raises the Rest-action rate by
+   +17.7 to +35.2 percentage points in 14 of 14 arms — roughly five times the size of the bush-dwell
+   effect — and that extra resting happens overwhelmingly *in the open*. Decomposed, bush occupancy
+   **while the agent is acting** falls with the wound in 14 of 14 arms, in both the predator-present
+   and predator-absent conditions. Section 5's reading as "ordinary caution" is therefore too strong:
+   the wounded agent freezes to heal, and with four to ten bushes scattered over a hundred squares a
+   slice of that freezing lands on one. Details, and the reconciliation with the project's separate
+   bush-refuge finding that injury *suppresses* cover use, are in
+   [`INJURY_HIDING_SIGN_RECONCILIATION`](../diagnosis/INJURY_HIDING_SIGN_RECONCILIATION.md).
+4. **Proximity is not randomised.** The distance curves in Figures 4, 5 and 10 describe a real
    regularity but do not on their own establish causation.
-4. **"Identity-resolving sight" is a post-hoc, two-condition proxy** that also confounds identity
+5. **"Identity-resolving sight" is a post-hoc, two-condition proxy** that also confounds identity
    with input capacity. See the three qualifications in Section 4.
-5. **The predator-odour control is contaminated.** Intensity and discriminability are anticorrelated
+6. **The predator-odour control is contaminated.** Intensity and discriminability are anticorrelated
    by construction, which flattens the control slope and inflates the rabbit-minus-predator gap in
    Section 5.
-6. **Hypervigilance was tested on two channels, not all of them.** The agent also has collision,
+7. **Hypervigilance was tested on two channels, not all of them.** The agent also has collision,
    proprioceptive and visual channels that were not tested for a criterion shift.
-7. **The hunger-versus-wound comparison is partly a comparison of sensors.** Nutrition is not
+8. **The hunger-versus-wound comparison is partly a comparison of sensors.** Nutrition is not
    directly observable either, but the channel that carries it &mdash; satiation &mdash; is an
    instantaneous monotone transform of it, with no delay. Injury reaches the agent through a
    twelve-step convolution. Over a 25-step window that difference alone favours hunger, so the
    1.6&ndash;4.5&times; ratio in Section 6 mixes drive strength with sensor dynamics and should not
    be read as the former alone.
-8. **The agent had an incentive to infer its wound faster than it can feel it.** The training reward
+9. **The agent had an incentive to infer its wound faster than it can feel it.** The training reward
    uses the *true* injury level, so a policy that inferred its condition from context could in
    principle have beaten the nociceptor's delay. Empirically it did not &mdash; the response tracks
    the delayed percept, not the wound &mdash; but that is an observation, not a constraint.
-9. **Late-time comparisons condition on survival.** Beyond roughly step 40, Figure 9 compares
+10. **Late-time comparisons condition on survival.** Beyond roughly step 40, Figure 9 compares
    whichever episodes are still alive, and Table 8 shows the heavy-wound quarter dying sooner. The
    convergence after step 60 is therefore measured on differently-selected survivors.
 
@@ -1102,6 +1119,12 @@ driver's `--dry-run`. Figures 6 and 7 additionally require
 
 ## Related
 
+- [`INJURY_HIDING_SIGN_RECONCILIATION`](../diagnosis/INJURY_HIDING_SIGN_RECONCILIATION.md) &mdash;
+  reconciles this study's "hides more when injured" (Figure 8) with the project's separate
+  bush-refuge finding that injury *suppresses* cover use. Verdict: not a contradiction &mdash;
+  different agents, a different world, a different measurement scene, and a different window. It
+  also identifies the behaviour underneath both, a wound-driven **freeze-and-rest** response, and
+  is the source of Limitations 2 and 3 above.
 - [`plan_sensor_ladder`](../../../reviews/plan_sensor_ladder.md) &mdash; the adversarial review of
   this analysis, including findings not yet acted on.
 - [`a01_hiding_drivers`](../trajectory_factors/a01_hiding_drivers.md) &mdash; the same factor
