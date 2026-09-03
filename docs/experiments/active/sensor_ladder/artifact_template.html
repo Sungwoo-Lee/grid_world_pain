@@ -211,6 +211,11 @@ td code{background:none;padding:0;font-size:12.5px;color:var(--ink)}
 .correction h4{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;
   margin:0 0 10px;color:var(--threat)}
 .correction p{margin:0;font-size:15px;line-height:1.57}
+/* Written when every correction box held exactly one paragraph. The first box to hold
+   several rendered as one wall of text: the breaks got the within-paragraph line pitch,
+   so the reader saw a block instead of the argument's steps. Nothing overlapped, so the
+   geometry checker could not see it -- only looking at the render did. */
+.correction p + p{margin-top:12px}
 .correction{--rule-2:color-mix(in srgb, var(--threat) 16%, transparent)}
 .caveats{margin:26px 0;padding:0;list-style:none;counter-reset:cv}
 .caveats li{counter-increment:cv;position:relative;padding:13px 0 13px 38px;
@@ -824,13 +829,32 @@ step 24. Twenty-five steps is roughly the lifetime of the <strong>felt</strong> 
 physical one. The causal claims are unaffected &mdash; they are keyed to the randomised starting
 wound either way &mdash; but the mechanism they were attached to was the wrong one.</p>
 </div>
+<div class="correction">
+<h4>And a second correction, larger than the first</h4>
+<p>This page called the extra hiding &ldquo;ordinary caution&rdquo;. That reading is too strong, and
+the data underneath it says something more interesting. A wound raises the agent's <strong>Rest</strong>
+rate by <strong>+17.7 to +35.2 percentage points in all fourteen arms</strong> &mdash; about five times
+the size of the bush-dwell effect &mdash; and that extra resting happens overwhelmingly <em>in the
+open</em>. Split the steps into resting and acting, and bush occupancy <strong>while the agent is
+acting falls with the wound in all fourteen arms</strong>, whether or not a predator is present.</p>
+<p>So the wounded agent is not travelling to cover. It is freezing to heal, and with four to ten
+bushes scattered over a hundred squares, a slice of that freezing happens to land on one. Every
+number on this page stands &mdash; none of them changed &mdash; but &ldquo;hides more when hurt&rdquo;
+describes where the agent stops, not a decision to seek cover.</p>
+<p>This surfaced when a project reviewer noticed that a separate study reported the <em>opposite</em>
+sign: that injury <em>suppresses</em> cover use. Both are right. That study measures over a whole
+episode in a scene with a single bush three squares away; at its window this study's own data agrees
+with it, in fourteen arms out of fourteen. The disagreement was never about the agent &mdash; it was
+about where the cover happens to be.</p>
+</div>
 </div>
 <div class="wide">{{TABLE:10}}</div>
 </section>
 
 <section>
 <div class="col"><h3>But it is not hypervigilance &mdash; on this channel</h3>
-<p>Figure 8 shows a wounded agent hides more. That, on its own, is ordinary caution. The claim that
+<p>Figure 8 shows a wounded agent hides more &mdash; which, as the correction above establishes, is
+mostly a wounded agent holding still. Either way it is not hypervigilance. The claim that
 would earn the word <em>hypervigilance</em> is stronger and more specific: that being wounded changes
 <strong>what the agent treats as evidence of danger</strong>, so an ambiguous, harmless cue starts
 driving the same defence a real threat does. Testing that means comparing the shift in the harmless cue

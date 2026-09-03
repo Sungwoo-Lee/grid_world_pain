@@ -383,6 +383,29 @@ a fixed number of decimal places that right-alignment decimal-aligns for free. P
 space (U+2007) only where right-alignment is not wanted. `tabular-nums` is necessary but not
 sufficient; align the header cell too, or the column reads as detached from its label.
 
+### F23 — a component's `p{margin:0}` reset, written when the component only ever held one paragraph
+
+**Saw:** a `.correction` callout on the sensor-ladder page, holding a three-paragraph argument,
+rendered as one unbroken wall of text. The two paragraph breaks got exactly the within-paragraph
+line pitch — measured 0 px gap against a 23.6 px line-height — so the reader saw a block where the
+author had written three steps. A pre-existing two-paragraph instance of the same component had the
+defect too, unnoticed, because nobody had read it closely.
+
+**Cause:** `.correction p{margin:0}` was written when every instance of the component held exactly
+one paragraph, where the reset is correct and invisible. The first instance to hold several inherits
+it silently. Nothing overlaps, nothing is clipped, nothing squeezes, and the CSS reads as deliberate
+in source review — so **the geometry checker structurally cannot see this**, and neither can reading
+the stylesheet. Only looking at the render finds it.
+
+**Rule:** any component that resets `p{margin:0}` must also set `p + p{margin-top: …}`. More
+generally: a reset written for a single-child case is a latent defect the first time the component
+takes a second child. When adding a paragraph to an existing callout, card or note component, render
+it — do not assume the component's spacing was designed for more than it had.
+
+**Verifying a fix:** measure the gap in the box tree rather than trusting the rule was added — and
+check the measurement fires by removing the rule and confirming it reports 0 px. A spacing assertion
+that has never been seen to fail is not evidence.
+
 ## Related
 
 - [`artifact_generation_guide`](artifact_generation_guide.md) — the wider guide: content, claims,
