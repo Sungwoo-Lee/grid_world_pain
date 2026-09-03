@@ -1,0 +1,70 @@
+# recurrent_ppo_cmp_mcfixed — one arm of the MC / MC_FIXED / GAE return-estimator comparison.
+# ---------------------------------------------------------------------------
+# PLAIN LANGUAGE: recurrent PPO learns two numbers from each rollout — a *critic target*
+# (what total future reward the value head should have predicted) and an *advantage*
+# (how much better an action turned out than the critic expected). There are three ways
+# of producing that pair in this trainer, and this three-config set exists to compare them
+# empirically on identical everything else:
+#   recurrent_ppo_cmp_mc.yaml       return_mode "MC"       Monte-Carlo returns rescaled to
+#                                   mean 0 / std 1, used as BOTH the critic target and
+#                                   (minus the critic's prediction) the advantage.
+#                                   The project's historical mode.
+#   recurrent_ppo_cmp_mcfixed.yaml  return_mode "MC_FIXED" the SAME Monte-Carlo returns, but
+#                                   used RAW as the critic target with the ADVANTAGES
+#                                   rescaled instead — the convention nine of nine surveyed
+#                                   mainstream PPO libraries use.
+#   recurrent_ppo_cmp_gae.yaml      return_mode "GAE"      generalised advantage estimation,
+#                                   raw critic target, rescaled advantages.
+# THIS FILE IS THE "MC_FIXED" ARM.
+#
+# Identical to recurrent_ppo.yaml in every other hyperparameter, and neuromodulation is OFF
+# (modulation.type: null) — any modulator would be a confound in an estimator comparison.
+# Survey: docs/project/references/modulation_in_rl/ppo_return_normalization_survey.md
+# Units-mismatch diagnosis behind MC_FIXED:
+#   docs/develop/active/issues/FIX_MC_RETURN_UNITS_AND_LEARNING_RATES.md (Fix 1)
+# ---------------------------------------------------------------------------
+agent:
+  algorithm: "RecurrentPPO"
+  lr_actor: 0.0005
+  lr_critic: 0.0001
+  gamma: 0.95
+  K_epochs: 4
+  eps_clip: 0.1
+  # update_timestep: 2000
+  sequence_length: 128     # Steps per rollout/sequence
+  frame_stack: 1
+  fc_layers: [128,128]
+  # recurrent_layers: [128]
+  actor_fc_layers: [128,128]
+  critic_fc_layers: [128,128]
+  hidden_size: 128
+  entropy_coef: 0.01
+  gae_lambda: 0.95
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  use_layer_norm: true
+  
+  # Parity Options
+  rnn_type: "GRU"       # "LSTM" or "GRU"
+  activation: "relu"     # "tanh" or "relu"
+  return_mode: "MC_FIXED"       # same MC returns, RAW as target, advantages normalised
+
+  # Encoding Configuration
+  encoding_mode: "hierarchical"  # "flat" or "hierarchical"
+  
+  hierarchical_params:
+    # Unimodal Phase 1: Independent MLPs for each sensor
+    # Available sensor names for overrides: 
+    # [Injury, Nutrition, Satiation, Extero Nociception, Olfaction, Collision, Proprioception, Visual, Location]
+    default_mlp: [128,128]
+    unimodal_overrides:
+      visual: [128,128]
+      olfaction: [128,128]
+    
+    # Multimodal Phase 2: Fusion hub
+    multimodal_hub: [128,128]
+
+  # Neuromodulation: DISABLED (true baseline, §5.2)
+  # For neuromodulated variant, use: configs/models/ppo/neuromodulated_ppo.yaml
+  modulation:
+    type: null
