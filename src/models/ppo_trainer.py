@@ -205,6 +205,15 @@ def update_step_ppo(model, optimizer, batch, config):
 def train_iteration_ppo(model, optimizer, env_params, env_state, key, config):
     """Performs one full PPO iteration (collect + N epochs)."""
     return_mode = getattr(config, 'return_mode', 'GAE')
+    # Plain PPO implements "MC" and "GAE" only. "MC_FIXED" (raw returns as the critic
+    # target + normalised advantages) exists in the RecurrentPPO trainer only; reject it
+    # loudly instead of letting the `else` below silently run GAE. No fallback default.
+    if return_mode.upper() not in ("MC", "GAE"):
+        raise ValueError(
+            f"Unknown agent.return_mode {return_mode!r} for algorithm PPO. "
+            "Plain PPO supports 'MC' and 'GAE'; 'MC_FIXED' is implemented in the "
+            "RecurrentPPO trainer only (src/models/recurrent_ppo_trainer.py)."
+        )
 
     # 1. Collect rollouts
     trajectories, next_env_state, key = collect_trajectories(

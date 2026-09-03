@@ -76,7 +76,7 @@ from src.environment.wrapper import ParallelEnv
 from src.environment.sensor import get_observation, get_observation_breakdown
 from src.environment.core import jax_step
 from src.models.recurrent_ppo_network import ActorCriticRNN
-from src.models.recurrent_ppo_trainer import train_iteration
+from src.models.recurrent_ppo_trainer import train_iteration, validate_return_mode
 from src.models.dqn_network import DQNNetwork, get_action_dqn_nnx
 from src.models.dqn_trainer import ReplayBuffer as DQNReplayBuffer, update_step_dqn
 from src.models.drqn_network import DRQNNetwork, get_action_drqn_nnx
@@ -1131,7 +1131,9 @@ def main():
         # Read parity options from config
         rnn_type = config.get_mandatory('agent.rnn_type')
         activation = config.get_mandatory('agent.activation')
-        return_mode = config.get_mandatory('agent.return_mode')
+        # Whitelist {MC, MC_FIXED, GAE} here so a typo fails before model/JIT setup
+        # rather than at the first training iteration.
+        return_mode = validate_return_mode(config.get_mandatory('agent.return_mode'))
         
         # Read neuromodulation config (MUST be defined in config, even if empty/null)
         # Using get() because get_mandatory() raises ValueError for null/None values

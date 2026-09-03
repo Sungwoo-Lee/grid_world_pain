@@ -190,6 +190,35 @@ def ppo_loss_fn(model, batch, clip_eps, ent_coef, vf_coef):
     
     return total_loss, (policy_loss, value_loss, entropy_loss)
 
+LEGAL_RETURN_MODES = ("MC", "MC_FIXED", "GAE")
+
+def validate_return_mode(return_mode):
+    """Whitelist `agent.return_mode` and return its canonical upper-case form.
+
+    The three legal estimator/bookkeeping combinations (see train_iteration):
+      - "MC"        Monte-Carlo returns, z-scored, used as BOTH the critic target and
+                    (minus V) the advantages. Historical mode; its normalisation is the
+                    units mismatch recorded in KNOWN_BUGS ("H4 bootstraps in the wrong units").
+      - "MC_FIXED"  Identical Monte-Carlo returns, but the mainstream convention applied
+                    afterwards: RAW returns as the critic target, normalised advantages.
+      - "GAE"       GAE(lambda) advantages, raw targets = advantages + V, normalised advantages.
+
+    No fallback default (project rule): an unrecognised value raises rather than silently
+    routing to one of the branches.
+    """
+    if not isinstance(return_mode, str):
+        raise ValueError(
+            f"agent.return_mode must be a string, got {type(return_mode).__name__!r} "
+            f"({return_mode!r}). Legal values: {', '.join(LEGAL_RETURN_MODES)}."
+        )
+    mode = return_mode.strip().upper()
+    if mode not in LEGAL_RETURN_MODES:
+        raise ValueError(
+            f"Unknown agent.return_mode {return_mode!r}. "
+            f"Legal values: {', '.join(LEGAL_RETURN_MODES)}."
+        )
+    return mode
+
 def collect_trajectories(model, env_params, last_state, last_h_state, last_key, num_steps, rnn_type="LSTM", return_mode="MC"):
     """Collects parallel trajectories using jax.lax.scan and NNX model."""
     from src.environment.core import jax_step
@@ -200,7 +229,9 @@ def collect_trajectories(model, env_params, last_state, last_h_state, last_key, 
     # `return_mode` is a static (non-traced) string from `config`, which is itself a static
     # jit argument (see train.py's `nnx.jit(train_iteration, static_argnums=(6,))`). This plain
     # Python comparison is therefore resolved once at trace time, not per-step at runtime.
-    use_gae_bootstrap = return_mode.upper() == "GAE"
+    # MC_FIXED reuses the MC path here: it takes the SAME single window-edge bootstrap as
+    # MC (one value forward per window), not GAE's per-step next-state forward pass.
+    use_gae_bootstrap = validate_return_mode(return_mode) == "GAE"
 
     def scan_fn(carry, _):
         state, h_state, key, _prev_next_state, _prev_h_new = carry
@@ -356,7 +387,8 @@ def update_step(model, optimizer, batch, config):
 def train_iteration(model, optimizer, env_params, env_state, h_state, key, config):
     """Performs one full PPO iteration (collect + N epochs) with NNX."""
     rnn_type = config.rnn_type
-    return_mode = config.return_mode
+    # Canonical upper-case form; raises on anything outside {MC, MC_FIXED, GAE}.
+    return_mode = validate_return_mode(config.return_mode)
     
     # 1. Collect rollouts
     with jax.named_scope("rppo_collect_trajectories"):
@@ -366,7 +398,7 @@ def train_iteration(model, optimizer, env_params, env_state, h_state, key, confi
 
     # 2. Compute Advantages and Targets
     with jax.named_scope("rppo_advantages"):
-        if return_mode.upper() == "MC":
+        if return_mode == "MC":
             # Monte Carlo Returns (PyTorch parity) with window-edge bootstrap (H4 fix).
             # Real-death mask: same termination_reason >= 2 mapping as the GAE branch below.
             # Use vmap over batch dimension (axis 1); bootstrap_value is (num_envs,) -> axis 0.
@@ -378,6 +410,25 @@ def train_iteration(model, optimizer, env_params, env_state, h_state, key, confi
             returns = (returns - jnp.mean(returns)) / (jnp.std(returns) + 1e-7)
             targets = returns
             advantages = returns - trajectories.value
+        elif return_mode == "MC_FIXED":
+            # MC_FIXED: the SAME Monte-Carlo returns as the "MC" branch above — same
+            # compute_mc_returns, same window-edge bootstrap_value, same real-death mask,
+            # same vmap axes — with the GAE branch's bookkeeping convention applied
+            # afterwards instead of MC's: the RAW return is the critic target and the
+            # ADVANTAGES (not the returns) are normalised. This is the convention nine of
+            # nine surveyed mainstream PPO implementations use
+            # (docs/project/references/modulation_in_rl/ppo_return_normalization_survey.md),
+            # and it removes the units mismatch between the z-scored return scale and the
+            # un-rescaled window-edge bootstrap value (KNOWN_BUGS: "H4 bootstraps in the
+            # wrong units"). Epsilon and normalisation form deliberately match the GAE
+            # branch exactly, so MC_FIXED vs GAE differs only in the ESTIMATOR.
+            terminateds = (trajectories.step_info.termination_reason >= 2).astype(trajectories.done.dtype)
+            returns = jax.vmap(compute_mc_returns, in_axes=(1, 1, 1, 0, None), out_axes=1)(
+                trajectories.reward, trajectories.done, terminateds, bootstrap_value, config.gamma
+            )
+            targets = returns
+            advantages = returns - trajectories.value
+            advantages = (advantages - jnp.mean(advantages)) / (jnp.std(advantages) + 1e-8)
         else:
             # GAE (original JAX)
             # Real-termination mask (Finding B, Part 2): termination_reason 2/3/4 = real death;
