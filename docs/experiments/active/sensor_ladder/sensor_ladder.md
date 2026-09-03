@@ -1000,6 +1000,23 @@ into circulation:
    ordering. Counts of agreeing arms must not be read as independent confirmations. **Replicating
    the ladder at two or three seeds is the single change that would move this study from exploratory
    to confirmatory.** Nothing here was pre-registered.
+
+   **Decided 2026-09-01 — deferred, not abandoned.** This study's role is a **design-rationale
+   appendix**: it justifies the sensor configuration the project trains on, and carries no headline
+   claim of its own. The seed replication is therefore not blocking, and will be run once, later, on
+   fixed trainer code — not now. The reason for waiting is concrete rather than budgetary: a
+   Monte-Carlo return-units bug, already measured and with a fix drafted, under-credits roughly 35%
+   of training targets in every run of this trainer, these fourteen arms included. Replicating today
+   would produce twenty-eight more agents trained on code the project has already decided is wrong.
+   The trigger for the deferred replication is that fix landing.
+
+   Recorded because it goes against the project's own internal advice: the Principal Investigator's
+   read was that the ladder is *already* the control arm for the main paper — the pain-like
+   signatures are defined as exceeding what a pure-nociception agent produces, and these
+   modulator-off agents are the only measurement of that agent we have — which would have made
+   replication mandatory rather than optional. The decision went the other way. If the ladder is
+   later cited as a control rather than as design rationale, this limitation becomes blocking again
+   and the replication has to happen first. See `docs/pi/calls/2026-09-01_sensor_ladder_replication.md`.
 2. **Everything about the wound is window-dependent, because the wound is transient.** Figure 9 makes
    the time course explicit and shows that the 25-step window matches the dose's lifetime, but any
    single number quoted for the wound is a statement about a window, and the hypervigilance gap in
