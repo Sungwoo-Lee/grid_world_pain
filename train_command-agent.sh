@@ -2241,3 +2241,276 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 # data that must not be casually deleted). Surfaced to the user for a decision:
 # prune/archive the _scratch tree, or bound the startup walk in code.
 # ---------------------------------------------------------------------------
+
+# ===========================================================================
+# return_mode comparison (MC / MC_FIXED / GAE) — basic/04, 5 seeds each — 2026-09-03
+# ===========================================================================
+# 15 plain-RecurrentPPO runs measuring, in SURVIVAL STEPS, whether PPO's mainstream
+# return-normalisation convention beats this project's historical one on the jump level.
+#
+#   MC       (configs/models/recurrent_ppo/recurrent_ppo_cmp_mc.yaml)
+#            Monte-Carlo returns z-scored, used as BOTH critic target and advantage.
+#            The project's historical mode; byte-identical to prior behaviour.
+#   MC_FIXED (configs/models/recurrent_ppo/recurrent_ppo_cmp_mcfixed.yaml)
+#            SAME MC returns, used RAW as the critic target, ADVANTAGES normalised
+#            instead — the convention 9/9 surveyed mainstream PPO libraries use.
+#            NEW code path, added today in af4047ac + 98b94d99.
+#   GAE      (configs/models/recurrent_ppo/recurrent_ppo_cmp_gae.yaml)
+#            GAE(lambda), raw critic target, normalised advantages. Unchanged.
+#
+# The three agent configs differ from each other ONLY in `return_mode` (verified by
+# comment-stripped diff), and the MC arm is identical to recurrent_ppo.yaml.
+# modulation.type: null in all three — a modulator would confound an estimator comparison.
+# Env for all 15: basic/04-jump_attack_10x10 as it currently resolves, no overrides.
+# 10x10 grid, obs_dim 27, action_dim 6, max_steps 500 (confirmed at smoke-test startup).
+#
+# wandb-group: return_mode_cmp, job-type: prod
+#
+# ---------------------------------------------------------------------------
+# CLI-flag deviations from the config-owns-values convention (flagged to the user)
+# ---------------------------------------------------------------------------
+#   --num-envs 128            NOT a deviation. configs/train/recurrent_ppo.yaml already
+#                             sets num_envs: 128; the flag is redundant but agrees.
+#   --checkpoint-frequency 50000  DEVIATION. rPPO's config layer owns 200000. Caller asked
+#                             for 50000 => 4x more checkpoints + eval videos per run.
+#   --seed 42..46             DEVIATION by design. Config owns seed: 42; this is the
+#                             5-seed sweep that the experiment is built on.
+#   --log-interval 50         NO-OP. train.py:731 prints
+#                             "[WARN] --log-interval is IGNORED: this config uses the
+#                             two-level `logging:` block". The effective value comes from
+#                             configs/train/recurrent_ppo.yaml logging.step.interval_iters,
+#                             which is ALREADY 50 — so the requested cadence is what runs.
+#                             Kept on the CLI for parity with the caller's spec.
+#
+# ---------------------------------------------------------------------------
+# Smoke test (MC_FIXED only — the one untested-in-training code path)
+# ---------------------------------------------------------------------------
+# Ran to completion on node 104 cuda:1 (RTX 2080 Ti, 11 GB — the tightest-memory card
+# in this batch) at the full --num-envs 128, --no-wandb, --results-dir tmp/... :
+#   "RNN Type: GRU, Activation: relu, Return Mode: MC_FIXED" / "Neuromodulation: DISABLED"
+#   JIT compiled, 163 iterations, 100,032 episodes, ~20-39 it/s, no OOM,
+#   value loss fell monotonically 1442.9 -> ~109 (raw-return units, as MC_FIXED expects),
+#   no NaN, 2 checkpoints + 2 eval videos rendered, clean "Training complete".
+# Debris deleted afterwards. MC and GAE need no smoke test (unchanged code).
+#
+# ---------------------------------------------------------------------------
+# Launched via CIFS-bypass /tmp scripts, strictly ONE AT A TIME (run_command.py is not
+# parallel-safe: concurrent calls share an SSH control socket and can return the wrong
+# node's PIDs). This file is the audit record; the 15 blocks below are the exact
+# command lines, kept commented because only one block can ever be active.
+# ---------------------------------------------------------------------------
+
+# Run 01: rppo_cmp_mc_s42 — node 101, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_cmp_mc.yaml \
+#   --episodes 1000000 \
+#   --num-envs 128 \
+#   --checkpoint-frequency 50000 \
+#   --log-interval 50 \
+#   --seed 42 \
+#   --device cuda:0 \
+#   --wandb-group return_mode_cmp --wandb-job-type prod \
+#   --wandb-name rppo_cmp_mc_s42 --tag rppo_cmp_mc_s42
+
+# Run 02: rppo_cmp_mc_s43 — node 101, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_cmp_mc.yaml \
+#   --episodes 1000000 \
+#   --num-envs 128 \
+#   --checkpoint-frequency 50000 \
+#   --log-interval 50 \
+#   --seed 43 \
+#   --device cuda:1 \
+#   --wandb-group return_mode_cmp --wandb-job-type prod \
+#   --wandb-name rppo_cmp_mc_s43 --tag rppo_cmp_mc_s43
+
+# Run 03: rppo_cmp_mc_s44 — node 103, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_cmp_mc.yaml \
+#   --episodes 1000000 \
+#   --num-envs 128 \
+#   --checkpoint-frequency 50000 \
+#   --log-interval 50 \
+#   --seed 44 \
+#   --device cuda:0 \
+#   --wandb-group return_mode_cmp --wandb-job-type prod \
+#   --wandb-name rppo_cmp_mc_s44 --tag rppo_cmp_mc_s44
+
+# Run 04: rppo_cmp_mc_s45 — node 103, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_cmp_mc.yaml \
+#   --episodes 1000000 \
+#   --num-envs 128 \
+#   --checkpoint-frequency 50000 \
+#   --log-interval 50 \
+#   --seed 45 \
+#   --device cuda:1 \
+#   --wandb-group return_mode_cmp --wandb-job-type prod \
+#   --wandb-name rppo_cmp_mc_s45 --tag rppo_cmp_mc_s45
+
+# Run 05: rppo_cmp_mc_s46 — node 104, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_cmp_mc.yaml \
+#   --episodes 1000000 \
+#   --num-envs 128 \
+#   --checkpoint-frequency 50000 \
+#   --log-interval 50 \
+#   --seed 46 \
+#   --device cuda:0 \
+#   --wandb-group return_mode_cmp --wandb-job-type prod \
+#   --wandb-name rppo_cmp_mc_s46 --tag rppo_cmp_mc_s46
+
+# Run 06: rppo_cmp_mcfixed_s42 — node 104, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_cmp_mcfixed.yaml \
+#   --episodes 1000000 \
+#   --num-envs 128 \
+#   --checkpoint-frequency 50000 \
+#   --log-interval 50 \
+#   --seed 42 \
+#   --device cuda:1 \
+#   --wandb-group return_mode_cmp --wandb-job-type prod \
+#   --wandb-name rppo_cmp_mcfixed_s42 --tag rppo_cmp_mcfixed_s42
+
+# Run 07: rppo_cmp_mcfixed_s43 — node 105, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_cmp_mcfixed.yaml \
+#   --episodes 1000000 \
+#   --num-envs 128 \
+#   --checkpoint-frequency 50000 \
+#   --log-interval 50 \
+#   --seed 43 \
+#   --device cuda:0 \
+#   --wandb-group return_mode_cmp --wandb-job-type prod \
+#   --wandb-name rppo_cmp_mcfixed_s43 --tag rppo_cmp_mcfixed_s43
+
+# Run 08: rppo_cmp_mcfixed_s44 — node 105, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_cmp_mcfixed.yaml \
+#   --episodes 1000000 \
+#   --num-envs 128 \
+#   --checkpoint-frequency 50000 \
+#   --log-interval 50 \
+#   --seed 44 \
+#   --device cuda:1 \
+#   --wandb-group return_mode_cmp --wandb-job-type prod \
+#   --wandb-name rppo_cmp_mcfixed_s44 --tag rppo_cmp_mcfixed_s44
+
+# Run 09: rppo_cmp_mcfixed_s45 — node 106, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_cmp_mcfixed.yaml \
+#   --episodes 1000000 \
+#   --num-envs 128 \
+#   --checkpoint-frequency 50000 \
+#   --log-interval 50 \
+#   --seed 45 \
+#   --device cuda:0 \
+#   --wandb-group return_mode_cmp --wandb-job-type prod \
+#   --wandb-name rppo_cmp_mcfixed_s45 --tag rppo_cmp_mcfixed_s45
+
+# Run 10: rppo_cmp_mcfixed_s46 — node 106, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_cmp_mcfixed.yaml \
+#   --episodes 1000000 \
+#   --num-envs 128 \
+#   --checkpoint-frequency 50000 \
+#   --log-interval 50 \
+#   --seed 46 \
+#   --device cuda:1 \
+#   --wandb-group return_mode_cmp --wandb-job-type prod \
+#   --wandb-name rppo_cmp_mcfixed_s46 --tag rppo_cmp_mcfixed_s46
+
+# Run 11: rppo_cmp_gae_s42 — node 107, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_cmp_gae.yaml \
+#   --episodes 1000000 \
+#   --num-envs 128 \
+#   --checkpoint-frequency 50000 \
+#   --log-interval 50 \
+#   --seed 42 \
+#   --device cuda:0 \
+#   --wandb-group return_mode_cmp --wandb-job-type prod \
+#   --wandb-name rppo_cmp_gae_s42 --tag rppo_cmp_gae_s42
+
+# Run 12: rppo_cmp_gae_s43 — node 107, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_cmp_gae.yaml \
+#   --episodes 1000000 \
+#   --num-envs 128 \
+#   --checkpoint-frequency 50000 \
+#   --log-interval 50 \
+#   --seed 43 \
+#   --device cuda:1 \
+#   --wandb-group return_mode_cmp --wandb-job-type prod \
+#   --wandb-name rppo_cmp_gae_s43 --tag rppo_cmp_gae_s43
+
+# Run 13: rppo_cmp_gae_s44 — node 108, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_cmp_gae.yaml \
+#   --episodes 1000000 \
+#   --num-envs 128 \
+#   --checkpoint-frequency 50000 \
+#   --log-interval 50 \
+#   --seed 44 \
+#   --device cuda:0 \
+#   --wandb-group return_mode_cmp --wandb-job-type prod \
+#   --wandb-name rppo_cmp_gae_s44 --tag rppo_cmp_gae_s44
+
+# Run 14: rppo_cmp_gae_s45 — node 108, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_cmp_gae.yaml \
+#   --episodes 1000000 \
+#   --num-envs 128 \
+#   --checkpoint-frequency 50000 \
+#   --log-interval 50 \
+#   --seed 45 \
+#   --device cuda:1 \
+#   --wandb-group return_mode_cmp --wandb-job-type prod \
+#   --wandb-name rppo_cmp_gae_s45 --tag rppo_cmp_gae_s45
+
+# Run 15: rppo_cmp_gae_s46 — node 109, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_cmp_gae.yaml \
+#   --episodes 1000000 \
+#   --num-envs 128 \
+#   --checkpoint-frequency 50000 \
+#   --log-interval 50 \
+#   --seed 46 \
+#   --device cuda:0 \
+#   --wandb-group return_mode_cmp --wandb-job-type prod \
+#   --wandb-name rppo_cmp_gae_s46 --tag rppo_cmp_gae_s46
+
+# ---------------------------------------------------------------------------
+# LAUNCH RECORD — all 15 verified live, exactly one PID per tag, 2026-09-03T16:48:20
+# Run  Tag                       Arm       Seed  Node:GPU  PID      WandB     Log
+# 1    rppo_cmp_mc_s42           mc        42    101:0     196840   rk3huayr  logs/20260903_163031.log
+# 2    rppo_cmp_mc_s43           mc        43    101:1     197637   x2jxkpq8  logs/20260903_163215.log
+# 3    rppo_cmp_mc_s44           mc        44    103:0     197326   4dnvtpqf  logs/20260903_163316.log
+# 4    rppo_cmp_mc_s45           mc        45    103:1     197912   9kjjj5t8  logs/20260903_163418.log
+# 5    rppo_cmp_mc_s46           mc        46    104:0     201684   mx8orfd1  logs/20260903_163519.log
+# 6    rppo_cmp_mcfixed_s42      mcfixed   42    104:1     202279   k7tu4ch0  logs/20260903_163621.log
+# 7    rppo_cmp_mcfixed_s43      mcfixed   43    105:0     199549   tifzlhcq  logs/20260903_163722.log
+# 8    rppo_cmp_mcfixed_s44      mcfixed   44    105:1     200169   0t83gfxv  logs/20260903_163824.log
+# 9    rppo_cmp_mcfixed_s45      mcfixed   45    106:0     4406     x6me4z6a  logs/20260903_163925.log
+# 10   rppo_cmp_mcfixed_s46      mcfixed   46    106:1     5704     kqjxkgwu  logs/20260903_164027.log
+# 11   rppo_cmp_gae_s42          gae       42    107:0     13718    g20s999t  logs/20260903_164128.log
+# 12   rppo_cmp_gae_s43          gae       43    107:1     14286    x36zqm96  logs/20260903_164229.log
+# 13   rppo_cmp_gae_s44          gae       44    108:0     4808     s1lpg7o8  logs/20260903_164330.log
+# 14   rppo_cmp_gae_s45          gae       45    108:1     5428     pwn54tw7  logs/20260903_164431.log
+# 15   rppo_cmp_gae_s46          gae       46    109:0     20183    0ghnqaly  logs/20260903_164534.log
+# ---------------------------------------------------------------------------
