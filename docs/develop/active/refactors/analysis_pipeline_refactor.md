@@ -3,8 +3,8 @@ title: A reusable analysis pipeline — one guarded scan instead of three
 topic: refactors
 status: active
 created: 2026-09-01
-last_updated: 2026-09-01
-revision: 3 — two Criticals from the second review fixed; one of them fixed in code, not deferred
+last_updated: 2026-09-04
+revision: 4 — resumed by the user 2026-09-04; round-3 review folded in; implementation under way
 ---
 
 # A reusable analysis pipeline
@@ -16,11 +16,16 @@ the URL first and pass it as `url`; publishing without it makes a separate artif
 
 ---
 
-## Status: parked, 2026-09-01 — not rejected, not scheduled
+## Status: IN PROGRESS, resumed 2026-09-04 by the user
 
-**Nothing in this plan has been built.** There is no `core/` package; the three programs still each
-reach into the store and re-implement the scan. What exists is this document, at revision 3, after
-two adversarial reviews that both returned NOT READY.
+**Resumed by explicit user decision on 2026-09-04**, not by one of the triggers below. The user was
+told nothing was built and asked for it to be implemented, step by step, with each step gated on
+reproducing every current published number. The triggers stay recorded because they are still the
+right test for *starting* this work; they simply were not what happened.
+
+Round 3 of review returned **SOUND WITH CONCERNS** — both round-2 Criticals verified genuinely
+closed, with no new Critical. Its findings are folded in below and its full text is in the Feedback
+section.
 
 It is parked because the case for doing it *now* got weaker while the case for writing it down got
 stronger. The refactor produces no new scientific result. The study it would have protected is
@@ -173,6 +178,18 @@ bypassed, a provision can — a callback is free to index raw arrays. The guaran
 > adjudicated change with a pre-declared expected diff. What must not happen is the gate being
 > renegotiated at porting time on numbers behind a published page.
 
+**The divergence register, populated.** Revision 3 defined this register and then left it empty,
+which is the same as not having one. Round 3 of review established that the register can only ever
+contain *provision* cells, and that there are exactly two — the asserts (contiguity, uniqueness,
+one-shard episodes, step count) either pass or fire on the data, so adopting one cannot move a
+number and cannot fight the gate. That is what actually confines the R2-1 contradiction rather than
+relocating it.
+
+| cell | why it diverges | decision |
+|---|---|---|
+| `build_time_course`, "the `t=0` row is not a step" | The t=0 point is **plotted**, and it carries finding 5's headline — the injury gap is largest at step 0, in 14 of 14 arms. Excluding it would delete the observation the figure exists to make. | **Not a divergence — by design.** Maps to `frame.initial`, which is a first-class accessor, not an escape. No register row needed beyond this one. |
+| `hiding_drivers.py:214`, per-step injury bins | Bins contemporaneously, and feeds the injury cross-tabs in `summary.json` that are published in the a01 document. | **Reproduce bug-for-bug, gate on the reproduction.** Adjudicate afterwards as its own change with a pre-declared expected diff — the same treatment the dose-response bug got, except that one was fixed before porting because nothing else depended on its old value. |
+
 **What the frame must actually expose.** Revision 2 named three accessors, which is not enough for
 two of the three sweeps — the review listed what is missing, and each is a real need in existing
 code:
@@ -218,6 +235,15 @@ Split by when each check can be true:
 Regenerating one product alone is then normal: it is written with a current stamp, and the next read
 that mixes it with a stale sibling fails loudly.
 
+**One tension this creates, settled before step 3.** Stamping a population into each product changes
+that product's bytes, which collides head-on with a gate built on byte-identity — and the predictable
+resolutions are both bad: drop the stamp (losing R2-2's flagship guard) or loosen the gate at the
+moment a port is trying to pass it. Neither happens. **During migration the stamp is written to a
+sidecar `<product>.provenance.json`, not into the product**, so the gated bytes are unchanged and the
+population check still runs at read time. Folding the stamp into the products themselves, if it is
+ever wanted, becomes its own adjudicated change with its own expected diff — after the port is
+proven, not during it.
+
 ### The manifest is keyed `(unit, seed)`
 
 The next study is a two-or-three-seed replication of the ladder. If the manifest maps one unit to one
@@ -238,6 +264,16 @@ GROUPS    = {"resolves_identity": lambda cfg: ...}
 
 **In:** `hiding_drivers.py`, `ladder/` (22 files). `hiding_drivers.py` is on the ladder's critical
 path — figures 6 and 7 read its CSVs — so it cannot be left behind.
+
+**A fourth scanner the earlier revisions missed.** `scripts/analysis/context_dependence.py` (236
+lines, written 2026-08-25) reads the store directly and writes `results/analysis/lad/<arm>_ctx.json`.
+Every revision of this plan has said "three programs"; there are four. It has no dependency-map row
+either. It is **out of scope for the port** — its outputs were built on the pass-1 population only
+and nothing in the ladder study reads them — but it is named here because it is the modulator
+study's tool and therefore the single likeliest first client of `core/`. Which makes it the honest
+test of whether this refactor was worth doing: if the next scanner is written against `core/` and
+gets all seven guards for free, the case is proven; if it is written by copying one of the existing
+four again, it was not.
 
 **Out, deliberately:** `scripts/analysis/figures/` (9 files) and `scripts/analysis/supplementary/`
 (19 files, not the 9 the dependency map claims — a separate correction that map owes). Both back the
@@ -268,12 +304,16 @@ The tiered criterion instead, fixed **before** any porting starts:
 |---|---|
 | integer-valued accumulators (0/1 sums, counts) | **bit-exact.** Order-independent, so exactness is free and any mismatch is a real bug. Tier membership is declared per output field in `core/provenance.py`, and the harness asserts `x == round(x)` on every tier-1 field, so a misclassification fails loudly instead of silently relaxing the gate |
 | float accumulators | `rtol = 1e-12`, pre-registered here, not chosen after seeing the diff |
-| figures | equality of the **plotted arrays**, not PNG bytes |
+| figures | **PNG md5.** Revision 3 said "equality of the plotted arrays", but no extraction mechanism for that exists in the code, and it is *weaker* than the page tier already demands: the page inlines the PNGs, so byte-identity of the page already requires byte-identity of every figure. The 15 PNGs are git-tracked, so the golden is free. A plotted-array diff is the diagnostic when a PNG differs, not the gate |
 | tables and the page | byte-identical (they are generated from the arrays) |
+| regression CSVs | **not gated numerically.** They carry p-values like `2.26e-212`, where a one-ulp change in z moves the value by ~10⁻⁹ relative, so no tolerance is meaningful. Gate `aggregate.npz` bit-exact instead; the CSVs follow from it deterministically, which was verified — identical npz gives byte-identical CSVs |
 
-**The baseline must be fresh.** The goldens currently on disk were produced before the second
-collection pass; the comparison must be old-code-run-today against new-code-run-today, on the same
-store. And the goldens must be protected: ported code writes to a scratch path, and **all three golden roots** are copied aside first —
+**The baseline must be fresh.** ~~The goldens currently on disk were produced before the second
+collection pass~~ — that was true when revision 3 was written and is **false now**: all fourteen arm
+JSONs stamp both store roots, 1,000,000 episodes, seeds 1,000,000–1,999,999. The requirement stands
+in the form that matters, and has been met: the comparison is old-code-run-today against
+new-code-run-today on the same store, verified by re-running `build_arm_data.py` and getting an
+md5-identical product. And the goldens must be protected: ported code writes to a scratch path, and **all three golden roots** are copied aside first —
 `results/analysis/ladder/`, `results/analysis/lad/` and `results/analysis/hiding_drivers/<tag>/` — it is gitignored, and cheap to regenerate, but the
 protocol should not rely on remembering that.
 
@@ -292,9 +332,33 @@ rather than a careful reading.
 ## Migration order
 
 1. Build `core/` alongside the existing code, changing nothing that runs.
-2. Regenerate the goldens with the **current** code, today, on the current store.
+1b. **The gate must exist and be shown to fail before anything is ported.** The order previously
+   assumed a comparison harness without ever creating one. `scripts/analysis/core/golden.py` is
+   that harness; it is negative-controlled in six directions (identical input reproduces; a count
+   off by one fails; a float outside `rtol` fails; the same float inside it passes; a count that
+   acquires a fractional part is a TIER BREAK; a manifest matching nothing refuses to run rather
+   than passing vacuously). *Done 2026-09-04, commit `0362a20b`.*
+1c. **A scratch output root must exist before a port can run.** `_ladder.OUT_ROOT` was a hardcoded
+   constant, so a port importing it would overwrite the live products and then compare the result
+   against what it had just written — a self-comparison, which passes for the same reason every
+   self-comparison passes. This was the single silent-failure mode in the whole order. `OUT_ROOT`
+   now reads `$LADDER_OUT_ROOT`, defaulting to the current path so nothing existing moves.
+2. **Capture and verify the goldens fresh** — not "regenerate", which contradicts the golden
+   directory's own README. The requirement is that today's code reproduce them, and that was
+   checked: `build_arm_data.py` re-run on `A_baseline` gives an md5-identical product, which also
+   establishes the sweep is deterministic. The 37 `.npz` — the actual gate objects for steps 3 and
+   4 — are hashed in place rather than copied, because they are 2.2 GB.
+2b. **Thirty-two golden entries are excluded from the gate**, because no current code reproduces
+   them and gating on them would manufacture 32 failures — which is exactly the noise one genuine
+   failure hides in. The 18 a01 `hiding_drivers/*.csv` predate commit `01fe5701` (a run today is a
+   strict row superset with every shared array bit-exact); the 14 `lad/<arm>_ctx.json` were built
+   on the pass-1 population only. The split is enforced by `--gate-manifest`, not merely
+   documented.
 3. Port `build_arm_data` → `core.scan`; compare against the golden under the tiered criterion.
-4. Port `build_time_course`, then `hiding_drivers`; same gate each time.
+4. Port `build_time_course`, then `hiding_drivers`; same gate each time. **`hiding_drivers.py`
+   short-circuits its entire scan whenever `aggregate.npz` already exists** (line 359), so a gate
+   run using the default cache path loads the old cache and verifies nothing about the scan. Every
+   run in this migration passes a scratch `--out` *and* a scratch `--cache`.
 5. Only once all three pass, retire the old implementations — but `hiding_drivers.py` is **kept**,
    not deleted: `supplementary/README.md` names it as the producer for the earlier study, so
    "reproduce as published" fails without it. Its port must also keep writing
@@ -412,3 +476,38 @@ redesign itself:
 Exit conditions are the two Criticals; both are plan edits.
 
 — plan-reviewer (round 2), 2026-09-01
+
+### Third review — revision 3 (2026-09-04, pre-implementation)
+
+**Verdict: SOUND WITH CONCERNS.** No Critical finding, so no round-3 section was added to
+`docs/reviews/plan_analysis_pipeline_refactor.md`; the full findings were returned inline to the
+implementing session. Both round-2 Criticals are genuinely closed: the previous-row fix
+(`c20ff5db`) dissolves the concrete instance of the guarantee-vs-gate contradiction, and the
+time-course goldens on disk were verified to carry the post-fix numbers (lowest/highest felt-pain
+quarter bush dwell 12.6–17.9% / 31.7–49.5%). The asserts-vs-provisions split confines the
+contradiction class: an assert either passes or fires on data and cannot move a number, so only the
+two remaining *provision* cells can — and both are already known (time-course t=0 is by design;
+`hiding_drivers.py:214` per-step injury bins are contemporaneous). The population contract's
+three-way split matches what `_ladder.load_time_course` already does.
+
+Concerns to resolve **before step 3** (all plan edits or one-off baseline work, none a rerun):
+
+1. The captured golden holds stale, unreproducible entries: the 18 a01 `hiding_drivers` CSVs
+   predate commit `01fe5701` (eight factors added the same evening) — a fresh run is a strict
+   row-superset with every shared array bit-exact — and the 14 `lad/<arm>_ctx.json` were built on
+   the pass-1 population only (single store root). Mark both sets non-gate or regenerate.
+2. The golden omits the 37 npz files (2.2 GB), which are the actual gate objects for steps 3–4: the
+   CSV tier is only decidable through a bit-exact `aggregate.npz` (p-values near 1e-212 make any
+   rtol meaningless), and the live npz are unprotected against a port that reuses the hardcoded
+   `_ladder.OUT_ROOT`. Add their md5s (or copy them) now.
+3. Stamping products at write time changes their bytes, which conflicts with the byte-identity
+   tiers; decide sidecar vs. subset-compare in one sentence.
+4. Insert a harness step (negative-controlled) and a scratch-output-root step before step 3; run
+   ported `hiding_drivers` with a scratch `--cache`, or the cache short-circuit gates nothing.
+5. Figure tier: gate on PNG bytes (git-tracked, verified reproducible) with plotted-array diff as
+   the diagnostic; the page tier already implies it.
+6. Populate the divergence register with its two known rows; refresh the stale prose (parked
+   status, "goldens predate pass 2", replication framing, artifact header, step-2 wording) and name
+   `scripts/analysis/context_dependence.py` — a fourth store scanner already on disk — in scope.
+
+— plan-reviewer (round 3), 2026-09-04

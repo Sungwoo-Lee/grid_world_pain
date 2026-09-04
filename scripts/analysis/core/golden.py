@@ -140,19 +140,40 @@ def main():
     ap.add_argument("golden", help="a golden .json/.csv file, or a directory of them")
     ap.add_argument("candidate", help="the matching file, or the directory the port wrote to")
     ap.add_argument("--quiet", action="store_true", help="only print the verdict line")
+    ap.add_argument("--gate-manifest", metavar="FILE",
+                    help="an md5sum-format manifest listing exactly which products are gated. "
+                         "Without it a directory comparison walks everything it finds, which "
+                         "silently re-includes products deliberately excluded from the gate -- and "
+                         "an expected failure is precisely the noise a real one hides in.")
     a = ap.parse_args()
 
     r = Result()
+    gated = None
+    if a.gate_manifest:
+        gated = set()
+        for line in open(a.gate_manifest):
+            line = line.strip()
+            if line:
+                gated.add(os.path.normpath(line.split(None, 1)[1]))
+        if not gated:
+            raise SystemExit(f"{a.gate_manifest} lists no products -- refusing to run a vacuous gate")
+
     if os.path.isdir(a.golden):
-        n = 0
+        n = skipped = 0
         for root, _, files in os.walk(a.golden):
             for f in sorted(files):
                 if not (f.endswith(".json") or f.endswith(".csv")) or f.startswith("_"):
                     continue
                 gp = os.path.join(root, f)
+                if gated is not None and os.path.normpath(gp) not in gated:
+                    skipped += 1
+                    continue
                 cp = os.path.join(a.candidate, os.path.relpath(gp, a.golden))
                 compare_file(gp, cp, r); n += 1
-        scope = f"{n} product(s)"
+        if gated is not None and n == 0:
+            raise SystemExit("the manifest matched no products under the golden root -- check the "
+                             "paths in it are relative to the repo root, as md5sum writes them")
+        scope = f"{n} gated product(s)" + (f", {skipped} excluded" if skipped else "")
     else:
         compare_file(a.golden, a.candidate, r)
         scope = os.path.basename(a.golden)

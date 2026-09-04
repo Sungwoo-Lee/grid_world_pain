@@ -28,7 +28,11 @@ RUN_ROOT   = "results/JAX_RecurrentPPO"
 # fresh seed base. Together they cover seeds 1,000,000 .. 1,999,999 with no gap and no overlap,
 # identically for all fourteen arms, so the paired design is exactly preserved.
 STORE_ROOTS = ["results/trajectories_lad", "results/trajectories_lad2"]
-OUT_ROOT   = "results/analysis/ladder"
+# Redirectable so a ported sweep can write somewhere else and be COMPARED against this one.
+# Without this the refactor's gate is unsound: a port that imports OUT_ROOT overwrites the live
+# products first and then "compares" the result against what it just wrote, which passes for the
+# same reason a self-comparison always passes. Default is unchanged, so nothing existing moves.
+OUT_ROOT   = os.environ.get("LADDER_OUT_ROOT", "results/analysis/ladder")
 FIG_ROOT   = "docs/experiments/active/sensor_ladder/figures"
 
 # Ladder order: sensory capability, poorest first. This is the reading order for every figure.
