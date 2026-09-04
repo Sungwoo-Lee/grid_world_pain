@@ -176,7 +176,7 @@ def slot_layout(cfg: dict) -> dict:
 def load_arm(arm: str) -> dict:
     p = f"{OUT_ROOT}/{arm}.json"
     if not os.path.exists(p):
-        raise SystemExit(f"{p} missing - run scripts/analysis/ladder/build_arm_data.py first")
+        raise SystemExit(f"{p} missing - run scripts/analysis/studies/sensor_ladder/collect_arm_data.py first")
     return json.load(open(p))
 
 
@@ -205,7 +205,7 @@ def proximity_effect(bush, tot, inj_bins=None):
     """How much more often the agent is in a bush when an animal is close than when it is far.
 
     Returned in percentage points. `bush` / `tot` are the (distance x injury) grids written by
-    build_arm_data.py. `inj_bins` restricts to some starting-wound quarters; None pools all four.
+    collect_arm_data.py. `inj_bins` restricts to some starting-wound quarters; None pools all four.
     A pooled contrast is NOT the same as an average of the four - the quarters carry different
     step counts - so this pools counts, not rates.
     """
@@ -311,7 +311,7 @@ GROUP_LABEL = {True: "sight resolves WHAT it sees  (range 2, 8 appearance channe
 
 
 def load_time_course(require=("injury", "noci", "bush", "nutrition", "ate", "n")) -> dict:
-    """The per-arm step-by-step sweeps written by build_time_course.py.
+    """The per-arm step-by-step sweeps written by collect_time_course.py.
 
     This docstring used to CLAIM it checked the files were built from the same episode population
     and from the same schema, while the code only checked they existed. A reviewer caught the gap
@@ -329,12 +329,12 @@ def load_time_course(require=("injury", "noci", "bush", "nutrition", "ate", "n")
     for arm in ARM_ORDER:
         p = f"{OUT_ROOT}/time_course_{arm}.json"
         if not os.path.exists(p):
-            raise SystemExit(f"{p} missing - run scripts/analysis/ladder/build_time_course.py")
+            raise SystemExit(f"{p} missing - run scripts/analysis/studies/sensor_ladder/collect_time_course.py.py")
         d = json.load(open(p))
         missing = [k for k in require if k not in d]
         if missing:
             raise SystemExit(f"{p} was written by an older sweep - missing {missing}. "
-                             f"Re-run build_time_course.py for every arm, not just the new ones.")
+                             f"Re-run collect_time_course.py for every arm, not just the new ones.")
         out[arm] = d
         sizes[arm] = int(np.asarray(d["n"], float)[:, 0].sum())
     if len(set(sizes.values())) != 1:

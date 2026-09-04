@@ -158,6 +158,6 @@ if TC:
         n = np.asarray(TC[a]["nutrition"], float)[3, :100] - np.asarray(TC[a]["nutrition"], float)[0, :100]
         w(f"| `{a}` | {b.max():+.2f} | {int(np.argmax(b))} | {b[60]:+.2f} | {n.min():+.1f} |")
 else:
-    w("_(run build_time_course.py to generate this table)_")
+    w("_(run collect_time_course.py to generate this table)_")
 
 print("\n".join(out))

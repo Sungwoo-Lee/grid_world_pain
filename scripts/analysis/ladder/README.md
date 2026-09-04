@@ -16,8 +16,8 @@ difference between them is the sensor change and nothing else.
 |---|---|
 | `_ladder.py` | arm list, arm labels, which arm is a single-variable step from which, bin edges, store discovery |
 | `_plot.py` | the house figure style, and the four layout rules every figure obeys |
-| `build_arm_data.py` | the main sweep of the parquet stores; writes `results/analysis/ladder/<arm>.json` + `<arm>_episodes.npz` |
-| `build_time_course.py` | a second, step-by-step sweep for Figure 9; writes `time_course.json` |
+| `../studies/sensor_ladder/collect_arm_data.py` | the main sweep, now on `core/scan`; writes `results/analysis/ladder/<arm>.json` + `<arm>_episodes.npz` |
+| `../studies/sensor_ladder/collect_time_course.py` | a second, step-by-step sweep for Figure 9; writes `time_course_<arm>.json` |
 | `lad01…lad15_*.py` | one figure each — question, method, and plot, all in the one file. The number in the filename IS the figure number in the report |
 | `make_report_tables.py` | every numeric table in the report, as markdown |
 | `build_artifact.py` | assembles the shareable HTML page from the template + real figures + generated tables |
@@ -27,8 +27,8 @@ difference between them is the sensor change and nothing else.
 
 ```bash
 P=/home/vncuser/miniconda3/envs/grid_world_pain/bin/python
-$P scripts/analysis/ladder/build_arm_data.py       # ~60-95 s per arm, 14 arms
-$P scripts/analysis/ladder/build_time_course.py    # ~20 s per arm
+$P scripts/analysis/studies/sensor_ladder/collect_arm_data.py     # ~60-95 s per arm, 14 arms
+$P scripts/analysis/studies/sensor_ladder/collect_time_course.py  # ~2.5 min per arm
 $P scripts/analysis/ladder/run_all.py              # seconds
 $P scripts/analysis/ladder/make_report_tables.py   # the report's tables
 $P scripts/analysis/ladder/build_artifact.py       # the HTML page

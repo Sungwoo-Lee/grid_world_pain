@@ -1,6 +1,6 @@
 """Rebuild every sensor-ladder figure from the per-arm data, in order.
 
-Assumes build_arm_data.py has already written results/analysis/ladder/<arm>.json for all fourteen
+Assumes collect_arm_data.py has already written results/analysis/ladder/<arm>.json for all fourteen
 arms. Each figure script is independent and can be run on its own; this only saves typing.
 """
 import glob, os, runpy, sys, time
