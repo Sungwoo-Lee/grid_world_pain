@@ -156,21 +156,18 @@ def sensory_summary(cfg: dict) -> dict:
 
 
 def slot_layout(cfg: dict) -> dict:
-    """Which entity / obstacle / resource slots are what, derived from the run's own config."""
-    env = cfg["environment"]
-    pred, neu, s = [], [], 0
-    for e in env["entities"]:
-        n = e["count_high"]
-        (pred if e["class"] == "predator" else neu).extend(range(s, s + n)); s += n
-    bush, rock, s = [], [], 0
-    for o in env["obstacles"]:
-        n = o["count_high"]
-        (bush if o.get("hides_agent") else rock).extend(range(s, s + n)); s += n
-    food, amb, s = [], [], 0
-    for r in env["resources"]:
-        n = r["count_high"]
-        (amb if max(r.get("damage", [0, 0])) > 0 else food).extend(range(s, s + n)); s += n
-    return dict(pred=pred, neutral=neu, bush=bush, rock=rock, food=food, ambush=amb)
+    """Delegates to `core/env.slot_layout`. Kept as a name, not as an implementation.
+
+    The ported sweeps call core directly; this had no callers left after the port, which made it a
+    fourth copy of a helper the refactor exists to have one of. Deleting it outright would break any
+    caller added later against the old name, so it forwards instead.
+    """
+    import os as _os, sys as _sys
+    _core = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "core")
+    if _core not in _sys.path:
+        _sys.path.insert(0, _core)
+    from env import slot_layout as _impl
+    return _impl(cfg)
 
 
 def load_arm(arm: str) -> dict:
