@@ -488,6 +488,31 @@ reporting the elements whose text cannot wrap. Media queries still see 500 px, s
 checks the one thing it can check honestly: does the document overflow its own width. Do not treat a
 clean 500 px pass as evidence about phones.
 
+### F26 — a UA-default `<sup>` or `<sub>` widens the line box it sits in
+
+**Saw:** one line inside a three-paragraph callout sat 4-5 px lower than every other line, wherever
+the prose carried an exponent. Measured line pitch in that paragraph read `[24, 28, 25]` against a
+24.3 px line-height.
+
+**Cause:** the page declared no `sup` rule, so the browser default applied — `vertical-align: super`
+with `font-size: smaller` and a non-zero line-height. A raised inline box with its own line-height
+**grows the line it sits on**, so the text around it is pushed apart.
+
+**Why neither review method finds it:** there is no rule to read. The markup is correct and the
+defect is the *absence* of a declaration, so source review sees nothing wrong; and nothing overlaps,
+clips or overflows, so the geometry checker stays silent. Only measuring line pitch, or looking
+closely at the render, shows it.
+
+**Rule:** any page using `<sup>` or `<sub>` declares them explicitly —
+`sup,sub{font-size:.72em;line-height:0;vertical-align:baseline;position:relative}` with
+`top:-.5em` / `top:.25em`. `line-height:0` is the load-bearing part: it stops the raised box
+contributing to the line box at all.
+
+**Verifying a fix:** collect the line rectangles across the paragraph with `Range.getClientRects()`
+and require every gap to equal the line-height. Filter out sub-pixel rect boundaries first — a naive
+version of this check reports 1-2 px "pitches" that are rect edges rather than lines, and those
+false positives will hide the real 4 px one.
+
 ## Related
 
 - [`artifact_generation_guide`](artifact_generation_guide.md) — the wider guide: content, claims,

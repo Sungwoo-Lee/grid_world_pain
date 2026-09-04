@@ -57,8 +57,12 @@ h2{font-family:var(--serif);font-weight:600;font-size:clamp(25px,3.2vw,31px);lin
 h3{font-family:var(--serif);font-weight:600;font-size:20px;margin:38px 0 6px;letter-spacing:-.01em}
 p{margin:0 0 17px}
 a{color:var(--core)}
-code{font-family:var(--mono);font-size:.85em;background:var(--rule-2);padding:1px 5px;
+code{font-family:var(--mono);font-size:.85em;background:var(--rule-2);padding:1px 3px;
   border-radius:4px;overflow-wrap:anywhere}
+/* Without an author rule the UA gives <sup> vertical-align:super and a non-zero line-height, so a
+   raised inline box GROWS the line it sits on and that one line sits 4-5px lower than its
+   neighbours. line-height:0 is the part that stops it contributing. */
+sup{font-size:.72em;line-height:0;vertical-align:baseline;position:relative;top:-.5em}
 ul,ol{margin:0 0 17px;padding-left:21px}
 li{margin-bottom:8px}
 figure{margin:34px 0}
@@ -98,9 +102,16 @@ pre{background:var(--card);border:1px solid var(--rule);border-radius:4px;paddin
    scroll it silently -- 99 characters is the longest excerpt on the page. */
 @media (max-width:1000px){ .col pre{font-size:11.5px} }
 pre code{background:none;padding:0;font-size:inherit}
-.scroll{overflow-x:auto}
-table{border-collapse:collapse;width:100%;font-size:13.5px;font-variant-numeric:tabular-nums}
-caption{caption-side:top;text-align:left;padding:0 0 10px;font-size:13.5px;color:var(--muted)}
+.scroll{overflow-x:auto;margin:0 0 17px}
+table{border-collapse:collapse;width:max-content;min-width:100%;font-size:13.5px;
+  font-variant-numeric:tabular-nums}
+/* Numeric columns right-align, header included: with one-digit values nothing drifts today, but a
+   left-aligned numeric column starts every value at the same left edge, so the first two-digit
+   entry moves the digits out of line. */
+td.num,th.num{text-align:right}
+/* The caption lives OUTSIDE the scroll box, as a sibling: inside it, a table wide enough to scroll
+   drags its own caption out of view (register F4). */
+.tcap{padding:0 0 10px;font-size:13.5px;color:var(--muted);margin:0}
 th,td{padding:7px 12px;text-align:left;border-bottom:1px solid var(--rule-2);vertical-align:top}
 thead th{font-weight:600;font-size:12px;color:var(--muted);border-bottom:1px solid var(--rule)}
 td.y{color:var(--core);font-weight:600}
@@ -131,7 +142,8 @@ pre.tight{margin-top:12px}
   <h1>Analysis Pipeline Layout</h1>
   <p class="standfirst">How a trajectory store becomes a published figure, one stage at a time
   &mdash; every script named by its real path, with the code that does the work. This describes the
-  pipeline as it exists and runs today, not a proposal.</p>
+  pipeline as it exists and runs today. As of 5 September 2026 that includes the shared scan: the
+  three programs that each re-implemented the shard loop now run on one.</p>
 </header>
 
 <section class="col">
@@ -147,16 +159,18 @@ never touch the slow stage.</strong></p>
 can open any of them and find what you see here.</p>
 
 <div class="note">
-<h4>What this page is not</h4>
-<p>An earlier version of this page argued for <em>reorganising</em> this code &mdash; replacing the
-three separate store-reading programs with one shared scan. That refactor was reviewed twice and
-then <strong>parked</strong>, and <strong>none of it is built</strong>: there is no <code>core/</code>
-package and the three programs still each read the store themselves. The argument, its costed plan,
-and the conditions that would restart it live in
-<code>docs/develop/active/refactors/analysis_pipeline_refactor.md</code>.</p>
-<p>This page now describes what actually exists, because that is what you need in order to run it,
-read it, or add to it. The duplication is still real and is described honestly at the end, but it is
-a footnote here rather than the argument.</p>
+<h4>This page has been wrong twice, in opposite directions</h4>
+<p>Its first version argued for <em>reorganising</em> this code. Its second version described the
+code as it stood and said the reorganisation was parked and unbuilt. On 5 September 2026 the
+refactor was resumed and <strong>completed</strong>, so this third version documents the shared
+scan as a thing that exists. If a claim here looks stale, the tree wins &mdash; every path, line
+count and excerpt below was read from it.</p>
+<p><strong>What was required before any of it shipped.</strong> Each ported sweep had to reproduce
+the pipeline it replaced, checked mechanically rather than by reading: integer fields bit-exact,
+floats inside a tolerance fixed <em>before</em> porting began. All three passed on all fourteen
+arms, and all fifteen figures came back byte-identical &mdash; then the originals were deleted and
+the figures were checked again, because "the port is complete" has to mean nothing downstream
+noticed.</p>
 </div>
 </section>
 
@@ -188,17 +202,17 @@ a footnote here rather than the argument.</p>
 
   <!-- sweeps -->
   <rect x="200" y="62"  width="244" height="74" rx="4" fill="var(--warn-soft)" stroke="var(--warn)"/>
-  <text x="214" y="86"  font-size="11.5" fill="var(--ink)" font-family="monospace">build_arm_data.py</text>
+  <text x="214" y="86"  font-size="11.5" fill="var(--ink)" font-family="monospace">collect_arm_data.py</text>
   <text x="214" y="104" font-size="10" fill="var(--ink-2)">per-episode + per-step aggregates</text>
   <text x="214" y="121" font-size="10" fill="var(--warn)">~60-95 s per arm</text>
 
   <rect x="200" y="173" width="244" height="74" rx="4" fill="var(--warn-soft)" stroke="var(--warn)"/>
-  <text x="214" y="197" font-size="11.5" fill="var(--ink)" font-family="monospace">build_time_course.py</text>
+  <text x="214" y="197" font-size="11.5" fill="var(--ink)" font-family="monospace">collect_time_course.py</text>
   <text x="214" y="215" font-size="10" fill="var(--ink-2)">step-by-step after waking wounded</text>
   <text x="214" y="232" font-size="10" fill="var(--warn)">~4 min per arm</text>
 
   <rect x="200" y="284" width="244" height="74" rx="4" fill="var(--warn-soft)" stroke="var(--warn)"/>
-  <text x="214" y="308" font-size="11.5" fill="var(--ink)" font-family="monospace">hiding_drivers.py</text>
+  <text x="214" y="308" font-size="11.5" fill="var(--ink)" font-family="monospace">collect_hiding_drivers.py</text>
   <text x="214" y="326" font-size="10" fill="var(--ink-2)">episode-level regressions</text>
   <text x="214" y="343" font-size="10" fill="var(--warn)">minutes per arm</text>
 
@@ -284,96 +298,120 @@ is not at risk.</p>
 </div>
 
 <div class="stage">
-<h3>2 &middot; The sweeps &mdash; the only code that opens the store</h3>
-<p class="pathrow">scripts/analysis/ladder/build_arm_data.py &nbsp;&middot;&nbsp; 235 lines</p>
-<p class="meta">one arm's store &rarr; results/analysis/ladder/&lt;arm&gt;.json &middot; ~60-95 s per arm</p>
-<p>Walks every shard once, and accumulates everything the fifteen figures will later need into
-counter arrays. The whole method is two NumPy primitives: <code>reduceat</code> to sum within an
-episode, and <code>add.at</code> to scatter into a bin.</p>
-<pre class="tight"><code>red = lambda a: np.add.reduceat(a, st)
+<h3>2 &middot; The scan &mdash; one loop, every guard, for all three sweeps</h3>
+<p class="pathrow">scripts/analysis/core/store.py &nbsp;&middot;&nbsp; 107 lines &nbsp;|&nbsp; scripts/analysis/core/scan.py &nbsp;&middot;&nbsp; 119 lines</p>
+<p class="meta">the only code that opens the store &middot; asserts what must be true of it</p>
+<p>Until 5 September 2026 there were three shard loops here, written months apart, each carrying a
+different subset of the same safety checks. Of twenty applicable check-cells across them, ten were
+empty &mdash; and <em>all three</em> bugs this analysis has actually hit sat in an empty cell. None
+of them raised. A third of episodes with no predator filed into the comparison group, a rebuild
+running on stale data, and a dose-response reading its predictor from the wrong row all produced
+figures that looked entirely fine.</p>
+<p><code>store.py</code> asserts what can be checked before scanning &mdash; that the collection
+passes form one contiguous, duplicate-free seed range:</p>
+<pre class="tight"><code>        if span != self.n_episodes or len(np.unique(self.seeds)) != self.n_episodes:
+            raise SystemExit(
+                f"the {len(self.roots)} collection pass(es) do not form one contiguous seed range: "
+                f"{self.n_episodes:,} episodes spanning {self.seeds.min():,}..{self.seeds.max():,} "
+                f"({span:,} seeds). A gap or an overlap means the population is not what the "
+                f"analysis will report it to be.")</code></pre>
+<p><code>scan.py</code> owns the loop and hands each shard to the study as a validated frame. The
+distinction it draws is the whole design:</p>
+<pre class="tight"><code>            raise SystemExit(f"{path}: episodes are not shard-aligned - an episode's rows are split "
+                             f"across shard files, so any per-episode sum here is partial")
+        ends = np.append(self.initial[1:], self.n)
+        self.estart = np.repeat(self.initial, ends - self.initial)   # first row of MY episode
 
-np.add.at(G["pd_bush"], (dpb[hp], ib[hp]), y[hp])
-np.add.at(G["pd_tot"],  (dpb[hp], ib[hp]), 1.0)
-np.add.at(G["dw_inj"], ib, y);   np.add.at(G["dwt_inj"], ib, 1.0)</code></pre>
-<p>Every quantity is stored as a <strong>pair</strong> &mdash; a numerator and its denominator,
-never a precomputed rate. That is what lets a figure choose its own grouping later without going
-back to the store, and it is why <code>_ladder.rate()</code> exists downstream.</p>
+        row = np.arange(self.n)
+        self.is_step = row &gt; self.estart                # excludes every reset row
+        self.prev = row[self.is_step] - 1               # the row the action was chosen on
+        self.step_rows = row[self.is_step]
+        self.episode_of_step = self.episode_id[self.is_step]
+        self.steps_per_episode = np.diff(np.append(self.initial, self.n)) - 1
 
-<p class="pathrow" style="margin-top:26px">scripts/analysis/ladder/build_time_course.py &nbsp;&middot;&nbsp; 133 lines</p>
-<p class="meta">one arm's store &rarr; results/analysis/ladder/time_course_&lt;arm&gt;.json &middot; ~4 min per arm</p>
-<p>A second sweep, kept separate because it asks a different shape of question: not "what happened
-in this episode" but "what happened at step <em>t</em>, averaged over episodes". It also
-reconstructs the agent's felt nociception, which the store does not record as a column.</p>
-<pre class="tight"><code>def sweep(arm: str) -&gt; dict:
-    kernel = nociception_kernel(L.arm_config(L.arm_runs()[arm]))
-    stores = L.arm_stores(arm)
-    ep = pq.read_table(L.store_files(stores, "episodes"), columns=["episode_seed"])
-    sd0 = ep.column("episode_seed").to_numpy()
-    o = np.argsort(sd0); seed0 = int(sd0[o][0]); nep = len(o)
-    acc = {k: np.zeros((4, MAXT)) for k in ["injury", "noci", "bush", "nutrition", "ate", "n"]}
-    # bush dwell against the PERCEIVED signal, on the same 0-25-50-75-100 bins as the injury level
-    dose = {"bush": np.zeros(4), "n": np.zeros(4)}</code></pre>
+    def raw(self, name: str, dtype=np.float64) -&gt; np.ndarray:
+        """The column as stored, with no convention applied. Deliberately conspicuous."""</code></pre>
+<p><strong>Asserts are properties of the data</strong> &mdash; shard alignment, seed contiguity, the
+step-count cross-check. They cannot be bypassed and they cannot move a number: they either pass or
+they fire. <strong>Provisions are conventions</strong> &mdash; <code>is_step</code>,
+<code>prev</code>, <code>initial</code>. A callback is free to ignore them and index the raw arrays,
+so the guarantee they offer is auditable rather than structural. <code>frame.raw()</code> is the
+deliberately conspicuous way to do that, and the plan counts its uses per sweep so a port that
+starts bypassing the driver becomes visible.</p>
 
-<p class="pathrow" style="margin-top:26px">scripts/analysis/hiding_drivers.py &nbsp;&middot;&nbsp; 387 lines</p>
-<p class="meta">one arm's store &rarr; results/analysis/lad/&lt;arm&gt;/multivariate.csv &middot; minutes per arm</p>
-<p>The third and oldest sweep. It fits regressions rather than filling counter arrays, so it needs
-one row per episode rather than aggregates, and it is the only stage that pulls in
-<code>statsmodels</code>.</p>
-<pre class="tight"><code>def fit_glms(D: dict, out_dir: str):
-    import pandas as pd, statsmodels.api as sm
-    from scipy import stats
-    L, Y = D["n_steps"], D["bush_steps"]
-    ns = np.maximum(L, 1)
-    EXO = {"start_injury": D["inj0"], "start_nutrition": D["nut0"],
-           "n_predators": D["n_pred"], "n_rabbits": D["n_rab"], "n_bushes": D["n_bush"],
-           "n_rocks": D["n_rock"], "n_food": D["n_food"], "n_ambush_predators": D["n_ambush"],
-           "spawn_dist_to_bush": D["d_bush0"]}</code></pre>
-<p>Its output path is load-bearing: <code>lad06_world_factor_map.py</code> decides which arms to
-draw by checking whether that CSV exists, so moving it would silently thin a published figure
-instead of raising an error.</p>
+<p class="pathrow" style="margin-top:26px">scripts/analysis/studies/sensor_ladder/collect_arm_data.py &nbsp;&middot;&nbsp; 185 lines</p>
+<p class="meta">one arm&rsquo;s store &rarr; results/analysis/ladder/&lt;arm&gt;.json &middot; ~60 s per arm</p>
+<p>A study now supplies only its own arithmetic. The callback is ordinary NumPy in the study&rsquo;s
+own folder, and the bookkeeping it used to carry is gone:</p>
+<pre class="tight"><code>    def collect(fr, acc, fi):
+        gi, gidx = fr.episode_id, fr.episodes
+        bu = fr.raw("agent_in_bush"); inj = fr.raw("injury_level"); nut = fr.raw("nutrition")
+        ar, ac = fr.raw("agent_row"), fr.raw("agent_col")
+        anr = fr.list_raw("animal_row", na).astype(np.float64)
+        anc = fr.list_raw("animal_col", na).astype(np.float64)
+
+        E["inj0"][gidx] = fr.at_initial(inj); E["nut0"][gidx] = fr.at_initial(nut)
+        E["n_steps"][gidx] += fr.steps_per_episode
+        E["bush_steps"][gidx] += fr.per_episode_sum(bu)
+        E["dmg"][gidx] += fr.per_episode_sum_with_initial(fr.raw("damage"))
+        E["n_ate"][gidx] += fr.per_episode_sum_with_initial(fr.raw("ate_food"))</code></pre>
+<p>Two conventions here are preserved rather than tidied, because tidying them would move published
+numbers: bush steps exclude the reset row while damage and eating include it &mdash; both forms are
+asked for explicitly at the call site rather than hidden in one default &mdash; and the odour
+quartile edges come from the first shard only.</p>
+
+<p class="pathrow" style="margin-top:26px">&hellip;/collect_time_course.py &nbsp;&middot;&nbsp; 99 lines &nbsp;|&nbsp; &hellip;/collect_hiding_drivers.py &nbsp;&middot;&nbsp; 157 lines</p>
+<p class="meta">the step-by-step sweep, and the episode-level regressions</p>
+<p>The time-course sweep asks a different shape of question &mdash; what happened at step <em>t</em>,
+averaged over episodes &mdash; and reconstructs the agent&rsquo;s <em>felt</em> nociception, which the
+store never records. The factor sweep fits regressions and so needs one row per episode.</p>
+<p>The factor sweep does <strong>not</strong> replace <code>scripts/analysis/hiding_drivers.py</code>
+(387 lines), which stays: the earlier study&rsquo;s README names it as that study&rsquo;s producer, and
+<code>lad06</code> decides which arms to draw by checking whether its CSV exists. It also reproduces
+that script&rsquo;s <em>contemporaneous</em> injury binning bug-for-bug &mdash; every other predictor
+in this analysis comes from the previous row, that one does not, and it feeds published cross-tabs.
+Correcting it inside a refactor would move a published number under cover of a cleanup, so it is
+registered as its own adjudicated change instead.</p>
 </div>
 
 <div class="stage">
-<h3>3 &middot; Shared plumbing &mdash; imported by everything downstream</h3>
-<p class="pathrow">scripts/analysis/ladder/_ladder.py &nbsp;&middot;&nbsp; 380 lines</p>
-<p class="meta">arm order, config reading, store finding, loaders, and the rate helper</p>
-<p>The module every figure starts with. Its most-used three functions are small enough to quote
-whole, and they set the pattern: <strong>fail loudly and say what to run</strong>, rather than
-returning something empty.</p>
-<pre class="tight"><code>def load_arm(arm: str) -&gt; dict:
-    p = f"{OUT_ROOT}/{arm}.json"
-    if not os.path.exists(p):
-        raise SystemExit(f"{p} missing - run scripts/analysis/ladder/build_arm_data.py first")
-    return json.load(open(p))
-
-
-def load_all() -&gt; dict[str, dict]:
-    return {a: load_arm(a) for a in ARM_ORDER}
-
-
-def rate(bush, tot):
-    """Percentage, NaN where the cell has too little support to mean anything."""</code></pre>
-<p>It also holds <code>arm_stores()</code>, which resolves an arm name to its two store
-directories, <code>arm_config()</code>, which reads the config the trainer saved beside the
-checkpoints rather than the one in the repo, and <code>load_time_course()</code>, which refuses to
-return data if the fourteen per-arm files disagree with each other about the population.</p>
-
-<p class="pathrow" style="margin-top:26px">scripts/analysis/ladder/_plot.py &nbsp;&middot;&nbsp; 198 lines</p>
-<p class="meta">house style: one meaning per colour, and label placement that is checked rather than hoped for</p>
-<p class="pre-cap">Its whole public surface. Unlike every other excerpt on this page these lines
-are <em>gathered</em> from across the file rather than copied as one contiguous run &mdash; each
-<code>def</code> is verbatim, but they are not adjacent in the source.</p>
-<pre class="tight"><code>def arm_colors(arms=None):
-def finish(fig, path, tight=True):
-def hbar_axis(ax, arms, values, colors, xlabel, note=None):
-def label_points(ax, xs, ys, labels, colors, min_gap=0.052, dx=0.035, fontsize=7.2):
-def group_lines(ax, x, curves: dict, grp: dict, spotlight=(), lw_thin=0.9, lw_bold=2.5,
-                label_end=False, alpha=0.30):
-def stagger_end_labels(ax, points, min_gap_frac=0.055):
-def assert_labels_fit(fig, axes, slack=1.04):</code></pre>
-<p>The last one is the interesting one. Matplotlib will happily draw a label off the edge of the
-figure and report success, so <code>assert_labels_fit</code> turns that into a build failure.</p>
+<h3>3 &middot; Shared code &mdash; imported by everything downstream</h3>
+<p class="pathrow">scripts/analysis/core/env.py &nbsp;&middot;&nbsp; 96 lines</p>
+<p class="meta">everything derived from a run&rsquo;s saved config</p>
+<p>Five helpers that existed in three copies each. Every copy had drifted <em>textually</em>, which
+sounds alarming until you ask the question that decides whether merging is safe, which is
+behavioural:</p>
+<p class="tcap">Measured on real configs before anything was merged</p>
+<div class="scroll">
+<table>
+  <thead><tr><th>helper</th><th class="num">copies</th><th class="num">distinct texts</th><th class="num">distinct results</th></tr></thead>
+  <tbody>
+    <tr><td><code>smell_channels</code></td><td class="num">3</td><td class="num">3</td><td class="y num">1</td></tr>
+    <tr><td><code>nociception_kernel</code></td><td class="num">2</td><td class="num">2</td><td class="y num">1</td></tr>
+    <tr><td><code>listcol</code></td><td class="num">3</td><td class="num">3</td><td class="y num">1</td></tr>
+    <tr><td><code>slot_layout</code></td><td class="num">3</td><td class="num">3</td><td class="n num">3</td></tr>
+  </tbody>
+</table>
 </div>
+<p>Three were safe to merge as written. <code>slot_layout</code> genuinely differed &mdash; and the
+difference is the kind that looks alarming and is not: all three agree on every slot list any caller
+reads, and differ only in whether they <em>also</em> return three convenience counts. So
+<code>core</code> returns the superset, which is safe only because no caller iterates the dict. That
+was checked across all four call sites rather than assumed; a caller that iterated would silently
+have gained keys.</p>
+<p>Equivalence was proven, not asserted: 112 comparisons across all fourteen arms with zero
+mismatches, plus <code>listcol</code> and the nociception reconstruction on 870,172 real step rows,
+bit-exact against every existing copy.</p>
+
+<p class="pathrow" style="margin-top:26px">scripts/analysis/ladder/_ladder.py &nbsp;&middot;&nbsp; 385 lines &nbsp;|&nbsp; scripts/analysis/ladder/_plot.py &nbsp;&middot;&nbsp; 198 lines</p>
+<p class="meta">study facts &mdash; arm order, bin edges, run paths &mdash; and the house plotting style</p>
+<p><code>_ladder</code> holds what is true of <em>this study</em> rather than of stores in general:
+the fourteen arms in reading order, the bin edges, which run directory each arm maps to. Its loaders
+fail loudly and name the script to run rather than returning something empty.
+<code>_plot</code> holds the house style, including <code>assert_labels_fit</code>, which turns
+Matplotlib&rsquo;s willingness to draw a label off the edge of a figure into a build failure.</p>
+</div>
+
 <div class="stage">
 <h3>4 &middot; The figures &mdash; one script per figure, named for its number</h3>
 <p class="pathrow">scripts/analysis/ladder/lad01_ladder_overview.py &hellip; lad15_price_of_hiding.py</p>
@@ -439,8 +477,8 @@ needed when the store changes; the rest take seconds.</p>
 <pre><code>P=/home/vncuser/miniconda3/envs/grid_world_pain/bin/python
 
 # stage 2 - slow, only when the store changes
-$P scripts/analysis/ladder/build_arm_data.py       # ~60-95 s per arm, 14 arms
-$P scripts/analysis/ladder/build_time_course.py    # ~4 min per arm, 14 arms
+$P scripts/analysis/studies/sensor_ladder/collect_arm_data.py     # ~60 s per arm, 14 arms
+$P scripts/analysis/studies/sensor_ladder/collect_time_course.py  # ~2.5 min per arm, 14 arms
 
 # stages 4 and 5 - seconds
 $P scripts/analysis/ladder/run_all.py              # all fifteen figures
@@ -481,37 +519,50 @@ and it is worth checking first.</p>
 </section>
 
 <section class="col">
-<h2>The wart, stated plainly</h2>
-<p>Stages 3, 4 and 5 share code. Stage 2 does not. The three sweeps were written months apart and
-each re-implements the same scan, so several helpers exist in more than one copy:
-<code>slot_layout</code> three times, <code>smell_channels</code> three times, <code>listcol</code>
-three times, <code>nociception_kernel</code> twice, and the store finder three times &mdash; and
-those copies have already drifted, one handling a single store root and the others several.</p>
-<p>They also carry different subsets of the same safety checks. Nothing forces them to agree, and
-they do not: of the twenty applicable cells, ten are still empty.</p>
+<h2>What the refactor fixed, and what it did not</h2>
+<p>Within the ladder&rsquo;s path there is now one shard loop, one set of config helpers, one
+population contract. The three sweeps that each carried a different subset of the same guards now
+share all of them, and <code>build_arm_data.py</code> and <code>build_time_course.py</code> no longer
+exist.</p>
 
-<div class="callout fix">
-<h4>Why this matters more than ordinary duplication</h4>
-<p>Every one of these checks exists because getting it wrong produces a <strong>plausible wrong
-number rather than an error</strong>. Three bugs in this pipeline have been of exactly that kind: a
-third of episodes with no predator being binned into the comparison group; a rebuild silently
-running on stale data because nothing cross-checked the population; and a dose-response reading its
-predictor from the wrong row. All three produced figures that looked fine.</p>
-<p>None was caught by a test. Two were caught by review and one by a reader noticing a number that
-could not be right.</p>
+<div class="callout">
+<h4>The gate, because &ldquo;it should be equivalent&rdquo; is not evidence</h4>
+<p>Nothing was deleted on the strength of a careful reading. Each ported sweep had to reproduce the
+one it replaced, checked mechanically against a snapshot taken before any code moved: integer-valued
+fields bit-exact, floats inside a tolerance <em>pre-registered in the source</em> rather than chosen
+after seeing a diff. Tier membership is decided by the data, so a field that failed could not be
+quietly reclassified into a looser tier.</p>
+<p>The arm sweep reproduced 14 of 14 arms in both its JSON and its per-episode arrays; the
+time-course sweep 14 of 14; the factor sweep&rsquo;s 43 arrays exactly. All fifteen figures
+regenerated from ported data came back <strong>byte-identical</strong> &mdash; and after the
+originals were deleted they were regenerated and checked again, because &ldquo;the port is
+complete&rdquo; has to mean nothing downstream noticed the swap.</p>
+<p>The gate itself was negative-controlled before being trusted: a count off by one fails, a float
+nudged one part in 10<sup>11</sup> fails, the same float nudged one part in 10<sup>14</sup> passes, a
+count that acquires a fractional part is caught as a tier break, and a manifest matching nothing
+refuses to run rather than passing vacuously. A gate that has never rejected anything is not a
+gate.</p>
 </div>
 
-<p>The costed plan for fixing this &mdash; one guarded scan with a callback, instead of three
-&mdash; is in <code>docs/develop/active/refactors/analysis_pipeline_refactor.md</code>. It was
-reviewed twice, revised three times, and then parked: it produces no new scientific result, the
-study it would have protected is finished, and all three bugs above have since been fixed in the
-existing scripts. It restarts when a fourth program needs to read the store, which is the point at
-which someone has to choose again which of the checks to remember.</p>
+<p><strong>What it did not fix, stated because the plan said so from the start.</strong> Two folders
+are deliberately frozen &mdash; <code>scripts/analysis/figures/</code> and
+<code>scripts/analysis/supplementary/</code> &mdash; because they back an earlier published study and
+are kept to reproduce it as published. They still carry their own copies of the config helpers, as
+does <code>hiding_drivers.py</code>. So the honest count is not one copy but two, one live and one
+frozen, and that was the trade rather than an oversight.</p>
+<p>There is also a fourth store scanner, <code>scripts/analysis/context_dependence.py</code>, which
+every earlier version of the plan missed. It imports its helpers from <code>hiding_drivers</code>
+rather than copying them, so it adds no duplication, and it was out of scope here. It is the
+modulator study&rsquo;s tool, which makes it the likeliest first client of <code>core/</code> &mdash;
+and therefore the honest test of whether this was worth doing. If the next scanner is written against
+the shared scan and gets all the guards for free, the case is proven. If it is written by copying one
+of the existing ones again, it was not.</p>
 </section>
 
 <div class="col foot">
 <p>Every path and code block on this page was read from the working tree at the time of writing.
-Source: <code>scripts/analysis/pipeline_layout.html</code>. The parked reorganisation plan:
+Source: <code>scripts/analysis/pipeline_layout.html</code>. The reorganisation plan, its three
+adversarial reviews and the gate results:
 <code>docs/develop/active/refactors/analysis_pipeline_refactor.md</code>. The study this pipeline
 produces: <code>docs/experiments/active/sensor_ladder/sensor_ladder.md</code>.</p>
 </div>
