@@ -1137,11 +1137,16 @@ generated rather than transcribed, and the build refuses to publish if a figure 
 prose is written by hand, so the numbers restated in it are checked against the generated tables on
 every republish &mdash; a check that caught a dozen stale values the last time the underlying data
 changed.</p>
-<pre><code>python scripts/analysis/ladder/build_arm_data.py       # one sweep per arm
-python scripts/analysis/ladder/build_time_course.py    # the step-by-step sweep for Figure 9
-python scripts/analysis/ladder/run_all.py              # all fifteen figures
-python scripts/analysis/ladder/make_report_tables.py   # every table on this page
-python scripts/analysis/ladder/build_artifact.py       # this page</code></pre>
+<pre><code>python scripts/analysis/studies/sensor_ladder/collect_arm_data.py     # one sweep per arm
+python scripts/analysis/studies/sensor_ladder/collect_time_course.py  # the step-by-step sweep for Figure 9
+python scripts/analysis/ladder/run_all.py                             # all fifteen figures
+python scripts/analysis/ladder/make_report_tables.py                  # every table on this page
+python scripts/analysis/ladder/build_artifact.py                      # this page</code></pre>
+<p>The two sweeps moved on 2026-09-05: they used to be <code>ladder/build_arm_data.py</code> and
+<code>ladder/build_time_course.py</code>, each with its own copy of the shard loop. They now share
+one guarded scan. Nothing on this page changed as a result &mdash; the ported sweeps were required
+to reproduce every number here before the originals were deleted, and all fifteen figures came back
+byte-identical.</p>
 
 <p class="foot">An independent adversarial review of this analysis, including findings not yet acted on,
 is recorded alongside the report in the repository at

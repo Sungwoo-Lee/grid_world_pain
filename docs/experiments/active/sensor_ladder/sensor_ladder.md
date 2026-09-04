@@ -1095,8 +1095,8 @@ store covering the remaining 700,000 seeds. All fourteen arms share a seed base,
 
 ```bash
 P=/home/vncuser/miniconda3/envs/grid_world_pain/bin/python
-$P scripts/analysis/ladder/build_arm_data.py       # one sweep per arm, ~60-95 s each
-$P scripts/analysis/ladder/build_time_course.py    # the step-by-step sweep for Figure 9
+$P scripts/analysis/studies/sensor_ladder/collect_arm_data.py     # one sweep per arm, ~60-95 s each
+$P scripts/analysis/studies/sensor_ladder/collect_time_course.py  # the step-by-step sweep for Figure 9
 $P scripts/analysis/ladder/run_all.py              # all fifteen figures, seconds
 $P scripts/analysis/ladder/make_report_tables.py   # every table in this document
 $P scripts/analysis/ladder/build_artifact.py       # the shareable HTML page
