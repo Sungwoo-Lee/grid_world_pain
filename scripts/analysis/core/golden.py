@@ -108,6 +108,54 @@ def compare_values(gold, cand, r: Result, label: str) -> None:
                                f"{gv!r} != {cv!r} (rel {rel:.3e})")
 
 
+def compare_npz(gold_path: str, cand_path: str, r: Result) -> None:
+    """Compare two .npz archives array by array.
+
+    This lives here rather than in a caller's shell script for a reason learned the hard way: the
+    first 14-arm gate run used an ad-hoc `np.array_equal` and reported 28 failures that were not
+    failures. `np.array_equal` returns False for ANY array containing NaN - including an array
+    compared against itself - and two columns here legitimately hold NaN for the third of episodes
+    that contain no predator. Writing a second comparison rather than extending the tested one is
+    precisely the duplication this refactor exists to remove, so it is removed.
+    """
+    import numpy as np
+    label = os.path.basename(gold_path)
+    if not os.path.exists(cand_path):
+        r.missing.append(f"{label}: candidate not produced at {cand_path}")
+        return
+    A, B = np.load(gold_path), np.load(cand_path)
+    for k in sorted(set(A.files) - set(B.files)):
+        r.missing.append(f"{label}:{k} present in golden, absent in candidate")
+    for k in sorted(set(B.files) - set(A.files)):
+        r.missing.append(f"{label}:{k} present in candidate, absent in golden")
+    for k in sorted(set(A.files) & set(B.files)):
+        x, y = A[k], B[k]
+        if x.shape != y.shape:
+            r.fails.append(f"{label}:{k} shape {x.shape} != {y.shape}")
+            continue
+        if np.issubdtype(x.dtype, np.floating):
+            gn, cn = np.isnan(x), np.isnan(y)
+            if not np.array_equal(gn, cn):
+                r.fails.append(f"{label}:{k} NaN positions differ "
+                               f"({int(gn.sum()):,} vs {int(cn.sum()):,})")
+                continue
+            xf, yf = x[~gn], y[~cn]
+            if np.array_equal(xf, yf):
+                r.tier2 += 1
+            elif np.allclose(xf, yf, rtol=RTOL, atol=0.0):
+                r.tier2 += 1
+            else:
+                d = np.abs(xf - yf); i = int(np.argmax(d))
+                r.fails.append(f"{label}:{k} exceeds rtol={RTOL:g}: max abs {d.max():.3e} "
+                               f"at index {i} ({xf[i]!r} vs {yf[i]!r})")
+        else:
+            if np.array_equal(x, y):
+                r.tier1 += 1
+            else:
+                r.fails.append(f"{label}:{k} integer array differs in "
+                               f"{int((x != y).sum()):,} of {x.size:,} values")
+
+
 def load(path: str):
     if path.endswith(".json"):
         return json.load(open(path))
@@ -127,6 +175,8 @@ def load(path: str):
 
 
 def compare_file(gold_path: str, cand_path: str, r: Result) -> None:
+    if gold_path.endswith(".npz"):
+        return compare_npz(gold_path, cand_path, r)
     label = os.path.basename(gold_path)
     if not os.path.exists(cand_path):
         r.missing.append(f"{label}: candidate not produced at {cand_path}")
@@ -137,7 +187,7 @@ def compare_file(gold_path: str, cand_path: str, r: Result) -> None:
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("golden", help="a golden .json/.csv file, or a directory of them")
+    ap.add_argument("golden", help="a golden .json/.csv/.npz file, or a directory of them")
     ap.add_argument("candidate", help="the matching file, or the directory the port wrote to")
     ap.add_argument("--quiet", action="store_true", help="only print the verdict line")
     ap.add_argument("--gate-manifest", metavar="FILE",
@@ -162,7 +212,7 @@ def main():
         n = skipped = 0
         for root, _, files in os.walk(a.golden):
             for f in sorted(files):
-                if not (f.endswith(".json") or f.endswith(".csv")) or f.startswith("_"):
+                if not f.endswith((".json", ".csv", ".npz")) or f.startswith("_"):
                     continue
                 gp = os.path.join(root, f)
                 if gated is not None and os.path.normpath(gp) not in gated:
