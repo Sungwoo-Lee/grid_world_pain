@@ -33,7 +33,11 @@ STORE_ROOTS = ["results/trajectories_lad", "results/trajectories_lad2"]
 # products first and then "compares" the result against what it just wrote, which passes for the
 # same reason a self-comparison always passes. Default is unchanged, so nothing existing moves.
 OUT_ROOT   = os.environ.get("LADDER_OUT_ROOT", "results/analysis/ladder")
-FIG_ROOT   = "docs/experiments/active/sensor_ladder/figures"
+# Redirectable for the same reason as OUT_ROOT: the figure gate regenerates all fifteen PNGs
+# from a PORTED sweep's aggregates and compares them against the committed ones. If that
+# wrote to the real figure directory it would overwrite the very files it is comparing
+# against, and the comparison would pass by construction.
+FIG_ROOT   = os.environ.get("LADDER_FIG_ROOT", "docs/experiments/active/sensor_ladder/figures")
 
 # Ladder order: sensory capability, poorest first. This is the reading order for every figure.
 ARM_ORDER = ["A_baseline", "B_olf_only", "R1_range1",
