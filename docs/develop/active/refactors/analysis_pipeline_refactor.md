@@ -207,9 +207,36 @@ code:
 | accumulator allocation | shard callbacks accumulate into study-owned arrays | `scan.sweep(..., init=)` |
 | everything else | the escape hatch, deliberately conspicuous | `frame.raw(col)` |
 
-Each ported sweep gets a row in a **frame-contract audit table** in the plan's verification section
-naming which accessors it uses and, if it calls `frame.raw()`, why. That is what makes "auditable"
-mean something more than "we intend to".
+Each ported sweep gets a row in a **frame-contract audit table** naming which accessors it uses and,
+if it calls `frame.raw()`, why. That is what makes "auditable" mean something more than "we intend
+to".
+
+### The audit table, first entry
+
+`studies/sensor_ladder/collect_arm_data.py`, ported 2026-09-04. Counts generated from the source
+rather than typed.
+
+| accessor | uses | what for |
+|---|---|---|
+| `raw` | 8 | the plain columns — bush, injury, nutrition, damage, ate_food, agent row/col |
+| `is_step` | 3 | excluding the reset row from every per-step accumulation |
+| `list_raw` | 2 | the ragged animal row/col columns |
+| `at_initial` | 2 | the starting wound and hunger, read off the reset row |
+| `per_episode_sum_with_initial` | 2 | damage and eating, which legitimately include the reset row |
+| `per_episode_sum` | 1 | bush steps, which legitimately do not |
+| `prev` | 1 | the row the action was chosen on — every predictor in this analysis |
+| `episode_of_step`, `episode_id`, `episodes` | 3 | mapping rows and shards back to global episode indices |
+| `estart`, `n`, `steps_per_episode` | 3 | the early-window mask and the step-count cross-check |
+
+**Ten `raw`/`list_raw` calls, and none of them is a breach.** The escape hatch exists to fetch a
+column the driver has no opinion about; it becomes a breach only when it is used to *sidestep a
+convention* — reading a predictor without the previous-row shift, or counting a reset row as a step.
+Every call here fetches a column and then applies `is_step`, `prev` or one of the per-episode sums
+to it. That is the contract working as intended, not being avoided.
+
+The count is worth keeping visible precisely because it is the number that would grow if a later
+port started bypassing the driver. A rising `raw` count with a falling `is_step` count is the shape
+of the failure this table exists to catch.
 `perceived_nociception` moves into `core/env.py` *with a regression test for its reset boundary* —
 the `src > estart` guard was a real bug with published impact (Known Bugs, 2026-08-25).
 
