@@ -155,6 +155,51 @@ def chrome() -> str:
     raise SystemExit("no Chrome found - this check requires a real browser")
 
 
+
+PIN_PROBE = r"""
+<script>
+(function(){
+  var W = document.documentElement.getBoundingClientRect().width;
+  // An element inside a deliberate horizontal scroller (a wide table, a wide diagram) is SUPPOSED
+  // to exceed the page width -- naming it sends the reader after the wrong thing. Only elements
+  // that overflow the PAGE itself, with no scrolling ancestor, actually cause sideways scroll.
+  function inScroller(el){
+    // self included: a box that scrolls ITSELF (a wide <pre>, a .dia) is doing its job.
+    for (var n = el; n && n !== document.body; n = n.parentElement){
+      var ox = getComputedStyle(n).overflowX;
+      if (ox === 'auto' || ox === 'scroll') return true;
+    }
+    return false;
+  }
+  function name(el){
+    var c = el.getAttribute && el.getAttribute('class');
+    return el.tagName.toLowerCase() + (c ? '.' + String(c).split(' ')[0] : '');
+  }
+  var worst = [];
+  document.querySelectorAll('body *').forEach(function(el){
+    if (inScroller(el)) return;
+    var r = el.getBoundingClientRect();
+    // Two different shapes of culprit. A box that sticks out past the page edge is the obvious
+    // one. The subtler -- and the one that actually caused this check to exist -- is a block whose
+    // BOX is the right width but whose text cannot wrap: an unbreakable 56-character path in a
+    // 338px column. Its getBoundingClientRect is innocent; only scrollWidth shows the overrun.
+    if (r.width > 0 && r.right > W + 0.5 && el.children.length === 0){
+      worst.push({t: name(el), over: Math.round(r.right - W),
+                  txt: (el.textContent || '').trim().slice(0, 60)});
+    } else if (el.scrollWidth - el.clientWidth > 1 && el.clientWidth > 0){
+      worst.push({t: name(el) + ' (text does not wrap)',
+                  over: Math.round(el.scrollWidth - el.clientWidth),
+                  txt: (el.textContent || '').trim().slice(0, 60)});
+    }
+  });
+  worst.sort(function(a,b){return b.over - a.over;});
+  var d = document.createElement('div'); d.id = '__probe_result';
+  d.textContent = JSON.stringify({scrollWidth: Math.round(document.body.scrollWidth),
+    widest: worst.slice(0,6).map(function(x){return x.t + '  +' + x.over + 'px  "' + x.txt + '"';})});
+  document.body.appendChild(d);
+})();
+</script>"""
+
 def wrap(page_html: str, lean: bool, open_details: bool = False) -> str:
     body = page_html
     if lean:
@@ -187,6 +232,42 @@ def shoot(binary: str, path: str, width: int, height: int, dest: str):
                    capture_output=True, timeout=240)
 
 
+
+def pinned_pass(binary: str, src: str, a) -> int:
+    """Test widths Chrome headless refuses to open, by pinning the document instead.
+
+    Chrome floors the headless viewport at 500px, so `--window-size=390` silently reports a
+    clientWidth of 500. That floor is not a harmless approximation: a 56-character monospace path
+    fits the 448px column a 500px window produces and overflows the 338px column a real 390px phone
+    produces, so the page scrolls sideways on the device while every rendered pass reports clean.
+    This was found on a real page after two passes had called it clean at 500px.
+
+    Pinning `html,body{width:390px}` inside the 500px window lays the document out at the true
+    width. It is not a full substitute for a 390px viewport -- media queries still see 500 -- so it
+    checks the one thing it can check honestly: does the document overflow its own width.
+    """
+    bad = 0
+    for w in a.pin_width or []:
+        page = wrap(src, lean=True, open_details=a.open_details)
+        pin = f"<style>html,body{{width:{w}px;overflow-x:visible}}</style>"
+        page = page.replace(PROBE, pin + PIN_PROBE)
+        with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False) as f:
+            f.write(page); path = f.name
+        try:
+            r = measure(binary, path, 500, 1400)
+        finally:
+            os.unlink(path)
+        over = r["scrollWidth"] - w
+        if over > 0:
+            bad += 1
+            print(f"[{w}px pinned] PAGE OVERFLOWS BY {over}px -- it scrolls sideways on a phone")
+            for sel in r.get("widest", [])[:6]:
+                print(f"    widest offender: {sel}")
+        else:
+            print(f"[{w}px pinned] no horizontal overflow")
+    return bad
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -197,6 +278,11 @@ def main():
     ap.add_argument("--open-details", action="store_true",
                     help="also render with every <details> expanded, so collapsed panels are "
                          "geometry-checked; they are invisible to the default pass")
+    ap.add_argument("--pin-width", nargs="*", type=int, default=[390],
+                    help="also test true phone widths by pinning html,body to this width inside a "
+                         "500px window. Chrome headless will not open a viewport below 500px, so a "
+                         "page can overflow a real 390px phone while every rendered pass reports "
+                         "clean. Pass no values to skip.")
     a = ap.parse_args()
     binary = chrome()
     # Chrome headless refuses to make the viewport narrower than 500px: --window-size=390 silently
@@ -204,11 +290,13 @@ def main():
     too_narrow = [w for w in a.widths if w < 500]
     if too_narrow:
         print(f"note: Chrome headless floors the viewport at 500px; {too_narrow} raised to 500")
+        print("      (that floor HIDES real phone overflow -- see the --pin-width pass below)")
         a.widths = sorted({max(w, 500) for w in a.widths})
     os.makedirs(a.out, exist_ok=True)
     src = open(a.page).read()
 
     problems = 0
+    problems += pinned_pass(binary, src, a)
     for w in a.widths:
         with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False) as f:
             f.write(wrap(src, lean=True, open_details=a.open_details)); lean_path = f.name
