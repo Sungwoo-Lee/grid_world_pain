@@ -135,6 +135,21 @@ scroll.
 **Rule:** a data table inside a scroll container is `width:max-content;min-width:100%` — natural
 width, at least filling the box.
 
+> **Amended after F24 — this rule holds only for tables whose columns are all short or numeric.**
+> F6 and F24 are the two ends of one trade-off, and the register has to say which applies when.
+> Under `max-content`, a cell containing a *sentence* claims that sentence's full unwrapped width, so
+> the table outgrows its scroll box and the **last column disappears at desktop width** (F24) — a far
+> worse failure than F6's, because F6 is visible and F24 is not. The split:
+>
+> | Table | Rule |
+> |---|---|
+> | every column short or numeric | `width:max-content; min-width:100%` (F6 as written) |
+> | any column carries prose | `width:100%` **plus** a `min-width` floor (≈560px), `nowrap` on the numeric cells only |
+>
+> The `min-width` floor is what keeps the prose case from falling back into F6's ribboning: below the
+> floor the box scrolls (signalled, expected on a phone) instead of crushing prose into one-to-two-word
+> lines. Never put `white-space:nowrap` on `th` — a long header forces the same overflow F24 describes.
+
 ### F7 — `scroll-margin-top` has to be on the element the anchor targets
 
 **Saw:** clicking a table-of-contents link parked the heading flush against the top of the window.
@@ -405,6 +420,73 @@ it — do not assume the component's spacing was designed for more than it had.
 **Verifying a fix:** measure the gap in the box tree rather than trusting the rule was added — and
 check the measurement fires by removing the rule and confirming it reports 0 px. A spacing assertion
 that has never been seen to fail is not evidence.
+
+### F24 — `width:max-content` on a table that has a prose column hides the last column, at every width
+
+**Saw:** a new results section whose headline table listed three training arms and their scores. The
+score column — `138.2 ± 3.5 / 40.3 ± 0.8 / 41.9 ± 0.7`, the entire point of the section — was off the
+right edge of its scroll box at **1440 px**, not merely on a phone. The reader saw a header clipped to
+`SURVIVAL` with nothing beneath it. A sweep of the same page then found **eight pre-existing tables**
+with the identical defect, including one in an appendix whose third column had never been visible to
+any reader at any viewport width since the page was first published.
+
+**Cause:** `table{width:max-content;min-width:100%}` (the F6 rule) tells the table to take its natural
+width, and a cell containing a sentence has a natural width of *that sentence on one line*. The rule is
+right for the short numeric cells it was written for, and looks proven by the ten other tables on the
+same page that use it correctly. Add one prose column and the table silently outgrows the 720 px text
+column; the `.scroll` wrapper then does its job and hides the overflow. A long `th` under
+`white-space:nowrap` causes the same thing on an all-numeric table.
+
+**Why nothing caught it:** the geometry checker **deliberately exempts any element overflowing its own
+scroll container** — that is normally correct behaviour, since a scroll box is supposed to scroll — so
+it reports nothing at all. Reading the CSS finds nothing either: the rule is correct in isolation and
+has many working instances above the broken one. And with `--hide-scrollbars` set for screenshots, the
+render carries no visible cue; the column is simply absent.
+
+**Rule:** `width:max-content` only for tables whose cells are **all short**. Any table with a prose
+column is `width:100%`, with `white-space:nowrap` left on the numeric cells so the prose column absorbs
+the wrapping. Do not put `white-space:nowrap` on `th` — let long headers wrap to two lines rather than
+push a column off-screen.
+
+**Verifying a fix:** the checker's silence is not evidence here. Measure `scrollWidth − clientWidth` on
+every scroll container at the **widest** viewport and require it to be zero. Overflow at 1440 px means
+the table was never designed to fit — it does not mean the scroll box is working. Some overflow at
+phone width is acceptable and expected; overflow at desktop width is the defect.
+
+### F25 — a legibility `min-width` floor carried from one diagram's viewBox to another's
+
+**Saw:** a hand-authored SVG whose labels rendered at **6.6 px** on a phone, directly beneath a CSS
+comment promising "a legible floor". The floor was doing nothing, and the comment made it look
+handled.
+
+**Cause:** `figure svg{min-width:660px}` had been tuned for an earlier diagram. Rendered label size
+is not the floor — it is `floor x fontSize / viewBoxWidth`. The new diagram used a 1000-unit viewBox
+with 10-unit labels, so the same 660 px floor produced 6.6 px text where the old diagram had
+produced legible text. Nothing in the CSS records which viewBox the constant was derived from, so
+the next diagram inherits a number that no longer means anything.
+
+**Rule:** derive the floor per diagram from its smallest label:
+`min-width >= 9px x viewBoxWidth / smallestFontSize`. Write the derivation into the comment beside
+the rule, not just the result — a bare constant cannot be checked by the next reader. Measure the
+rendered size (`svg.getBoundingClientRect().width x fontSize / viewBox.baseVal.width`) rather than
+trusting the floor.
+
+### F8 amendment — the 500 px floor in the checker hides F8
+
+**Saw:** two full review passes called a page clean at 500 px; pinned to a real 390 px phone it
+scrolled sideways by 35 px, with two monospace paths running off the right edge mid-path.
+
+**Cause:** Chrome headless refuses to open a viewport below 500 px — `--window-size=390` silently
+reports a `clientWidth` of 500. A 56-character monospace token at 11.5 px is about 386 px: it fits
+the 448 px column a 500 px window produces and overflows the 338 px column a real phone produces. So
+the tool's floor sits exactly above the width at which this defect appears, and every rendered pass
+reports clean.
+
+**Rule:** `check_artifact_layout.py` now runs a `--pin-width 390` pass by default, pinning
+`html,body{width:390px}` inside the 500 px window so the document lays out at the true width, and
+reporting the elements whose text cannot wrap. Media queries still see 500 px, so the pinned pass
+checks the one thing it can check honestly: does the document overflow its own width. Do not treat a
+clean 500 px pass as evidence about phones.
 
 ## Related
 
