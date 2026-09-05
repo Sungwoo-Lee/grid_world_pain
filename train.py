@@ -1131,8 +1131,8 @@ def main():
         # Read parity options from config
         rnn_type = config.get_mandatory('agent.rnn_type')
         activation = config.get_mandatory('agent.activation')
-        # Whitelist {MC, MC_FIXED, GAE} here so a typo fails before model/JIT setup
-        # rather than at the first training iteration.
+        # Whitelist {MC, MC_FIXED, GAE, GAE_NORM, MC_RAW} here so a typo fails before
+        # model/JIT setup rather than at the first training iteration.
         return_mode = validate_return_mode(config.get_mandatory('agent.return_mode'))
         
         # Read neuromodulation config (MUST be defined in config, even if empty/null)

@@ -206,13 +206,17 @@ def train_iteration_ppo(model, optimizer, env_params, env_state, key, config):
     """Performs one full PPO iteration (collect + N epochs)."""
     return_mode = getattr(config, 'return_mode', 'GAE')
     # Plain PPO implements "MC" and "GAE" only. "MC_FIXED" (raw returns as the critic
-    # target + normalised advantages) exists in the RecurrentPPO trainer only; reject it
-    # loudly instead of letting the `else` below silently run GAE. No fallback default.
+    # target + normalised advantages), "GAE_NORM" (GAE estimator with MC's z-scored
+    # target and un-rescaled residual advantages) and "MC_RAW" (raw returns as the target
+    # AND the raw residual as the advantage — nothing normalised) exist in the
+    # RecurrentPPO trainer only; reject them loudly instead of letting the `else` below
+    # silently run GAE. No fallback default.
     if return_mode.upper() not in ("MC", "GAE"):
         raise ValueError(
             f"Unknown agent.return_mode {return_mode!r} for algorithm PPO. "
-            "Plain PPO supports 'MC' and 'GAE'; 'MC_FIXED' is implemented in the "
-            "RecurrentPPO trainer only (src/models/recurrent_ppo_trainer.py)."
+            "Plain PPO supports 'MC' and 'GAE'; 'MC_FIXED', 'GAE_NORM' and 'MC_RAW' are "
+            "implemented in the RecurrentPPO trainer only "
+            "(src/models/recurrent_ppo_trainer.py)."
         )
 
     # 1. Collect rollouts

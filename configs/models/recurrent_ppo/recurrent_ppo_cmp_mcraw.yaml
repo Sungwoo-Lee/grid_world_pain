@@ -1,0 +1,76 @@
+# recurrent_ppo_cmp_mcraw — the MC_RAW arm of the return-estimator / scale comparison.
+# ---------------------------------------------------------------------------
+# PLAIN LANGUAGE: recurrent PPO learns two numbers from each rollout — a *critic target*
+# (what total future reward the value head should have predicted) and an *advantage*
+# (how much better an action turned out than the critic expected). Two independent
+# choices go into producing that pair: WHICH ESTIMATOR builds it (Monte-Carlo returns,
+# or generalised advantage estimation, "GAE"), and HOW the two numbers are RESCALED
+# before training. The existing arms confound three different things under the label
+# "matched scale":
+#
+#   arm                         critic target       advantage             one scale?
+#   recurrent_ppo_cmp_mc        z-scored (~1)       residual target-V     yes, at ~1
+#   recurrent_ppo_cmp_gaenorm   z-scored (~1)       residual target-V     yes, at ~1
+#   recurrent_ppo_cmp_mcfixed   raw (~24)           separately z-scored   no, split
+#   recurrent_ppo_cmp_gae       raw (~24)           separately z-scored   no, split
+#   THIS FILE (mcraw)           raw (~24)           raw residual (~20)    yes, at ~24
+#
+# THIS FILE IS THE "MC_RAW" ARM: identical to the MC_FIXED arm with the advantage
+# normalisation deleted. Nothing is rescaled anywhere. It is matched-scale like "MC",
+# but matched at the LARGE raw scale rather than at 1, which separates the claim
+# "the critic target and the advantage must share units" from the claim "the advantage
+# must land near spread 1". Motivating result: on basic/04 at 1M episodes "MC" reached
+# 138.8 mean survival steps while "MC_FIXED" (40.0) and "GAE" (41.9) did not.
+#
+# Identical to recurrent_ppo_cmp_mcfixed.yaml in every other key (verified by a flattened
+# dict-diff), and neuromodulation is OFF (modulation.type: null) — any modulator would be
+# a confound in an estimator/scale comparison.
+# Survey: docs/project/references/modulation_in_rl/ppo_return_normalization_survey.md
+# Units-mismatch diagnosis behind the MC family:
+#   docs/develop/active/issues/FIX_MC_RETURN_UNITS_AND_LEARNING_RATES.md (Fix 1)
+# ---------------------------------------------------------------------------
+agent:
+  algorithm: "RecurrentPPO"
+  lr_actor: 0.0005
+  lr_critic: 0.0001
+  gamma: 0.95
+  K_epochs: 4
+  eps_clip: 0.1
+  # update_timestep: 2000
+  sequence_length: 128     # Steps per rollout/sequence
+  frame_stack: 1
+  fc_layers: [128,128]
+  # recurrent_layers: [128]
+  actor_fc_layers: [128,128]
+  critic_fc_layers: [128,128]
+  hidden_size: 128
+  entropy_coef: 0.01
+  gae_lambda: 0.95
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  use_layer_norm: true
+  
+  # Parity Options
+  rnn_type: "GRU"       # "LSTM" or "GRU"
+  activation: "relu"     # "tanh" or "relu"
+  return_mode: "MC_RAW"       # same MC returns, RAW as target AND raw residual advantages
+
+  # Encoding Configuration
+  encoding_mode: "hierarchical"  # "flat" or "hierarchical"
+  
+  hierarchical_params:
+    # Unimodal Phase 1: Independent MLPs for each sensor
+    # Available sensor names for overrides: 
+    # [Injury, Nutrition, Satiation, Extero Nociception, Olfaction, Collision, Proprioception, Visual, Location]
+    default_mlp: [128,128]
+    unimodal_overrides:
+      visual: [128,128]
+      olfaction: [128,128]
+    
+    # Multimodal Phase 2: Fusion hub
+    multimodal_hub: [128,128]
+
+  # Neuromodulation: DISABLED (true baseline, §5.2)
+  # For neuromodulated variant, use: configs/models/ppo/neuromodulated_ppo.yaml
+  modulation:
+    type: null

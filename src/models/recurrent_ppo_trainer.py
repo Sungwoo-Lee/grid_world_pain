@@ -190,7 +190,7 @@ def ppo_loss_fn(model, batch, clip_eps, ent_coef, vf_coef):
     
     return total_loss, (policy_loss, value_loss, entropy_loss)
 
-LEGAL_RETURN_MODES = ("MC", "MC_FIXED", "GAE")
+LEGAL_RETURN_MODES = ("MC", "MC_FIXED", "GAE", "GAE_NORM", "MC_RAW")
 
 def validate_return_mode(return_mode):
     """Whitelist `agent.return_mode` and return its canonical upper-case form.
@@ -202,6 +202,15 @@ def validate_return_mode(return_mode):
       - "MC_FIXED"  Identical Monte-Carlo returns, but the mainstream convention applied
                     afterwards: RAW returns as the critic target, normalised advantages.
       - "GAE"       GAE(lambda) advantages, raw targets = advantages + V, normalised advantages.
+      - "GAE_NORM"  The GAE(lambda) ESTIMATOR with MC's NORMALISATION scheme: the target
+                    (advantages + V) is z-scored and the advantages are the un-rescaled
+                    residual `target - V`. Fills the missing cell of the 2x2
+                    (estimator: MC vs GAE) x (scale: matched vs split) comparison.
+      - "MC_RAW"    MC_FIXED with the advantage normalisation DELETED: raw Monte-Carlo
+                    returns as the critic target AND the raw residual `target - V` as the
+                    advantage. Matched-scale like "MC", but matched at the LARGE raw scale
+                    (~24) instead of at 1 — separates "critic and advantage share units"
+                    from "the advantage must land near spread 1".
 
     No fallback default (project rule): an unrecognised value raises rather than silently
     routing to one of the branches.
@@ -231,7 +240,9 @@ def collect_trajectories(model, env_params, last_state, last_h_state, last_key, 
     # Python comparison is therefore resolved once at trace time, not per-step at runtime.
     # MC_FIXED reuses the MC path here: it takes the SAME single window-edge bootstrap as
     # MC (one value forward per window), not GAE's per-step next-state forward pass.
-    use_gae_bootstrap = validate_return_mode(return_mode) == "GAE"
+    # GAE_NORM, by contrast, uses the GAE ESTIMATOR (`compute_gae` consumes the per-step
+    # `next_value`), so it takes the per-step bootstrap path exactly as "GAE" does.
+    use_gae_bootstrap = validate_return_mode(return_mode) in ("GAE", "GAE_NORM")
 
     def scan_fn(carry, _):
         state, h_state, key, _prev_next_state, _prev_h_new = carry
@@ -387,7 +398,8 @@ def update_step(model, optimizer, batch, config):
 def train_iteration(model, optimizer, env_params, env_state, h_state, key, config):
     """Performs one full PPO iteration (collect + N epochs) with NNX."""
     rnn_type = config.rnn_type
-    # Canonical upper-case form; raises on anything outside {MC, MC_FIXED, GAE}.
+    # Canonical upper-case form; raises on anything outside
+    # {MC, MC_FIXED, GAE, GAE_NORM, MC_RAW}.
     return_mode = validate_return_mode(config.return_mode)
     
     # 1. Collect rollouts
@@ -429,6 +441,65 @@ def train_iteration(model, optimizer, env_params, env_state, h_state, key, confi
             targets = returns
             advantages = returns - trajectories.value
             advantages = (advantages - jnp.mean(advantages)) / (jnp.std(advantages) + 1e-8)
+        elif return_mode == "MC_RAW":
+            # MC_RAW: the "MC_FIXED" branch above with EXACTLY ONE LINE DELETED — the
+            # advantage normalisation. Nothing in this branch is rescaled: the raw
+            # Monte-Carlo return is the critic target AND the raw residual
+            # `return - V` is the advantage.
+            #
+            # Why this arm exists. The four older modes confound three different things
+            # under the label "matched scale":
+            #
+            #   arm             critic target        advantage           both on one scale?
+            #   MC, GAE_NORM    z-scored (~1)        residual target-V   yes, at ~1
+            #   MC_FIXED, GAE   raw (~24)            separately z-scored no, split
+            #   MC_RAW          raw (~24)            raw residual (~20)  yes, at ~24
+            #
+            # So MC_RAW is matched-scale like MC, but matched at the LARGE scale instead
+            # of at 1. It separates the claim "the critic target and the advantage must
+            # share units" from the claim "the advantage must land near spread 1".
+            # Empirically, on basic/04 at 1M episodes MC reached 138.8 mean survival
+            # steps while MC_FIXED (40.0) and GAE (41.9) did not; the open question is
+            # whether that is about the RELATION between the two scales or about their
+            # ABSOLUTE magnitude.
+            #
+            # Estimator side is byte-identical to MC/MC_FIXED: same compute_mc_returns,
+            # same window-edge bootstrap_value (use_gae_bootstrap is False for MC_RAW —
+            # it is in the MC family), same real-death mask, same vmap axes.
+            terminateds = (trajectories.step_info.termination_reason >= 2).astype(trajectories.done.dtype)
+            returns = jax.vmap(compute_mc_returns, in_axes=(1, 1, 1, 0, None), out_axes=1)(
+                trajectories.reward, trajectories.done, terminateds, bootstrap_value, config.gamma
+            )
+            targets = returns                     # RAW  — same as MC_FIXED
+            advantages = returns - trajectories.value   # RAW — MC_FIXED normalises this line; we do not
+        elif return_mode == "GAE_NORM":
+            # GAE_NORM: the GAE(lambda) ESTIMATOR with the "MC" branch's NORMALISATION
+            # scheme. Motivation: on basic/04 (1M episodes, 5 seeds/arm) MC reached 138.8
+            # mean survival steps while MC_FIXED (40.0) and GAE (41.9) never reached the
+            # 500-step cap. The hypothesis is that MC wins not because of its estimator but
+            # because it keeps the critic target and the advantage on the SAME scale: MC's
+            # target is z-scored (spread ~1), the critic therefore predicts on that scale,
+            # and `target - V` is a residual on that same scale. MC_FIXED and GAE instead
+            # train the critic on a RAW target (spread ~24) while separately rescaling the
+            # advantages to spread ~1 — critic and policy learning on scales ~24x apart.
+            # This mode fills the missing cell of the 2x2 (estimator: MC vs GAE) x
+            # (scale: matched vs split), so the two explanations can be separated.
+            #
+            # Deliberately mirrors "MC", not "GAE", in two places:
+            #   * the TARGET is z-scored, with MC's 1e-7 epsilon (not GAE's 1e-8);
+            #   * the ADVANTAGE is the un-rescaled residual `target - V` — there is NO
+            #     second normalisation, because in MC the advantage is precisely the
+            #     residual between a normalised target and a critic trained on normalised
+            #     targets.
+            # Everything up to `targets` is byte-identical to the GAE branch below.
+            terminateds = (trajectories.step_info.termination_reason >= 2).astype(trajectories.done.dtype)
+            adv_raw = jax.vmap(compute_gae, in_axes=(1, 1, 1, 1, 1, None, None), out_axes=1)(
+                trajectories.reward, trajectories.value, trajectories.next_value,
+                trajectories.done, terminateds, config.gamma, config.gae_lambda
+            )
+            targets = adv_raw + trajectories.value
+            targets = (targets - jnp.mean(targets)) / (jnp.std(targets) + 1e-7)
+            advantages = targets - trajectories.value
         else:
             # GAE (original JAX)
             # Real-termination mask (Finding B, Part 2): termination_reason 2/3/4 = real death;
