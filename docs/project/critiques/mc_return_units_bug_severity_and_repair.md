@@ -2,6 +2,8 @@
 
 > One-line summary: the planned repair is right and standard; the revised "0.16 sigma" severity number is honest about one defect but is measured in the wrong denominator for policy-gradient harm, cannot see the two dynamic pathologies (moving affine target, advantage-scale decay) that are plausibly the larger damage, and the explainer's gradient-clipping arithmetic ignores Adam — which also weakens the pre-registered Gate's instrument.
 
+> **Update 2026-09-04 (professor-rl):** the endorsed repair was run and lost 3.5× to the historical code it replaced. The endorsement is retracted as stated; the reassessment, measurements, and corrected recommendation are in [§10](#10-update--the-repair-was-run-and-the-result-refutes-the-endorsement). Sections 1–9 are left unchanged.
+
 **Author**: professor-rl · 2026-09-01
 **Reviews**: the diagnosed units mismatch in `src/models/recurrent_ppo_trainer.py` (MC branch, lines ~369–386), the fix plan [[FIX_MC_RETURN_UNITS_AND_LEARNING_RATES]], and the user-facing explainer (`tmp/units_bug.html`, session job 96e71c7b).
 
@@ -187,3 +189,126 @@ Beyond the plan's Gate, three cheap confirmations that the repair is doing the i
 - **experiment-analyzer**: after the first post-fix run, the §9 signatures are the confirmation checklist; §9.2's one-off comparison quantifies the implicit-lr defect for the diagnosis series.
 - **bug-curator**: the §5 archaeology ("a correct change elsewhere destroyed the invariant that made a copied idiom safe") is a candidate pattern note for the registry row; also the explainer's §9 correction to the "pre/post-H4 runs not comparable" warning (~4% true) matches what the plan already records.
 - **professor-bayesian-nn** (only if the symlog/two-hot fallback is ever activated): the two-hot critic head's calibration interacts with their remit; not needed for the current fix.
+
+---
+
+## 10. Update — the repair was run and the result refutes the endorsement
+
+**Feedback from professor-rl — 2026-09-04.** Appended after the 1M-episode, 5-seed, three-arm comparison on the jump-attack environment. The original sections above are left as written so the reasoning that was wrong stays legible next to the result that refuted it.
+
+### 10.1 What happened (plain language)
+
+The repair I endorsed in §1–§7 — keep the Monte-Carlo return in raw reward units as the critic's target, normalise only the advantages — was implemented as a third return mode (`MC_FIXED`) and run against the historical mode (`MC`, returns rescaled per batch) and the conventional GAE mode. Everything else was held identical. The historical mode survived **139 steps**; the repaired mode survived **40**; GAE survived **42**. The repaired mode behaves exactly like GAE, which is what it was designed to do — and both are 3.5× worse than the code they were meant to fix. Five seeds each, spread of 1–3 steps. There is no reading of this in which the endorsement, as written, was adequate.
+
+The one-sentence diagnosis, from data the runs already logged: **the repair multiplied the value-loss gradient by several hundred, the shared network's gradient norm went from 0.4 to 125–154 against a clip ceiling of 0.5, and the shared encoder–GRU trunk stopped receiving any usable policy-gradient signal.** The original memo named this mechanism (§4 Correction 2, §6b "direction contamination of the shared trunk"), ranked upstream reward normalisation as the first fallback (§7), and then endorsed shipping without it. That ordering was the error.
+
+### 10.2 The measurements (from the fifteen finished 1M runs, WandB group `return_mode_cmp`)
+
+Steady-state (last 20 % of training) per arm; every number is consistent across all five seeds.
+
+| Quantity | MC (historical) | MC_FIXED (repair) | GAE |
+|---|---|---|---|
+| Pre-clip global gradient norm (`loss/grad_norm`; clip ceiling 0.5) | **0.36–0.48** | **125–154** | **77–86** |
+| Implied global clip factor `0.5 / ‖g‖` | ≈ 1 (clip rarely binds; per-iteration max ≈ 0.8) | **≈ 0.003–0.004, every update** | ≈ 0.006, every update |
+| Value loss `0.5·MSE` (units differ by arm) | 0.23–0.24 (z-units → residual σ ≈ 0.69) | 260–287 (raw → residual RMS ≈ 23) | 159–170 (raw → residual RMS ≈ 18) |
+| Policy loss magnitude | 0.002 | 0.003 | 0.003 |
+| Policy entropy, nats (5 actions, max 1.61) | −0.56 … −0.70 | −0.55 … −0.75 | −0.64 … −0.67 |
+| Food eaten per episode | 24–30 | 1.3–2.0 | 2.0–2.2 |
+| Episodes reaching the 500-step cap | 15–19 % | 0 % | 0 % |
+
+Two things to read off this table. First, the policy loss and entropy terms are O(10⁻²–10⁻³) in every arm, so a global norm of 125–154 is, to within a percent, the value term alone; the ratio of value-gradient to policy-gradient magnitude in the shared parameters moved from order 1 to order 10²–10³. Second, entropy did **not** collapse in the failing arms — they are not stuck in a deterministic bad policy; they are exploring at the same rate as MC and failing to convert exploration into a foraging policy.
+
+The learning-curve shape is the other decisive fact. In ten equal windows of the MC run, survival went 29 → 38 → 40 → 41 → 46 → 50 → **76 → 115** → 123 → 131 steps, and food eaten went 0.9 → 1.6 → 1.5 → 1.8 → 3.0 → 3.7 → **10 → 20** → 23 → 26. There is a **take-off between roughly 550k and 750k episodes**. MC_FIXED and GAE creep linearly 26 → 41 with no knee. Before the knee (window 6), MC leads by only 1.3× in survival and 2.5× in food — the mild lead a gradient-balance story predicts. The 3.5× endpoint is one arm crossing a discovery threshold inside the budget and the other two not.
+
+### 10.3 Q1 — Is the gradient-swamping hypothesis right, and how to test it cheaply
+
+**Right at the level of gradient balance, and already confirmed by logged data** — no new instrument is needed to establish that the clip binds at factor ≈ 0.004 on every update in the repaired arm and essentially never in the historical arm. What the logged data cannot separate is *which of two channels* turns that imbalance into a failure to learn:
+
+- **Channel (a), the clip.** The actor head's gradient is scaled by the global clip factor. Under Adam a *constant* factor cancels (§6b); the measured factor varies ~2–3× across 100-iteration means and ~10× on spikes (per-iteration maxima 250–1400 against means 125–150), so it is partly intermittent, and death-heavy windows are the spikes. This predicts a moderate slowdown plus a down-weighting of exactly the informative updates.
+- **Channel (b), the trunk direction.** The shared encoder + GRU receives `g_π + 0.5·g_V` with `‖g_V‖/‖g_π‖ ~ 10²–10³`. Adam is per-parameter; it cannot separate two contributions summed inside the same parameter. The trunk is therefore trained by the critic alone and the actor is a two-layer readout of features chosen to predict returns *under the current, non-foraging policy* — which do not include "where is food", because under a policy that does not eat, food position does not predict return. This is independent of clipping and it predicts a threshold failure (see 10.4).
+
+**The cheap test is two config-only arms, 1M episodes × 5 seeds, identical to the runs that just finished (ten GPUs, about a day):**
+
+1. **`MC_FIXED` with `max_grad_norm` raised to effectively off (e.g. 10⁴).** Recovery ⇒ channel (a); still ≈ 40 steps ⇒ channel (b).
+2. **`MC_FIXED` with `vf_coef` reduced from 0.5 to ≈ 10⁻³.** This is the algebraic proxy for reward scaling: if rewards are divided by `c` the critic learns `V/c`, and the value-loss gradient becomes
+
+$$
+\nabla_\theta\,\tfrac12\bigl(V'-G'\bigr)^2 \;=\; \frac{1}{c^{2}}\,(V-G)\,\nabla_\theta V ,
+$$
+
+so scaling rewards by `1/c` and multiplying `vf_coef` by `1/c²` are the same change to the critic's gradient at the same function. With the measured return spread `c ≈ 24`, `0.5/24² ≈ 9×10⁻⁴`. Adam still trains the critic *head* at learning-rate speed regardless (per-parameter normalisation), so this arm changes only the mix inside the shared trunk and the global norm. **Take-off by ~700k episodes and final survival ≥ 100 ⇒ scale is the whole story and upstream reward normalisation will work. Final survival ≈ 40 ⇒ scale is not the story, and the raw-unit offset / non-stationarity the critic must track is the next suspect.**
+
+The plan's per-group gradient instrument (Stage A of [[FIX_MC_RETURN_UNITS_AND_LEARNING_RATES]]) would give the direct number `‖g_V,trunk‖ / ‖g_π,trunk‖`; it was never implemented, and the two ablations answer the question without it. If it is built later, the confirming value is a share ≥ 0.99 for the value term in the trunk group of the repaired arm.
+
+### 10.4 Q2 — Does a scaling problem predict this effect size and shape?
+
+**A uniform actor-step throttle predicts something milder — a proportional slowdown. Channel (b) predicts exactly this shape.** Foraging discovery here is a positive-feedback process: an eating event raises satiation, extends the episode, and creates more eating opportunities per episode, which multiplies the advantage signal for approaching food. Any process with that structure has a knee, and a constant-factor reduction in the policy's ability to sculpt trunk features moves the knee out by roughly that factor. A 1M budget that sits just past MC's knee and well before the repaired arm's knee produces a 3.5× gap that looks qualitative.
+
+The project already holds the long-horizon data that adjudicates "slowdown vs. never": [[NMN_PERFORMANCE_DIAGNOSIS_v8]] §4.1.1, on the noise environment, at ~19M episodes, had unmodulated GAE at 265 ± 11 survival steps against MC at 284 ± 10, with GAE "still improving". GAE arrives, an order of magnitude later. So the honest characterisation is **an order-of-magnitude slowdown of the discovery phase, presenting as a qualitative failure at a 1M budget** — not a permanent inability. The running 10M comparison is the direct test: the repaired arm and GAE should take off somewhere between roughly 3M and 10M episodes. If they have not by 10M, channel (b) is stronger than "slow" — the critic-trained representation has locked in — and the fix has to change the architecture's coupling, not just the scale.
+
+What else could produce the shape, and why the data argue against it: **entropy collapse** — no, entropies are matched across arms; **estimator variance** — no, MC_FIXED and GAE use different estimators and match each other to within a step, while MC and MC_FIXED share the same estimator and differ 3.5×, so the variable is the target bookkeeping, not λ; **the H4 bootstrap now working** — the seed is 4 % of one edge value per 128-step window and cannot move survival from 139 to 40. One secondary contributor that is real but small: the raw-unit critic must first learn an offset of roughly −50 (mean discounted return under a policy that always dies within ~40 steps) and then track its drift as survival improves, at Adam's per-parameter learning-rate speed; the z-scored critic never pays this. It is a few hundred updates, not the whole run.
+
+### 10.5 Q3 — Was the endorsement wrong, or the implementation incomplete?
+
+**The endorsement was wrong in structure, and the implementation was incomplete in a way the endorsement licensed.** Specifically:
+
+- §6a of this memo stated that "this environment with raw return σ ≈ 24 and no reward normalisation sits outside the regime the defaults come from". §7 stated that the fix "moves the actor:critic gradient ratio by a factor of ~σ no matter what — the only choice available is which quantity stays fixed", and then accepted holding the YAML `vf_coef` fixed. That is the error in one sentence: I identified which hyperparameter moves, and endorsed holding the wrong one still. The ratio moves by `σ`–`σ²` (measured: ≈ 300×), not by a factor a 2× gate tolerance could absorb.
+- §7 ranked upstream reward normalisation as the *first fallback if a gate trips*. It should have been a **precondition**. Every one of the nine library precedents in the survey ([ppo_return_normalization_survey](../references/modulation_in_rl/ppo_return_normalization_survey.md)) regresses the critic on a raw target **at a return scale of order one**: Baselines / SB3 / CleanRL-continuous via `VecNormalize`-style scaling by a running discounted-return standard deviation, Atari via reward clipping to ±1, MuJoCo via rewards that are already O(1). I read the survey's column "raw target" as the convention and missed that the *pair* — raw target at unit scale — is the convention. "Raw critic target + normalised advantages" is not invalid without scale control; it is the correct target semantics. It is **incomplete**: it is one-and-a-half of a three-part package, and the missing part is the one that keeps the shared-trunk gradient balanced.
+- The literature that settles this was in my reference list and I under-weighted it. Engstrom et al. (2020) identify reward scaling as one of the implementation details PPO's reported results actually rest on. Andrychowicz et al. (2021), the largest on-policy ablation, put "check whether value-function normalisation improves performance" in their top-level recommendations, alongside observation normalisation. Cobbe et al. (2021, *Phasic Policy Gradient*) document the shared-trunk interference channel directly: with shared parameters the relative weight of the value objective is a sensitive hyperparameter, and value-gradient scale degrades policy learning — their motivation for decoupling. Raileanu & Fergus (2021, IDAAC) report the same. van Hasselt et al. (2016, PopArt) is the canonical statement that value-target scale must be controlled *before* it reaches the shared parameters.
+- The Gate as designed measured channel (a) and carried my own Adam caveat that a constant clip factor is mostly harmless to the actor head. Channel (b), which I named and called "the persistent harm", had no stop condition. Had the Gate run it would have tripped anyway (G4 fires below 0.25; the measured factor is 0.004), so the plan's safety net was adequate to the plan; it was skipped. But a memo that names the dominant channel and builds the gate around the other one is not a memo that endorsed correctly.
+
+The honest recommendation now: **all three together or none.** Raw target, normalised advantages, and return-scale control upstream (running discounted-return standard deviation, scale only, no mean subtraction, SB3/Baselines semantics) — or, equivalently for the gradient balance, a `vf_coef` reduced by `σ²`, or PopArt. Shipping the first two alone is not a smaller change than the historical code; it is a ~300× hyperparameter change disguised as a bookkeeping fix.
+
+### 10.6 Q4 — Does this vindicate the historical MC branch?
+
+**No. It shows the historical branch contains one correct ingredient, by accident, wrapped in the defects the memo already listed.** Decompose what per-batch z-scoring of returns does:
+
+1. **Scale** — divides the target by `σ_batch ≈ 24`, which divides the value-loss gradient by ≈ σ and keeps the shared trunk's gradient balanced at order 1. This is the ingredient that wins, and it is exactly what `VecNormalize` reward scaling, Tianshou's `return_scaling`, PopArt, and return-based scaling (van Hasselt et al. 2021) deliver — with a running statistic instead of a one-batch one. The closest published precedent for what the MC branch does is *return scaling with a one-iteration window plus mean subtraction*.
+2. **Centre** — subtracts `μ_batch`, so the critic never learns the −50 offset or its drift. Mild help here; Tianshou's and Baselines' authors report mean subtraction as harmful in their settings, and it is what destroys the critic's absolute-value information (§3.2(i)).
+3. **Per-batch statistics** — the moving affine target. Still a defect.
+4. **Mixed-unit bootstrap seed** — the H4 fix at ~4 % strength. Still a defect.
+5. **Un-normalised residual advantages** — the "implicit decaying learning rate" I flagged in §3.2(ii). **Overstated at this operating point**: the value loss plateaus at 0.24 from the third window onward, so the residual standard deviation sits at ≈ 0.69 and does not decay; the actor's effective step is stable and within 30 % of the normalised arm's. Retract the "uncontrolled, drifting step size" framing for this environment.
+
+There *is* a principled, environment-specific reason scale control matters more here than in the survey's reference environments. The reward is potential-shaped: `r_t = D(s_{t−1}) − D(s_t) − 100·[death]`, with `D` the homeostatic drive (0–141). Summing by parts,
+
+$$
+G_t \;=\; D(s_{t-1}) \;-\; (1-\gamma)\sum_{k\ge 0}\gamma^{k} D(s_{t+k}) \;-\; \gamma^{\tau}\bigl(D(s_\tau)+100\bigr)\,\mathbb{1}[\text{death at }\tau] .
+$$
+
+The current drive enters the return at full weight while the decision-relevant per-step cost is `(1−γ)·D ≈ 0.05·D`. The return's spread is therefore set by the potential and by the 100-point death penalty, not by the differences between actions; σ ≈ 24 is large relative to the policy-relevant signal. This is why an O(1) rescale is load-bearing here and why an Atari-style pipeline with |r| ≤ 1 never meets the problem. It is an argument for **running-statistic scale control**, not for per-batch z-scoring.
+
+Is MC winning for a reason unrelated to normalisation? The comparison holds the estimator fixed, so the win lives entirely in the bookkeeping, and the only bookkeeping difference of large magnitude is the scale. Prediction, falsifiable by the arms in 10.3: `MC_FIXED` with scale control ≥ `MC`. If `MC` still wins after scale is equalised, then per-batch centring or the non-stationarity itself is doing something beneficial in this environment — that would be genuinely surprising and would earn its own memo.
+
+A project-wide belief needs re-attributing on the same evidence. The v8 diagnosis and the live config comments ("MC: cleaner per v8 — smaller seed variance + lower critic loss") attributed GAE's underperformance to the *estimator*. This experiment says the estimator is not the variable: MC_FIXED and GAE differ in estimator and match; MC and MC_FIXED share the estimator and differ 3.5×. The "lower critic loss" comparison in v8 was z-units against raw units and is not a comparison. GAE(λ = 0.95) was never given a fair trial in this project; it has only ever run without scale control.
+
+### 10.7 Q5 — The next experiment
+
+- **Leave the 10M comparison running.** It is the direct test of "slowdown vs. lock-in" (10.4) and the MC arm is the baseline every later arm is judged against. Do not add arms to it yet.
+- **Launch now, config-only, 1M × 5 seeds, same environment**: (i) `MC_FIXED` + `vf_coef ≈ 10⁻³`; (ii) `MC_FIXED` + `max_grad_norm` effectively off. Pre-registered readings in 10.3. One day on ten GPUs; these two arms decide whether reward normalisation is the fix and which channel the failure runs through.
+- **Queue, needs code (senior-developer)**: (iii) `MC_FIXED` + running discounted-return standard-deviation reward scaling, SB3/Baselines semantics — scale only, no mean subtraction, clip ±10, statistic updated from a per-environment discounted-return accumulator carried through the collection scan, applied *before* `compute_mc_returns` so the bootstrap seed stays in consistent units. This is the arm that becomes the default if (i) confirms. Add it to the 10M comparison only after (i) reads positive.
+- **Do not** revert to per-batch z-scoring as a considered design, and do not treat the current `MC` branch as validated by this result. It is the best-performing configuration the project has, and it is also the one with the moving target and the inert H4 seed.
+
+### 10.8 Retractions and corrections to the sections above, itemised
+
+| Section | Claim | Status |
+|---|---|---|
+| §1.3, Verdict | "The proposed repair … is the correct, standard fix, and I endorse it" | **Retracted as stated.** Correct target semantics; incomplete without return-scale control; a ~300× change to the effective `vf_coef`. |
+| §7 | Reward normalisation is "the leading fallback if the Gate trips" | **Corrected**: it is a precondition of the raw-target convention, not a fallback. |
+| §7 | "the fix moves [the ratio] by a factor of ~σ ≈ 24" | **Understated**: measured ≈ 300× on the global norm, consistent with σ-to-σ² depending on critic residual. |
+| §6b | Persistent uniform clipping is "largely cancelled after Adam's moment warm-up"; the persistent harm is trunk-direction contamination | Mechanism stands; **magnitude was not stated** — the trunk channel can prevent discovery, not merely slow it. |
+| §3.2(ii) | MC's un-normalised advantages give an "uncontrolled, drifting effective step size" | **Overstated here**: residual σ ≈ 0.69, stable from the third window. |
+| §3.3 / §9 | Cross-arm historical comparisons on MC are on a level playing field | Stands, and gains a clause: every historical modulator comparison ran under *accidentally correct* gradient balance; any future switch of return mode must carry scale control or every modulator comparison will be confounded by the switch. |
+
+### References added
+
+- Cobbe, Hilton, Klimov, Schulman, 2021. *Phasic Policy Gradient.* ICML. — shared-trunk value/policy interference; the precedent for channel (b).
+- Raileanu & Fergus, 2021. *Decoupling Value and Policy for Generalization in Reinforcement Learning* (IDAAC). ICML.
+- Ng, Harada, Russell, 1999. *Policy invariance under reward transformations.* ICML. — the potential-shaping decomposition in 10.6.
+
+### Next steps
+
+- **experiment-designer**: the two config-only arms in 10.7 (i)–(ii), 1M × 5 seeds, same environment and seeds as the finished comparison; pre-registered readings are in 10.3.
+- **senior-developer**: arm (iii), running discounted-return-std reward scaling upstream of the MC scan; keep the estimator untouched. Also consider whether the Stage A per-group gradient instrument is still worth building given the ablations answer the question.
+- **experiment-analyzer**: on the 10M comparison, report the episode at which each arm's survival first exceeds 80 steps (the knee), not just the endpoint.
+- **bug-curator**: the KNOWN_BUGS row for "H4 bootstraps in the wrong units" should record that the raw-target repair is unsafe without scale control, so the row is not closed by `MC_FIXED` alone.
+- **pi**: the v8-era attribution "GAE underperforms because of the estimator" is refuted; any roadmap item that inherited it should be re-read.
