@@ -978,6 +978,17 @@ null band is what makes the pre-registered behavioural threshold meaningful; a t
 assumed null is exactly what finding 3 objected to. The demoted B2 needs the same scripts' existing
 Rest-exclusion option, which also does not yet exist.
 
+**Ordering rule, stated so nobody has to guess under time pressure.** The grid's launch is already
+gated on refactor Part B, so this work fits inside that wait and *before launch* is the default. If
+it somehow is not ready when Part B is, the launch **does not** wait: the hard requirement is that
+the null band is computed **before any behavioural number from a grid run is read**. That is not a
+weakening of the pre-registration, and the reason is worth stating plainly — the band is measured on
+five runs that finished on 2026-09-05, which no grid run can influence, and the rule for turning
+them into a band (min-to-max of `Δ_B0` across the five seeds, per window and predator condition,
+exceeded only from above in the positive direction) is fixed in §4.2 above. What would break
+pre-registration is choosing the band *after* seeing the grid's behaviour, and that is forbidden
+either way.
+
 **(b) The critic-value pre-check for H3 (§2.5).** Plot the distribution of critic values conditioned
 on injury, on the existing `MC` checkpoints. The value output is computed inside
 `scripts/eval/eval_rollout.py` (`get_action_and_value_nnx`) and discarded, and the trajectory store
