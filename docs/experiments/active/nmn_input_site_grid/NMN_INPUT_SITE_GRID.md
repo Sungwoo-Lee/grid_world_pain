@@ -1623,3 +1623,60 @@ the injury breakdown uses fixed bin edges rather than sample-defined quartiles. 
 disposition table is §10.
 
 — `experiment-designer`
+
+
+## Launch-time provenance ruling (2026-09-07)
+
+`env-config-reviewer` cleared the 16 configs but raised one condition: the working tree was dirty at
+launch, so `provenance.json` will record **`git_dirty: true`** on all 16 runs — and §3's manifest rule
+says such rows are "excluded from every comparison". That rule was written to catch a run whose own
+code was uncommitted. It is not the situation here, so the rule is **ruled inapplicable for this wave**,
+on the following recorded evidence rather than on assertion.
+
+**HEAD at launch:** `8f800baadb77663c37ef5f8478cfb068ed2f207c`
+
+**Exact dirty paths (`git status --porcelain --untracked-files=no`):**
+
+```
+M configs/environment/experiment/sensory_directional/E_clamp.yaml
+ M configs/environment/experiment/sensory_directional/F_presence_v1.yaml
+ M configs/environment/experiment/sensory_directional/G_presence_binary.yaml
+ M configs/environment/experiment/sensory_directional/H_occlusion05.yaml
+ M configs/environment/experiment/sensory_directional/I_occlusion15.yaml
+ M configs/environment/experiment/sensory_directional/J_all_weakened.yaml
+ M configs/environment/experiment/sensory_directional/K_occl05_veg.yaml
+ M configs/environment/experiment/sensory_directional/L_occl15_veg.yaml
+ M configs/environment/experiment/sensory_directional/M_occl05_all.yaml
+ M configs/environment/experiment/sensory_directional/N_occl15_all.yaml
+ M configs/environment/experiment/sensory_directional/generate_weakened_vision_arms.py
+ M docs/diary/2026-09-03.md
+```
+
+**Why this does not touch any of the 16 runs.** Every dirty path is outside the load path of every arm.
+The environment chain each run resolves is `configs/environment/default.yaml` → `basic/03-random_init`
+→ `basic/04-jump_attack_10x10`; the agent configs live in
+`configs/models/recurrent_ppo/nmn_input_site_grid/`; the training layers are `configs/train/default.yaml`
+and `configs/train/recurrent_ppo.yaml`. None of the twelve dirty files appears in any of those. Ten are
+sensory-ladder environment configs belonging to a parallel session's in-progress work (one of them
+flips `visual_blur_enabled`, which is exactly why they must **not** be swept into this launch), one is
+their generator, and one is another day's diary. **`src/` and `train.py` are clean at HEAD**, and `src/`
+is byte-identical to `e1aab726` (Part B) — verified by diff, not assumed.
+
+**Consequence for analysis:** read the code SHA from each run's `provenance.json` and require all
+sixteen to equal the value above; treat `git_dirty` as satisfied by this ruling. Note the reference run
+this grid replicates (`20260904-173804_rppo_cmp10m_mc_s42`) records `git_dirty: "unknown"`, so the
+strict form of the rule was never satisfiable for the reference either.
+
+### Advisory on the C7 replication gate
+
+`env-config-reviewer` also observed that the C7 gate's numeric form — control must land inside
+162.4–166.9 survival steps — can void the grid **by chance**. Bitwise replication is impossible on GPU
+regardless of code (Part A's commit records two runs of *identical* code diverging from iteration 0
+through reduction non-determinism), and a 4.5-step acceptance band is about the width of the five-seed
+spread it was derived from. The stronger evidence that the control is the same agent is already in
+hand and is structural: built from `nmnsite_t1none.yaml` at HEAD and from `recurrent_ppo_cmp_mc.yaml`
+at the reference commit `788e5983` under one PRNG key, **27/27 parameter leaves are identical and the
+forward pass is bit-equal in logits, value and hidden state**. Accordingly the **learning-curve overlay
+against the reference is primary and the numeric band is advisory**; a control landing just outside
+162.4–166.9 is a prompt to inspect the overlay, not an automatic void.
+
