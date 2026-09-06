@@ -3031,3 +3031,214 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 # 24   rppo_cmp10m_mcraw_s45    mcraw   45    112:1     39113    37oqpt8k  logs/20260904_215922.log
 # 25   rppo_cmp10m_mcraw_s46    mcraw   46    102:0     1921862  o6yac86p  logs/20260904_215932.log
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# NMN input x site grid — 16 runs — 2026-09-07
+# Study: docs/experiments/active/nmn_input_site_grid/NMN_INPUT_SITE_GRID.md
+# Grid: WHAT the modulator reads (ALL / interoceptive-2 / exteroceptive-4)
+#       x WHERE it writes (none / encoder / rnn / actor / critic / all-four).
+# Env: basic/04-jump_attack_10x10 on all sixteen. Agent: RecurrentPPO, return_mode MC.
+# seed (42), num_envs (128) and checkpoint_frequency (200000) are CONFIG-OWNED —
+# deliberately NOT passed on the CLI. --episodes IS passed (config's 100 is a placeholder).
+# Node 114 deliberately left whole (reserved for heavier jobs) despite 4 free Ada cards.
+# Code SHA pinned for the whole wave: a71f4471.
+# ---------------------------------------------------------------------------
+
+# Run 1: rppo_nmnsite_t1none_s42 — node 106, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/nmn_input_site_grid/nmnsite_t1none.yaml \
+#   --episodes 10000000 \
+#   --device cuda:0 \
+#   --log-interval 10 \
+#   --wandb-group nmn_input_site_grid --wandb-job-type pilot \
+#   --wandb-name rppo_nmnsite_t1none_s42 --tag rppo_nmnsite_t1none_s42
+
+# Run 2: rppo_nmnsite_t2enc_ALL_s42 — node 106, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/nmn_input_site_grid/nmnsite_t2enc_ALL.yaml \
+#   --episodes 10000000 \
+#   --device cuda:1 \
+#   --log-interval 10 \
+#   --wandb-group nmn_input_site_grid --wandb-job-type pilot \
+#   --wandb-name rppo_nmnsite_t2enc_ALL_s42 --tag rppo_nmnsite_t2enc_ALL_s42
+
+# Run 3: rppo_nmnsite_t2enc_I_s42 — node 107, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/nmn_input_site_grid/nmnsite_t2enc_I.yaml \
+#   --episodes 10000000 \
+#   --device cuda:0 \
+#   --log-interval 10 \
+#   --wandb-group nmn_input_site_grid --wandb-job-type pilot \
+#   --wandb-name rppo_nmnsite_t2enc_I_s42 --tag rppo_nmnsite_t2enc_I_s42
+
+# Run 4: rppo_nmnsite_t2enc_X_s42 — node 107, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/nmn_input_site_grid/nmnsite_t2enc_X.yaml \
+#   --episodes 10000000 \
+#   --device cuda:1 \
+#   --log-interval 10 \
+#   --wandb-group nmn_input_site_grid --wandb-job-type pilot \
+#   --wandb-name rppo_nmnsite_t2enc_X_s42 --tag rppo_nmnsite_t2enc_X_s42
+
+# Run 5: rppo_nmnsite_t3rnn_ALL_s42 — node 108, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/nmn_input_site_grid/nmnsite_t3rnn_ALL.yaml \
+#   --episodes 10000000 \
+#   --device cuda:0 \
+#   --log-interval 10 \
+#   --wandb-group nmn_input_site_grid --wandb-job-type pilot \
+#   --wandb-name rppo_nmnsite_t3rnn_ALL_s42 --tag rppo_nmnsite_t3rnn_ALL_s42
+
+# Run 6: rppo_nmnsite_t3rnn_I_s42 — node 108, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/nmn_input_site_grid/nmnsite_t3rnn_I.yaml \
+#   --episodes 10000000 \
+#   --device cuda:1 \
+#   --log-interval 10 \
+#   --wandb-group nmn_input_site_grid --wandb-job-type pilot \
+#   --wandb-name rppo_nmnsite_t3rnn_I_s42 --tag rppo_nmnsite_t3rnn_I_s42
+
+# Run 7: rppo_nmnsite_t3rnn_X_s42 — node 109, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/nmn_input_site_grid/nmnsite_t3rnn_X.yaml \
+#   --episodes 10000000 \
+#   --device cuda:0 \
+#   --log-interval 10 \
+#   --wandb-group nmn_input_site_grid --wandb-job-type pilot \
+#   --wandb-name rppo_nmnsite_t3rnn_X_s42 --tag rppo_nmnsite_t3rnn_X_s42
+
+# Run 8: rppo_nmnsite_t4act_ALL_s42 — node 109, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/nmn_input_site_grid/nmnsite_t4act_ALL.yaml \
+#   --episodes 10000000 \
+#   --device cuda:1 \
+#   --log-interval 10 \
+#   --wandb-group nmn_input_site_grid --wandb-job-type pilot \
+#   --wandb-name rppo_nmnsite_t4act_ALL_s42 --tag rppo_nmnsite_t4act_ALL_s42
+
+# Run 9: rppo_nmnsite_t4act_I_s42 — node 110, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/nmn_input_site_grid/nmnsite_t4act_I.yaml \
+#   --episodes 10000000 \
+#   --device cuda:0 \
+#   --log-interval 10 \
+#   --wandb-group nmn_input_site_grid --wandb-job-type pilot \
+#   --wandb-name rppo_nmnsite_t4act_I_s42 --tag rppo_nmnsite_t4act_I_s42
+
+# Run 10: rppo_nmnsite_t4act_X_s42 — node 110, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/nmn_input_site_grid/nmnsite_t4act_X.yaml \
+#   --episodes 10000000 \
+#   --device cuda:1 \
+#   --log-interval 10 \
+#   --wandb-group nmn_input_site_grid --wandb-job-type pilot \
+#   --wandb-name rppo_nmnsite_t4act_X_s42 --tag rppo_nmnsite_t4act_X_s42
+
+# Run 11: rppo_nmnsite_t5crt_ALL_s42 — node 111, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/nmn_input_site_grid/nmnsite_t5crt_ALL.yaml \
+#   --episodes 10000000 \
+#   --device cuda:0 \
+#   --log-interval 10 \
+#   --wandb-group nmn_input_site_grid --wandb-job-type pilot \
+#   --wandb-name rppo_nmnsite_t5crt_ALL_s42 --tag rppo_nmnsite_t5crt_ALL_s42
+
+# Run 12: rppo_nmnsite_t5crt_I_s42 — node 111, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/nmn_input_site_grid/nmnsite_t5crt_I.yaml \
+#   --episodes 10000000 \
+#   --device cuda:1 \
+#   --log-interval 10 \
+#   --wandb-group nmn_input_site_grid --wandb-job-type pilot \
+#   --wandb-name rppo_nmnsite_t5crt_I_s42 --tag rppo_nmnsite_t5crt_I_s42
+
+# Run 13: rppo_nmnsite_t5crt_X_s42 — node 112, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/nmn_input_site_grid/nmnsite_t5crt_X.yaml \
+#   --episodes 10000000 \
+#   --device cuda:0 \
+#   --log-interval 10 \
+#   --wandb-group nmn_input_site_grid --wandb-job-type pilot \
+#   --wandb-name rppo_nmnsite_t5crt_X_s42 --tag rppo_nmnsite_t5crt_X_s42
+
+# Run 14: rppo_nmnsite_t16quad_ALL_s42 — node 112, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/nmn_input_site_grid/nmnsite_t16quad_ALL.yaml \
+#   --episodes 10000000 \
+#   --device cuda:1 \
+#   --log-interval 10 \
+#   --wandb-group nmn_input_site_grid --wandb-job-type pilot \
+#   --wandb-name rppo_nmnsite_t16quad_ALL_s42 --tag rppo_nmnsite_t16quad_ALL_s42
+
+# Run 15: rppo_nmnsite_t16quad_I_s42 — node 113, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/nmn_input_site_grid/nmnsite_t16quad_I.yaml \
+#   --episodes 10000000 \
+#   --device cuda:0 \
+#   --log-interval 10 \
+#   --wandb-group nmn_input_site_grid --wandb-job-type pilot \
+#   --wandb-name rppo_nmnsite_t16quad_I_s42 --tag rppo_nmnsite_t16quad_I_s42
+
+# Run 16: rppo_nmnsite_t16quad_X_s42 — node 113, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/nmn_input_site_grid/nmnsite_t16quad_X.yaml \
+#   --episodes 10000000 \
+#   --device cuda:1 \
+#   --log-interval 10 \
+#   --wandb-group nmn_input_site_grid --wandb-job-type pilot \
+#   --wandb-name rppo_nmnsite_t16quad_X_s42 --tag rppo_nmnsite_t16quad_X_s42
+
+# ---------------------------------------------------------------------------
+# LAUNCH RECORD — all 16 verified TRAINING, exactly one PID per tag, 2026-09-07T05:06
+# Verification beyond process-existence: every run's episode counter advanced between
+# two samples ~95 s apart, and every assigned GPU is resident and busy (72-100% util,
+# 5.4-6.7 GB). Node 114 left whole as instructed (all 4 Ada cards idle, 1 MiB).
+# Ground truth from each run's OWN saved models/config.yaml: modulation.sites and
+# modulation.input_sensors match the intended arm on all 16 (t1none: type null);
+# TOP-LEVEL seed: 42 and episodes: 10000000 on all 16; num_envs 128; decay_power 1.0
+# (registry canonical); return_mode MC; algorithm RecurrentPPO.
+# NOTE: read seed/episodes from the TOP-LEVEL keys — the nested training: pair is a
+# known stale duplicate that always reads 42/100 (see KNOWN_BUGS.md).
+# provenance.json git_short = a71f4471 on ALL SIXTEEN (no split-SHA wave).
+#
+# LAUNCH DEFECT (caught pre-training, nothing wasted): the first attempt at runs 2-16
+# staged the remote /tmp scripts with `ssh -n ... "cat > $TMP" < stage.sh`. The -n flag
+# forces stdin to /dev/null, overriding the redirect, so all 15 scripts were written
+# 0 bytes; `bash <empty>` exits 0 instantly -> 0-byte logs, no processes, no results
+# dirs, no WandB runs, no GPU touched. Relaunched without -n plus a post-stage
+# assertion that the staged file contains the expected --tag before run_command.py is
+# called. Run 1 was staged before the -n was introduced and was never affected.
+# Run  Tag                            Arm         Slice  Node:GPU  PID      WandB     Log
+# 1    rppo_nmnsite_t1none_s42        t1none      -      106:0     349961   anpfno02  logs/20260907_045528_rppo_nmnsite_t1none_s42.log
+# 2    rppo_nmnsite_t2enc_ALL_s42     t2enc       ALL    106:1     354805   pom30693  logs/20260907_050217_rppo_nmnsite_t2enc_ALL_s42.log
+# 3    rppo_nmnsite_t2enc_I_s42       t2enc       I      107:0     267885   9f8wx4b9  logs/20260907_050218_rppo_nmnsite_t2enc_I_s42.log
+# 4    rppo_nmnsite_t2enc_X_s42       t2enc       X      107:1     268045   kir9fubn  logs/20260907_050219_rppo_nmnsite_t2enc_X_s42.log
+# 5    rppo_nmnsite_t3rnn_ALL_s42     t3rnn       ALL    108:0     259660   3ed43b2i  logs/20260907_050220_rppo_nmnsite_t3rnn_ALL_s42.log
+# 6    rppo_nmnsite_t3rnn_I_s42       t3rnn       I      108:1     259817   84964jnn  logs/20260907_050221_rppo_nmnsite_t3rnn_I_s42.log
+# 7    rppo_nmnsite_t3rnn_X_s42       t3rnn       X      109:0     243285   ryt9z2lo  logs/20260907_050222_rppo_nmnsite_t3rnn_X_s42.log
+# 8    rppo_nmnsite_t4act_ALL_s42     t4act       ALL    109:1     243445   p6yc4akb  logs/20260907_050223_rppo_nmnsite_t4act_ALL_s42.log
+# 9    rppo_nmnsite_t4act_I_s42       t4act       I      110:0     183809   qeesiize  logs/20260907_050224_rppo_nmnsite_t4act_I_s42.log
+# 10   rppo_nmnsite_t4act_X_s42       t4act       X      110:1     183969   skmnxb2h  logs/20260907_050225_rppo_nmnsite_t4act_X_s42.log
+# 11   rppo_nmnsite_t5crt_ALL_s42     t5crt       ALL    111:0     197715   qug0fubt  logs/20260907_050226_rppo_nmnsite_t5crt_ALL_s42.log
+# 12   rppo_nmnsite_t5crt_I_s42       t5crt       I      111:1     197875   hi2ly2sh  logs/20260907_050226_rppo_nmnsite_t5crt_I_s42.log
+# 13   rppo_nmnsite_t5crt_X_s42       t5crt       X      112:0     185723   f5qlrnql  logs/20260907_050227_rppo_nmnsite_t5crt_X_s42.log
+# 14   rppo_nmnsite_t16quad_ALL_s42   t16quad     ALL    112:1     185883   b2cen70a  logs/20260907_050228_rppo_nmnsite_t16quad_ALL_s42.log
+# 15   rppo_nmnsite_t16quad_I_s42     t16quad     I      113:0     290554   ldsttwlo  logs/20260907_050229_rppo_nmnsite_t16quad_I_s42.log
+# 16   rppo_nmnsite_t16quad_X_s42     t16quad     X      113:1     290742   hxey8k3h  logs/20260907_050230_rppo_nmnsite_t16quad_X_s42.log
+# ---------------------------------------------------------------------------
