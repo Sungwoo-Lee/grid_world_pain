@@ -9,6 +9,10 @@
 #     g1 maintains near-identity gates (~0.93–0.97), preserving discriminative
 #     capacity that heterogeneity can in principle exploit.
 #   - If g1 cannot exploit P5 heterogeneity, no other grouping size will.
+# MIGRATION 2026-09-07 (MODULATION_SITE_REFACTOR): `modulation.temp_clip` became
+# `modulation.temperature.{enabled, clip}`, and `modulation.sites` + `modulation.rnn_mechanism`
+# became mandatory keys. The values below reproduce this file's PRE-refactor behaviour
+# exactly — a no-op migration, not a retune.
 
 agent:
   algorithm: "RecurrentPPO"
@@ -50,5 +54,16 @@ agent:
     grouping_size: 1
     percept_bias_init: 3.0
     memory_bias_init: 0.0
-    temp_clip: [0.5, 3.0]
     memory_clip: [-2.0, 2.0]
+
+    # --- modulation-site refactor (2026-09-07): WHERE the modulator writes.
+    # encoder+rnn / gate_bias / temperature-on == this file's pre-refactor behaviour.
+    sites:
+      encoder: true
+      rnn:     true
+      actor:   false
+      critic:  false
+    rnn_mechanism: "gate_bias"
+    temperature:
+      enabled: true
+      clip: [0.5, 3.0]

@@ -55,6 +55,7 @@ except ImportError:
 
 from src.environment.config_loader import load_env_params
 from src.models.recurrent_ppo_network import ActorCriticRNN
+from src.models.modulation_compat import translate_legacy_modulation_config
 from src.environment.wrapper import ParallelEnv
 from src.environment.core import jax_step, jax_reset
 from src.environment.sensor import get_observation, get_observation_breakdown
@@ -382,6 +383,11 @@ def main():
             modulation_config = config.get('agent.modulation')
             if modulation_config is not None and modulation_config.get('type') is None:
                 modulation_config = None
+            # Archived runs saved the pre-refactor flat `temp_clip` key; translate it
+            # in memory so re-analysis of an archived NMN run still works. Read-only —
+            # nothing is written back, and the LIVE-config path still hard-errors.
+            modulation_config = translate_legacy_modulation_config(
+                modulation_config, source=config_path)
 
             model = ActorCriticRNN(
                 input_dim=input_dim,

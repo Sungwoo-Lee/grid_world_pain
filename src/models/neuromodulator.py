@@ -25,17 +25,33 @@ import math
 import jax
 import jax.numpy as jnp
 from flax import nnx
-from typing import NamedTuple, Tuple
+from typing import Any, NamedTuple, Optional, Tuple
 
 
 class ModulatorOutput(NamedTuple):
-    """Output from the neuromodulator's branched heads."""
-    z_unimodal: jnp.ndarray      # Phase 1: Unimodal gains
-    z_unimodal_add: jnp.ndarray  # Phase 1: Unimodal biases
-    z_multimodal: jnp.ndarray    # Phase 2: Multimodal gains
-    z_multimodal_add: jnp.ndarray # Phase 2: Multimodal biases
-    z_memory: jnp.ndarray        # Memory gate-bias signal
-    temperature: jnp.ndarray     # Bounded temperature scalar
+    """Output from the neuromodulator's branched heads.
+
+    A field is None when its site is disabled. None is a valid EMPTY pytree, so
+    vmap/scan carry it without allocating anything (plan D7/D8) -- which matters
+    because the trainer stores this whole structure per step, per environment,
+    inside the rollout buffer. The field SET is fixed at construction and never
+    varies at runtime.
+
+    Fields are grouped in data-flow order (encoder -> rnn -> actor -> critic ->
+    temperature) for readability only; every consumer reads by attribute name.
+    """
+    z_unimodal: Any          # encoder stage 1 gain (gamma);  None if sites.encoder is False
+    z_unimodal_add: Any      # encoder stage 1 shift (beta)
+    z_multimodal: Any        # encoder stage 2 gain (gamma)
+    z_multimodal_add: Any    # encoder stage 2 shift (beta)
+    z_rnn: Any               # task-GRU output gain (gamma); None unless rnn_mechanism == "activation"
+    z_rnn_add: Any           # task-GRU output shift (beta)
+    z_memory: Any            # gate-bias signal; None unless rnn_mechanism == "gate_bias"
+    z_actor: Any             # actor hidden gain (gamma);  None if sites.actor is False
+    z_actor_add: Any         # actor hidden shift (beta)
+    z_critic: Any            # critic hidden gain (gamma); None if sites.critic is False
+    z_critic_add: Any        # critic hidden shift (beta)
+    temperature: Any         # None unless temperature.enabled
 
 
 class NeuromodulatorRNN(nnx.Module):
@@ -52,8 +68,21 @@ class NeuromodulatorRNN(nnx.Module):
         percept_add_bias_init: Bias initialization for the perceptual additive head (beta).
                                Only used when modulation_type = "PreActivation".
         memory_bias_init: Bias initialization for the memory gate-bias head.
-        temp_clip: (min, max) bounds for the temperature output.
+        temp_clip: (min, max) bounds for the temperature output. Required only
+                   when temperature_enabled; ignored (and may be None) otherwise.
+        sites: dict with the four mandatory boolean keys
+               {"encoder", "rnn", "actor", "critic"} -- WHERE the modulator writes.
+        rnn_mechanism: "activation" (FiLM on the task GRU's emitted output) or
+               "gate_bias" (legacy additive bias into the GRU update gate).
+               Read even when sites["rnn"] is False, so turning the site on later
+               cannot silently pick a mechanism nobody chose.
+        temperature_enabled: whether the action-temperature head exists at all.
         rngs: Flax NNX random number generators.
+
+    Head construction ORDER is load-bearing (plan D11): the pre-refactor heads
+    keep their exact positions in the nnx.Rngs stream and every new head is
+    created strictly after them, so a legacy-equivalent config produces a
+    byte-identical parameter tree and old checkpoints still restore.
     """
 
     def __init__(
@@ -68,8 +97,11 @@ class NeuromodulatorRNN(nnx.Module):
         percept_bias_init: float = 2.0,
         percept_add_bias_init: float = 0.0,
         memory_bias_init: float = 0.0,
-        temp_clip: Tuple[float, float] = (0.1, 10.0),
+        temp_clip: Optional[Tuple[float, float]] = None,
         memory_clip: Tuple[float, float] = (-2.0, 2.0),
+        sites: dict,
+        rnn_mechanism: str,
+        temperature_enabled: bool,
         rngs: nnx.Rngs,
     ):
         self.mod_hidden_size = mod_hidden_size
@@ -78,6 +110,25 @@ class NeuromodulatorRNN(nnx.Module):
         self.grouping_size = grouping_size
         self.temp_clip = temp_clip
         self.memory_clip = memory_clip
+
+        # Site enables are stored as four SEPARATE scalar bools (never a dict
+        # attribute): a bare Python bool on an nnx.Module lands unambiguously in
+        # the graphdef -- the static half of the jit cache key -- so it is
+        # resolved once at trace time and can never become a traced leaf.
+        self.site_encoder = bool(sites['encoder'])
+        self.site_rnn = bool(sites['rnn'])
+        self.site_actor = bool(sites['actor'])
+        self.site_critic = bool(sites['critic'])
+        self.rnn_mechanism = str(rnn_mechanism)
+        self.temperature_enabled = bool(temperature_enabled)
+        self._uses_gate_bias = self.site_rnn and self.rnn_mechanism == "gate_bias"
+        self._uses_rnn_film = self.site_rnn and self.rnn_mechanism == "activation"
+
+        if self.temperature_enabled and temp_clip is None:
+            raise ValueError(
+                "NeuromodulatorRNN: temperature_enabled=True requires temp_clip "
+                "(modulation.temperature.clip)."
+            )
 
         self.num_groups_hidden = math.ceil(target_hidden_size / grouping_size)
         self.num_groups_unimodal = self.num_groups_hidden
@@ -94,37 +145,76 @@ class NeuromodulatorRNN(nnx.Module):
         else:
             _percept_bias = percept_bias_init
 
-        self.head_unimodal = nnx.Linear(mod_hidden_size, self.num_groups_unimodal,
-                                       bias_init=nnx.initializers.constant(_percept_bias), rngs=rngs)
-        if self.modulation_type in ("PreActivation", "FiLM"):
-            self.head_unimodal_add = nnx.Linear(mod_hidden_size, self.num_groups_unimodal,
-                                               bias_init=nnx.initializers.constant(percept_add_bias_init), rngs=rngs)
+        if self.site_encoder:
+            self.head_unimodal = nnx.Linear(mod_hidden_size, self.num_groups_unimodal,
+                                           bias_init=nnx.initializers.constant(_percept_bias), rngs=rngs)
+            if self.modulation_type in ("PreActivation", "FiLM"):
+                self.head_unimodal_add = nnx.Linear(mod_hidden_size, self.num_groups_unimodal,
+                                                   bias_init=nnx.initializers.constant(percept_add_bias_init), rngs=rngs)
 
-        # Phase 2: Multimodal
-        self.head_multimodal = nnx.Linear(mod_hidden_size, self.num_groups_hidden,
-                                         bias_init=nnx.initializers.constant(_percept_bias), rngs=rngs)
-        if self.modulation_type in ("PreActivation", "FiLM"):
-            self.head_multimodal_add = nnx.Linear(mod_hidden_size, self.num_groups_hidden,
-                                                 bias_init=nnx.initializers.constant(percept_add_bias_init), rngs=rngs)
+            # Phase 2: Multimodal
+            self.head_multimodal = nnx.Linear(mod_hidden_size, self.num_groups_hidden,
+                                             bias_init=nnx.initializers.constant(_percept_bias), rngs=rngs)
+            if self.modulation_type in ("PreActivation", "FiLM"):
+                self.head_multimodal_add = nnx.Linear(mod_hidden_size, self.num_groups_hidden,
+                                                     bias_init=nnx.initializers.constant(percept_add_bias_init), rngs=rngs)
 
         # Memory gate-bias head: raw output, injected into GRU update gate (§5.1a)
-        self.head_memory = nnx.Linear(
-            mod_hidden_size, self.num_groups_hidden,
-            bias_init=nnx.initializers.constant(memory_bias_init),
-            rngs=rngs,
-        )
+        if self._uses_gate_bias:
+            self.head_memory = nnx.Linear(
+                mod_hidden_size, self.num_groups_hidden,
+                bias_init=nnx.initializers.constant(memory_bias_init),
+                rngs=rngs,
+            )
 
         # Temperature head: scalar → softplus → clip
-        self.head_action = nnx.Linear(mod_hidden_size, 1, rngs=rngs)
+        if self.temperature_enabled:
+            self.head_action = nnx.Linear(mod_hidden_size, 1, rngs=rngs)
+
+        # --- Everything below is NEW and MUST be constructed after head_action,
+        # --- so the legacy-equivalent setting leaves the RNG stream untouched (D11).
+
+        def _film_pair(name):
+            """Build a (gamma, beta) FiLM head pair with the project's standard
+            pass-through initialisation: gamma starts at identity, beta at zero,
+            so a newly-enabled site is a no-op at step 0 (§5.2)."""
+            setattr(self, f'head_{name}', nnx.Linear(
+                mod_hidden_size, self.num_groups_hidden,
+                bias_init=nnx.initializers.constant(_percept_bias), rngs=rngs))
+            setattr(self, f'head_{name}_add', nnx.Linear(
+                mod_hidden_size, self.num_groups_hidden,
+                bias_init=nnx.initializers.constant(percept_add_bias_init), rngs=rngs))
+
+        if self._uses_rnn_film:
+            _film_pair('rnn')
+        if self.site_actor:
+            _film_pair('actor')
+        if self.site_critic:
+            _film_pair('critic')
 
         # === Per-neuron learned baselines ===
-        self.z_unimodal_baseline = nnx.Param(jnp.zeros(target_hidden_size))
-        self.z_hidden_baseline = nnx.Param(jnp.zeros(target_hidden_size))
-        self.z_mem_baseline = nnx.Param(jnp.zeros(target_hidden_size))
+        # nnx.Param(jnp.zeros(...)) consumes no RNG, so the relative order here does
+        # not shift the stream; the existing names keep their positions so the state
+        # dict's key set stays identical for a legacy-equivalent config.
+        if self.site_encoder:
+            self.z_unimodal_baseline = nnx.Param(jnp.zeros(target_hidden_size))
+            self.z_hidden_baseline = nnx.Param(jnp.zeros(target_hidden_size))
+        if self._uses_gate_bias:
+            self.z_mem_baseline = nnx.Param(jnp.zeros(target_hidden_size))
 
-        if self.modulation_type in ("PreActivation", "FiLM"):
+        if self.site_encoder and self.modulation_type in ("PreActivation", "FiLM"):
             self.z_unimodal_add_baseline = nnx.Param(jnp.zeros(target_hidden_size))
             self.z_hidden_add_baseline = nnx.Param(jnp.zeros(target_hidden_size))
+
+        if self._uses_rnn_film:
+            self.z_rnn_baseline = nnx.Param(jnp.zeros(target_hidden_size))
+            self.z_rnn_add_baseline = nnx.Param(jnp.zeros(target_hidden_size))
+        if self.site_actor:
+            self.z_actor_baseline = nnx.Param(jnp.zeros(target_hidden_size))
+            self.z_actor_add_baseline = nnx.Param(jnp.zeros(target_hidden_size))
+        if self.site_critic:
+            self.z_critic_baseline = nnx.Param(jnp.zeros(target_hidden_size))
+            self.z_critic_add_baseline = nnx.Param(jnp.zeros(target_hidden_size))
 
     def __call__(
         self,
@@ -154,28 +244,59 @@ class NeuromodulatorRNN(nnx.Module):
                 return sig, sig_add
             return sig, jnp.zeros_like(sig)
 
-        z_uni, z_uni_add = _get_signal(self.head_unimodal, self.z_unimodal_baseline, 
-                                      getattr(self, 'head_unimodal_add', None), 
-                                      getattr(self, 'z_unimodal_add_baseline', None))
-        
-        z_multi, z_multi_add = _get_signal(self.head_multimodal, self.z_hidden_baseline,
-                                          getattr(self, 'head_multimodal_add', None),
-                                          getattr(self, 'z_hidden_add_baseline', None))
+        # Every disabled site yields None -- a valid EMPTY pytree, so nothing is
+        # allocated and nothing is stored per step in the rollout buffer (D7).
+        z_uni = z_uni_add = None
+        if self.site_encoder:
+            z_uni, z_uni_add = _get_signal(self.head_unimodal, self.z_unimodal_baseline,
+                                          getattr(self, 'head_unimodal_add', None),
+                                          getattr(self, 'z_unimodal_add_baseline', None))
 
-        # Memory (always Multiplicative/direct bias)
-        z_mem, _ = _get_signal(self.head_memory, self.z_mem_baseline)
-        z_mem = jnp.clip(z_mem, self.memory_clip[0], self.memory_clip[1])
+        z_multi = z_multi_add = None
+        if self.site_encoder:
+            z_multi, z_multi_add = _get_signal(self.head_multimodal, self.z_hidden_baseline,
+                                              getattr(self, 'head_multimodal_add', None),
+                                              getattr(self, 'z_hidden_add_baseline', None))
 
-        # Temperature (bounded). Note: softplus(x) + 0.5 >= 0.5 always, so
-        # temp_clip[0] (default 0.1) is a dead lower bound in practice — the
+        # Memory gate bias (legacy "gate_bias" mechanism; always direct bias)
+        z_mem = None
+        if self._uses_gate_bias:
+            z_mem, _ = _get_signal(self.head_memory, self.z_mem_baseline)
+            z_mem = jnp.clip(z_mem, self.memory_clip[0], self.memory_clip[1])
+
+        # RNN-output FiLM ("activation" mechanism)
+        z_rnn = z_rnn_add = None
+        if self._uses_rnn_film:
+            z_rnn, z_rnn_add = _get_signal(self.head_rnn, self.z_rnn_baseline,
+                                           self.head_rnn_add, self.z_rnn_add_baseline)
+
+        z_actor = z_actor_add = None
+        if self.site_actor:
+            z_actor, z_actor_add = _get_signal(self.head_actor, self.z_actor_baseline,
+                                               self.head_actor_add, self.z_actor_add_baseline)
+
+        z_critic = z_critic_add = None
+        if self.site_critic:
+            z_critic, z_critic_add = _get_signal(self.head_critic, self.z_critic_baseline,
+                                                 self.head_critic_add, self.z_critic_add_baseline)
+
+        # Temperature (bounded, opt-in). Note: softplus(x) + 0.5 >= 0.5 always, so
+        # temp_clip[0] (typically 0.5) is a dead lower bound in practice — the
         # effective floor is 0.5. Only temp_clip[1] (upper bound) is reachable.
-        z_act_raw = self.head_action(h_mod_new)
-        temperature = jnp.clip(jax.nn.softplus(z_act_raw) + 0.5, self.temp_clip[0], self.temp_clip[1])
+        temperature = None
+        if self.temperature_enabled:
+            z_act_raw = self.head_action(h_mod_new)
+            temperature = jnp.clip(jax.nn.softplus(z_act_raw) + 0.5,
+                                   self.temp_clip[0], self.temp_clip[1])
 
         output = ModulatorOutput(
             z_unimodal=z_uni, z_unimodal_add=z_uni_add,
             z_multimodal=z_multi, z_multimodal_add=z_multi_add,
-            z_memory=z_mem, temperature=temperature
+            z_rnn=z_rnn, z_rnn_add=z_rnn_add,
+            z_memory=z_mem,
+            z_actor=z_actor, z_actor_add=z_actor_add,
+            z_critic=z_critic, z_critic_add=z_critic_add,
+            temperature=temperature,
         )
         return output, h_mod_new
 

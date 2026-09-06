@@ -1144,9 +1144,16 @@ def main():
         if not args.quiet:
             print(f"RNN Type: {rnn_type}, Activation: {activation}, Return Mode: {return_mode}")
             if modulation_config is not None:
+                _sites = modulation_config.get('sites', {})
+                _site_list = ",".join(k for k in ('encoder', 'rnn', 'actor', 'critic')
+                                      if _sites.get(k))
+                _temp_on = bool((modulation_config.get('temperature') or {}).get('enabled'))
                 print(f"Neuromodulation: ENABLED (type={modulation_config['type']}, "
                       f"mod_hidden={modulation_config['mod_hidden_size']}, "
-                      f"grouping={modulation_config['grouping_size']})")
+                      f"grouping={modulation_config['grouping_size']}, "
+                      f"sites=[{_site_list}], "
+                      f"rnn_mechanism={modulation_config.get('rnn_mechanism')}, "
+                      f"temperature={'on' if _temp_on else 'off'})")
             else:
                 print(f"Neuromodulation: DISABLED (baseline)")
         
@@ -1666,10 +1673,15 @@ def main():
                     if args.debug: print(f" Done.", flush=True)
                     
                     if args.debug and mod_info is not None:
-                        z_uni = float(jnp.mean(mod_info.z_unimodal))
-                        z_multi = float(jnp.mean(mod_info.z_multimodal))
-                        z_mem = float(jnp.mean(mod_info.z_memory))
-                        temp = float(jnp.mean(mod_info.temperature)) if hasattr(mod_info, 'temperature') else 1.0
+                        # Disabled sites carry None (plan D7), so every read is guarded.
+                        # The 1.0 / 0.0 stand-ins below are DISPLAY placeholders for a
+                        # debug print only -- never a config default.
+                        def _m(v, default):
+                            return float(jnp.mean(v)) if v is not None else default
+                        z_uni = _m(mod_info.z_unimodal, 1.0)
+                        z_multi = _m(mod_info.z_multimodal, 1.0)
+                        z_mem = _m(mod_info.z_memory, 0.0)
+                        temp = _m(getattr(mod_info, 'temperature', None), 1.0)
                         print(f"  [Modulator] Mean Uni: {z_uni:.3f}, Multi: {z_multi:.3f}, Mem: {z_mem:.3f}, Temp: {temp:.2f}")
                     
                     steps_this_iter = num_steps * num_envs
@@ -1822,25 +1834,38 @@ def main():
                         # Add Modulator metrics if enabled (single-iteration semantics —
                         # not part of the rolling window; see note above).
                         if mod_info is not None:
-                            wandb_logs.update({
-                                "modulator/grad_norm": float(avg_mod_grad_norm),
-                                "modulator/gamma_uni_mean": float(jnp.mean(mod_info.z_unimodal)),
-                                "modulator/gamma_uni_std": float(jnp.std(mod_info.z_unimodal)),
-                                "modulator/gamma_multi_mean": float(jnp.mean(mod_info.z_multimodal)),
-                                "modulator/gamma_multi_std": float(jnp.std(mod_info.z_multimodal)),
-                                "modulator/z_memory_mean": float(jnp.mean(mod_info.z_memory)),
-                                "modulator/z_memory_std": float(jnp.std(mod_info.z_memory)),
-                                "modulator/temperature_mean": float(jnp.mean(mod_info.temperature)),
-                                "modulator/temperature_min": float(jnp.min(mod_info.temperature)),
-                                "modulator/temperature_max": float(jnp.max(mod_info.temperature)),
-                            })
-                            if modulation_config is not None and modulation_config.get('type') in ("PreActivation", "FiLM"):
+                            # A metric series exists iff its site is enabled: a disabled
+                            # site's field is None (plan D7), and jnp.mean(None) raises.
+                            # z_memory_* keeps its historical name (gate-bias mechanism);
+                            # the "activation" mechanism logs gamma_rnn_*/beta_rnn_*
+                            # instead, because it is a DIFFERENT quantity.
+                            wandb_logs["modulator/grad_norm"] = float(avg_mod_grad_norm)
+
+                            def _mod_spread(v, prefix):
+                                if v is not None:
+                                    wandb_logs[f"modulator/{prefix}_mean"] = float(jnp.mean(v))
+                                    wandb_logs[f"modulator/{prefix}_std"] = float(jnp.std(v))
+
+                            _mod_spread(mod_info.z_unimodal, "gamma_uni")
+                            _mod_spread(mod_info.z_multimodal, "gamma_multi")
+                            _mod_spread(mod_info.z_memory, "z_memory")
+                            _mod_spread(getattr(mod_info, 'z_rnn', None), "gamma_rnn")
+                            _mod_spread(getattr(mod_info, 'z_actor', None), "gamma_actor")
+                            _mod_spread(getattr(mod_info, 'z_critic', None), "gamma_critic")
+                            if mod_info.temperature is not None:
                                 wandb_logs.update({
-                                    "modulator/beta_uni_mean": float(jnp.mean(mod_info.z_unimodal_add)),
-                                    "modulator/beta_uni_std": float(jnp.std(mod_info.z_unimodal_add)),
-                                    "modulator/beta_multi_mean": float(jnp.mean(mod_info.z_multimodal_add)),
-                                    "modulator/beta_multi_std": float(jnp.std(mod_info.z_multimodal_add)),
+                                    "modulator/temperature_mean": float(jnp.mean(mod_info.temperature)),
+                                    "modulator/temperature_min": float(jnp.min(mod_info.temperature)),
+                                    "modulator/temperature_max": float(jnp.max(mod_info.temperature)),
                                 })
+                            if modulation_config is not None and modulation_config.get('type') in ("PreActivation", "FiLM"):
+                                _mod_spread(mod_info.z_unimodal_add, "beta_uni")
+                                _mod_spread(mod_info.z_multimodal_add, "beta_multi")
+                            # The rnn/actor/critic FiLM sites are always gamma+beta pairs,
+                            # regardless of the encoder's modulation style.
+                            _mod_spread(getattr(mod_info, 'z_rnn_add', None), "beta_rnn")
+                            _mod_spread(getattr(mod_info, 'z_actor_add', None), "beta_actor")
+                            _mod_spread(getattr(mod_info, 'z_critic_add', None), "beta_critic")
 
                         wandb_logs.update({
                             "timesteps": global_step,
@@ -1856,7 +1881,7 @@ def main():
                         "Loss": f"{total_loss:.4f}",
                         "Rew": f"{np.mean([ep['r'] for ep in ep_info_buffer]) if ep_info_buffer else 0.0:.2f}"
                     }
-                    if mod_info is not None:
+                    if mod_info is not None and mod_info.temperature is not None:
                         postfix["T"] = f"{float(jnp.mean(mod_info.temperature)):.2f}"
                     pbar.set_postfix(postfix)
                         

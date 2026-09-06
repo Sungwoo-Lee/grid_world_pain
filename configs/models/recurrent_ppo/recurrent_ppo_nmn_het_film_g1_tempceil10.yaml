@@ -17,6 +17,10 @@
 #
 # Numerical safety: src/models/neuromodulator.py:71 default is (0.1, 10.0).
 # We are not pushing past the architecture's own original numerical envelope.
+# MIGRATION 2026-09-07 (MODULATION_SITE_REFACTOR): `modulation.temp_clip` became
+# `modulation.temperature.{enabled, clip}`, and `modulation.sites` + `modulation.rnn_mechanism`
+# became mandatory keys. The values below reproduce this file's PRE-refactor behaviour
+# exactly — a no-op migration, not a retune.
 
 agent:
   algorithm: "RecurrentPPO"
@@ -58,5 +62,16 @@ agent:
     grouping_size: 1
     percept_bias_init: 3.0
     memory_bias_init: 0.0
-    temp_clip: [0.5, 10.0]    # <-- changed from [0.5, 3.0]
     memory_clip: [-2.0, 2.0]
+
+    # --- modulation-site refactor (2026-09-07): WHERE the modulator writes.
+    # encoder+rnn / gate_bias / temperature-on == this file's pre-refactor behaviour.
+    sites:
+      encoder: true
+      rnn:     true
+      actor:   false
+      critic:  false
+    rnn_mechanism: "gate_bias"
+    temperature:
+      enabled: true
+      clip: [0.5, 10.0]     # <-- changed from [0.5, 3.0]

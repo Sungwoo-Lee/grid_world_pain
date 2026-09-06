@@ -187,6 +187,7 @@ def load_policy(agent_type: str, ckpt_dir: Path, cfg: dict, params,
     import orbax.checkpoint as ocp
     from src.environment.sensor import get_observation_breakdown
     from src.models.recurrent_ppo_network import ActorCriticRNN
+    from src.models.modulation_compat import translate_legacy_modulation_config
 
     agent_cfg = Config(cfg).get("agent")
     if agent_cfg is None:
@@ -199,6 +200,11 @@ def load_policy(agent_type: str, ckpt_dir: Path, cfg: dict, params,
     modulation_config = acfg.get("agent.modulation")
     if modulation_config is not None and modulation_config.get("type") is None:
         modulation_config = None
+    # The collector always reads the run's OWN saved config, so archived runs
+    # carrying the pre-refactor flat `temp_clip` key are translated in memory.
+    # Read-only; nothing is written back.
+    modulation_config = translate_legacy_modulation_config(
+        modulation_config, source="the run's saved models/config.yaml")
 
     model = ActorCriticRNN(
         input_dim=input_dim,

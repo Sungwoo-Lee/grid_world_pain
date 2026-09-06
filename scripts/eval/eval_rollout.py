@@ -1055,12 +1055,14 @@ def main():
     if agent_type == "rppo":
         import flax.nnx as nnx
         from src.models.recurrent_ppo_network import ActorCriticRNN, get_action_and_value_nnx
+        from src.models.modulation_compat import translate_legacy_modulation_config
 
         # --- Locate agent config ---
         # Prefer an explicit --agent_config; fall back to config.yaml saved alongside
         # the checkpoint (written by train.py at checkpoint-save time).
         # The config.yaml lives in the CheckpointManager root directory; check
         # both ckpt_path itself and its parent (handles step-dir vs. root-dir arg).
+        agent_config_source = None      # set only when the config came from the RUN's saved copy
         if args.agent_config:
             agent_config = Config.load_yaml(args.agent_config)
         else:
@@ -1069,6 +1071,7 @@ def main():
                 saved_cfg = ckpt_path.parent / "config.yaml"
             if saved_cfg.exists():
                 agent_config = Config.load_yaml(str(saved_cfg))
+                agent_config_source = str(saved_cfg)
             else:
                 raise FileNotFoundError(
                     f"No --agent_config provided and no config.yaml found near "
@@ -1093,6 +1096,13 @@ def main():
         modulation_config = agent_config.get("agent.modulation")
         if modulation_config is not None and modulation_config.get("type") is None:
             modulation_config = None
+        if agent_config_source is not None:
+            # Archived runs saved the pre-refactor flat `temp_clip` key; translate it
+            # in memory so an archived NMN run stays re-analysable. Read-only, and only
+            # for the run's OWN saved config -- an explicit --agent_config is a live
+            # file and still hard-errors if it carries the legacy key.
+            modulation_config = translate_legacy_modulation_config(
+                modulation_config, source=agent_config_source)
 
         if not args.quiet:
             print(

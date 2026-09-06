@@ -3,7 +3,7 @@ title: "Modulation Site Refactor — uniform FiLM at selectable sites (Recurrent
 topic: neuromodulation
 status: active
 created: 2026-08-31
-last_updated: 2026-09-01
+last_updated: 2026-09-07
 ---
 
 # Modulation Site Refactor — uniform FiLM at selectable sites (RecurrentPPO)
@@ -583,23 +583,23 @@ Every row names evidence that could actually come out negative.
 
 Ordered. C0a/C0b are genuinely first — doing either late invalidates C1–C4 and V4 respectively.
 
-- [ ] **C0a — Capture all four golden fixtures on the UNMODIFIED tree.** Run `tests/fixtures/modulation/generate_golden.py` before editing any file under `src/`; it must emit the flat pair **and** the hierarchical+LayerNorm pair. Confirm via `git status` that `src/` is clean at capture time and record the commit SHA in the Implementation Report.
-- [ ] **C0b — Capture V4's "before" losses, also on the UNMODIFIED tree, in the same sitting as C0a.** V4 is the only bitwise check that exercises the real hierarchical-encoder + LayerNorm path *through the optimiser*, and its "before" half is only meaningful if produced pre-change. Run ~20 iterations of `recurrent_ppo_nmn_het_film_g1.yaml` at a fixed seed and save the per-iteration losses to a file under `tmp/`, recording seed, node, GPU and the same SHA as C0a.
+- [x] **C0a — Capture all four golden fixtures on the UNMODIFIED tree.** DONE at SHA `5c0835afc609152f9b40b64a88fe42f007ed3353`, `src/` confirmed clean; all four `.npz` written in one run. Run `tests/fixtures/modulation/generate_golden.py` before editing any file under `src/`; it must emit the flat pair **and** the hierarchical+LayerNorm pair. Confirm via `git status` that `src/` is clean at capture time and record the commit SHA in the Implementation Report.
+- [x] **C0b — Capture V4's "before" losses, also on the UNMODIFIED tree, in the same sitting as C0a.** DONE at the same SHA, direct capture (no worktree regen), seed 42, GPU 0 (RTX 4090) — but only reproducible under `XLA_FLAGS=--xla_gpu_deterministic_ops=true`; see the Implementation Report. V4 is the only bitwise check that exercises the real hierarchical-encoder + LayerNorm path *through the optimiser*, and its "before" half is only meaningful if produced pre-change. Run ~20 iterations of `recurrent_ppo_nmn_het_film_g1.yaml` at a fixed seed and save the per-iteration losses to a file under `tmp/`, recording seed, node, GPU and the same SHA as C0a.
   **Fallback if C0b was skipped or the run is lost:** do **not** improvise a "before" from the modified tree. Regenerate it from the SHA recorded in C0a via a throwaway git worktree — `git worktree add /tmp/pre_refactor <SHA>` — run the 20 iterations there with the identical seed/node/GPU, then `git worktree remove`. Note in the Implementation Report which route was used. (A worktree is used rather than a branch switch because this repo's git-safety rule forbids switching with untracked data present.)
 
   ⚠️ **Sequencing rule — the MC-return-bootstrap fix.** The open Monte-Carlo return-bootstrap units bug (Risks item 2, registry row P1 #5) changes the loss values V4 compares. If that fix lands during this work, it must land **strictly before C0b** or **strictly after V4's "after" half** — **never between the two halves**. Landing it in between makes the two sides differ for a reason that has nothing to do with this refactor, and V4 then fails (or, worse, appears to fail) uninterpretably. If the fix lands between, both halves must be re-run. **Plan for both fixes: [[FIX_MC_RETURN_UNITS_AND_LEARNING_RATES]]** — it is sequenced to land entirely BEFORE C0a/C0b, so the before/after pair here is taken on already-fixed code.
-- [ ] **C1** — After editing `neuromodulator.py` + `recurrent_ppo_network.py`, the baseline golden tests pass.
-- [ ] **C2** — All three existing tests in `tests/models/test_network_construction.py` pass with the updated fixture dict.
-- [ ] **C3** — `tests/scripts/test_evaluation_model_rebuild.py` passes, including its unmodulated round-trip case.
-- [ ] **C4** — Legacy-equivalent golden tests pass (forward **and** parameter tree).
-- [ ] **C5** — A real archived NMN checkpoint restores under its migrated config with no completeness-assertion failure.
-- [ ] **C6** — Read (do not edit) `evaluation.py`, `scripts/eval/eval_rollout.py`, `scripts/eval/traj_collect/collect_trajectories.py`; confirm each passes the whole `agent.modulation` dict through. Report if any hand-builds a whitelist.
-- [ ] **C7** — `initial_state` pytree structure identical across all 15 site combinations.
-- [ ] **C8** — All three trainer call sites still unpack a 4-tuple on both paths; a smoke train with `mod_info` containing `None` fields survives `vmap` + `scan`.
-- [ ] **C9** — Full test suite green, including `tests/env/test_unified_parity.py` and `tests/env/test_visual_parity.py` (these must be untouched by an agent-side change; if they move, something is wrong).
-- [ ] **C10** — Short smoke train (~200 iterations) on **three** configs: a baseline, a migrated legacy NMN config, and a new all-four-sites config. No NaN; WandB shows exactly the metric series the site table predicts, and none of the others.
-- [ ] **C11** — Speed + memory numbers for V9/V10 recorded in the Implementation Report, with node, GPU, config and seed stated.
-- [ ] **C12** — `NEUROMODULATION_ALGORITHM.md` and `NMN_METRICS_REFERENCE.md` updated in the same change; `python scripts/claude/regen_dev_index.py` exits 0.
+- [x] **C1** — Baseline golden tests pass, both encoding modes, bit-identical.
+- [x] **C2** — All three pass with the migrated fixture dict.
+- [x] **C3** — Passes (10 tests incl. the unmodulated round trip); its Finding-A key guard now covers the full new mandatory set.
+- [x] **C4** — Legacy-equivalent golden tests pass, forward and parameter tree, both modes.
+- [x] **C5** — `20260507-232135_rppo_nmn_het_p2_film_g1_c4` step 10000043: 56 vs 56 params, identical names + shapes, assertion silent.
+- [x] **C6** — All three pass the whole dict through. `save_snapshot.py` still hand-builds a whitelist (pre-existing OPEN registry row; untouched).
+- [x] **C7** — Identical across all 15 combinations (parametrised test).
+- [x] **C8** — Confirmed at trainer lines 161/262/284; 201-iteration smoke train with `None` fields in `mod_info` ran clean.
+- [x] **C9** — Full suite run: 778 passed / 628 skipped across four invocations. `tests/env/` and `tests/environment/` fully green. The 33 failures + 8 errors are all in `tests/test_trajectory_collection.py` and were **proved pre-existing** by reverting this change's one line in `collect_trajectories.py` and getting an identical failure set.
+- [x] **C10** — 201 iterations on all three; no NaN; the emitted `modulator/*` key sets match the site table exactly (verified through the real `train.py` with `wandb.log` stubbed).
+- [x] **C11** — Recorded. Legacy config −0.06 % (within noise); all-sites-on −3.9 %; peak memory does not grow. Baseline memory row missing (host GPUs claimed mid-measurement).
+- [x] **C12** — Both docs updated in this change (§2A-bis and §2.8 respectively); `regen_dev_index.py` re-run.
 
 ---
 
@@ -660,18 +660,255 @@ A `input_sensors: "interoceptive"` preset would need a hard-coded name→sensor-
 
 ## Implementation Report
 
-> **Implemented by**: [agent/person]
-> **Date**: [date]
+> **Implemented by**: developer
+> **Date**: 2026-09-07
+> **Scope**: **Part A only.** Part B (the configurable modulator input slice) was
+> explicitly out of scope: no code, no config keys, no hooks were added for it.
 
-<!-- developer: fill this in. Must include:
-     - the commit SHA the golden fixtures were captured at (C0a), and confirmation
-       that all FOUR fixtures (flat pair + hierarchical/LN pair) were captured there
-     - where V4's "before" losses live and whether they came from C0b directly or
-       from a worktree regeneration at the recorded SHA
-     - whether the MC-return-bootstrap fix landed during this work, and if so on which
-       side of V4's before/after pair (it must never land between them — see C0b)
-     - before/after speed numbers with node, GPU, config, seed (C11)
-     - any deviation from the plan and why -->
+### Headline
+
+The modulator now performs **one operation — FiLM (multiply by a learned gain, add a
+learned offset) — at four switchable places**: the observation encoder, the task GRU,
+the actor's hidden layer, and the critic's hidden layer. Which places it acts on is
+chosen in the config (`modulation.sites.*`); how it acts on the memory cell is chosen
+by `modulation.rnn_mechanism`; and the action temperature became opt-in. **Both hard
+promises hold, checked against fixtures captured before any code was touched**: the
+unmodulated baseline is bit-identical, and a migrated legacy config reproduces the old
+network byte for byte — same parameters, same forward pass, and the same per-iteration
+training losses to float equality over 20 iterations.
+
+### C0a — golden fixtures
+
+Captured at commit **`5c0835afc609152f9b40b64a88fe42f007ed3353`**, with `git status
+--porcelain src/` empty at capture time (verified in the same shell invocation as the
+capture). **All four** fixtures were produced there, in one run of
+`tests/fixtures/modulation/generate_golden.py`:
+
+| Fixture | Encoding | LayerNorm | Arrays |
+|---|---|---|---|
+| `tests/fixtures/modulation/flat_baseline.npz` | flat | off | 16 |
+| `tests/fixtures/modulation/flat_legacy.npz` | flat | off | 52 |
+| `tests/fixtures/modulation/hier_ln_baseline.npz` | hierarchical | on | 26 |
+| `tests/fixtures/modulation/hier_ln_legacy.npz` | hierarchical | on | 62 |
+
+Each holds the flattened parameter tree plus one fixed-seed forward pass (logits,
+value, task carry, modulator carry, and every emitted modulator signal). Fixtures are
+generated and compared on **CPU** so the parity tests never silently become a CPU/GPU
+numerics comparison.
+
+**Post-change result: all four bit-identical** (`generate_golden.py --check`:
+16/52/26/62 arrays equal). Pinned as tests — see below.
+
+### C0b — V4 "before" losses
+
+Captured **directly (not via a worktree regeneration)** at the same SHA
+`5c0835afc...`, in the same sitting as C0a, with `src/` and `train.py` both clean.
+
+- Harness: `tmp/20260907_v4_loss_capture.py` (mirrors `train.py`'s config assembly,
+  model/optimizer construction, `PPOConfig` fields and key/env-reset order; strips
+  WandB, checkpointing and episode bookkeeping, none of which affect the numbers).
+- Env config `configs/environment/experiment/archive/nmn_noise_heterogeneity/p3_moderate.yaml`,
+  agent config `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_film_g1.yaml`,
+  **seed 42**, 20 iterations, local host **GPU 0 (RTX 4090)**.
+- Before: `tmp/20260907_v4_before.npz` · After: `tmp/20260907_v4_after.npz`.
+
+⚠️ **One thing the plan did not anticipate, and it matters for anyone repeating this.**
+The first "before" capture was **not reproducible against itself** — two identical runs
+differed from iteration 0 (e.g. total loss `0.2678547501564026` vs
+`0.26787126064300537`). This is GPU reduction non-determinism, not a seeding bug, and it
+would have made V4's "float equality" criterion impossible to meet in either direction.
+Both halves were therefore re-captured under `XLA_FLAGS=--xla_gpu_deterministic_ops=true`,
+which was first verified to give run-to-run bitwise equality on the unmodified tree.
+**Anyone re-running V4 must set that flag.** Speed measurements deliberately do *not*
+use it (it is not how training actually runs).
+
+**V4 result: bitwise equal over 20 iterations × 6 loss scalars** (total, policy, value,
+entropy, grad_norm, modulator grad_norm).
+
+### MC-return-bootstrap fix sequencing
+
+**It did not land during this work.** `git log` shows the last trainer change before
+C0a was the MC_FIXED/GAE_NORM/MC_RAW return-mode work, already committed at
+`5c0835afc...`; nothing was committed to `src/models/recurrent_ppo_trainer.py` between
+V4's before and after halves. The three new `return_mode` values were checked for
+interaction and there is **none**: they live entirely in `train_iteration`'s advantage
+step and never read `mod_info`; the only shared surface is `Transition.mod_info` flowing
+through `collect_trajectories`, which is return-mode independent. No config's
+`return_mode` was changed (all 12 migrated NMN configs keep `MC`; the diff over
+`configs/models/recurrent_ppo/` touches only the modulation block and comments).
+
+### File-by-file
+
+| File | Change |
+|---|---|
+| `src/models/neuromodulator.py` | `ModulatorOutput` extended from 6 to 12 fields (adds `z_rnn`, `z_rnn_add`, `z_actor`, `z_actor_add`, `z_critic`, `z_critic_add`); a disabled site's field is `None`. `NeuromodulatorRNN.__init__` takes keyword-only `sites` / `rnn_mechanism` / `temperature_enabled`, `temp_clip` is now optional-when-disabled. Head construction is conditional and **strictly ordered** per D11 — the five pre-existing heads keep their exact positions in the `nnx.Rngs` stream and every new head is created after `head_action`. Site enables stored as four separate scalar bools, never a dict. |
+| `src/models/recurrent_ppo_network.py` | New module-level `_mod_required()` (named `ValueError`, not a bare `KeyError`). Strict validation block in `ActorCriticRNN.__init__` covering the `temp_clip` migration error (D9/D16 wording verbatim), the four site keys, the `rnn_mechanism` whitelist (D12), conditional `temperature.clip`, and the dead-modulator guard (D13). D6 cell selection: `ModulatedGRUCell` only when `sites.rnn and rnn_mechanism == "gate_bias"`. Modulated forward branch rewritten for the four sites; the **unmodulated branch is untouched, not one character**. |
+| `src/models/modulation_compat.py` | **NEW.** The read-only saved-config translation shim (see Deviations). |
+| `train.py` | Startup print now names the site set, mechanism and temperature state. Every `mod_info.<field>` read is guarded for `None`. WandB metric dict built conditionally, with the new `gamma_/beta_{rnn,actor,critic}` series and `z_memory_*` keeping its historical name. Progress-bar temperature guarded. |
+| `evaluation.py`, `scripts/eval/eval_rollout.py`, `scripts/eval/traj_collect/collect_trajectories.py` | One line each: route the saved-config modulation dict through the shim. No other change; all three still pass the **whole** `agent.modulation` dict to the model. |
+| 12 × `configs/models/recurrent_ppo/recurrent_ppo_nmn_*film*.yaml` | Flat `temp_clip` replaced by `sites` + `rnn_mechanism: "gate_bias"` + `temperature: {enabled: true, clip: <this file's own former ceiling>}`, plus a header migration note. Per-file ceilings were re-read from the files, not taken from the plan's table; they matched (`[0.5, 3.0]` / `[0.5, 10.0]` / `[0.5, 5.0]` / 8 × `[0.5, 10.0]` / `[0.5, 10.0]`). Trailing comments on the old `temp_clip` lines were carried onto the new `clip:` lines. No other key changed. |
+| `tests/fixtures/modulation/generate_golden.py` + 4 `.npz` | **NEW.** Fixture generator (under `tests/`, so the SCRIPTS_DEPENDENCY_MAP contract is not triggered) with a `--check` mode. |
+| `tests/models/test_modulation_sites.py` | **NEW**, 71 tests. |
+| `tests/models/test_modulation_compat.py` | **NEW**, 6 tests, for the shim. |
+| `tests/models/test_network_construction.py` | Fixture dict migrated; all three existing tests pass unchanged. |
+| `tests/scripts/test_evaluation_model_rebuild.py` | Finding-A key-presence guard widened from `memory_clip` to the full new mandatory set. |
+| `docs/.../NEUROMODULATION_ALGORITHM.md` | New §2A-bis (sites, mechanisms, the three load-bearing constraints) + rPPO pseudocode updated. |
+| `docs/.../NMN_METRICS_REFERENCE.md` | New §2.8 (per-site metrics; when `z_memory_*` / `temperature_*` are absent and why) + §3 table rows. |
+
+### Test results
+
+All runs on CPU (`JAX_PLATFORMS=cpu`), `-p no:randomly`.
+
+| Command | Result |
+|---|---|
+| `pytest tests/models/` | **168 passed** (92.8 s) — includes the 71 new `test_modulation_sites.py` tests and the 6 new `test_modulation_compat.py` tests |
+| `pytest tests/models/test_network_construction.py tests/scripts/test_evaluation_model_rebuild.py` | **10 passed** |
+| `pytest tests/scripts/ tests/algorithms/ tests/training/ tests/analysis/` | **246 passed, 9 skipped** (862 s) |
+| `pytest tests/env/ tests/environment/ tests/test_provenance.py tests/test_rolling_logging.py tests/test_trajectory_collection.py` | **364 passed, 619 skipped, 33 failed, 8 errors** (306 s) |
+
+⚠️ **The 33 failures + 8 errors are all in `tests/test_trajectory_collection.py`, and all
+are pre-existing — none is caused by this change.** They fail on
+`ValueError: Strict Config: Configuration key 'sensory.visual_value_mode' is required but
+missing` — an environment-config-schema drift that has nothing to do with modulation.
+Proved rather than assumed: `collect_trajectories.py` (the only file in that test's path
+this change touches) was temporarily reverted with `git checkout --`, the file re-run, and
+the failure set is **byte-for-byte identical** (`33 failed, 26 passed, 8 errors`, same test
+names) with and without the change. `tests/env/` and `tests/environment/` are entirely
+green. The `tests/env/` failure named in the hand-off brief
+(`test_observation_is_bit_identical_to_stored_pre_change_fixture`) did not run — it is
+among the 619 skipped on this host.
+
+Checkpoint-by-checkpoint evidence:
+
+- **C1 / C4 / V1 / V2** — all four golden comparisons bit-identical, parametrised over
+  both encoding modes. The hierarchical + LayerNorm pair is the one that exercises what
+  real runs execute (`plan-reviewer` finding 4).
+- **C2** — three existing construction tests pass with the migrated fixture dict.
+- **C3** — `test_evaluation_model_rebuild.py` green including the unmodulated round trip.
+- **C5** — a real archived run,
+  `results/JAX_RecurrentPPO/20260507-232135_rppo_nmn_het_p2_film_g1_c4` (step 10000043),
+  checked via `tmp/20260907_c5_restore_check.py`: **56 checkpoint params vs 56
+  post-refactor model params, identical key names and shapes, nothing only-in-checkpoint
+  and nothing only-in-model**, and the `2ad9104` restore-completeness assertion does not
+  fire. Note: this archived run's **environment** config also carries keys the env schema
+  has since removed (`environment.predator_enabled`) and lacks
+  `sensory.visual_value_mode` — a **pre-existing, unrelated** drift that already blocks
+  re-evaluation of these runs; the check strips those to isolate the model question.
+- **C6** — read, not edited: `evaluation.py:378-393`, `eval_rollout.py:1093-1113`,
+  `collect_trajectories.py:199-210` all pass the whole dict through; none hand-builds a
+  whitelist. **`save_snapshot.py` still does** (`get_mandatory('agent.modulation.temp_clip')`)
+  — already an OPEN row in the Known Bugs registry that explicitly anticipates this
+  refactor; left untouched, per the plan.
+- **C7** — `initial_state` pytree structure identical across all 15 site combinations.
+- **C8** — the three trainer unpack sites (`recurrent_ppo_trainer.py:161, 262, 284`) still
+  take a 4-tuple on both paths, and 201-iteration smoke trains ran clean with `mod_info`
+  carrying `None` fields through `vmap` + `scan` (all-sites config: `temperature` and
+  `z_memory` both `None`).
+- **C9** — full suite: see block above.
+- **C10** — 201-iteration smoke on three configs (baseline `recurrent_ppo_nmn_het_unmod`,
+  migrated legacy `recurrent_ppo_nmn_het_film_g1`, and an all-four-sites config). **No
+  NaN/Inf in any loss series.** WandB series verified by a stubbed-`wandb.log` probe
+  (`tmp/20260907_wandb_key_probe.py`) driving the real `train.py`, and they are **exactly**
+  what the site table predicts:
+  - legacy: `gamma_uni_*`, `gamma_multi_*`, `beta_uni_*`, `beta_multi_*`, `z_memory_*`,
+    `temperature_{mean,min,max}`, `grad_norm` — and **no** `gamma_rnn/actor/critic_*`;
+  - all-sites (`activation`, temperature off): the five gamma/beta pairs (uni, multi, rnn,
+    actor, critic) + `grad_norm` — and **no** `z_memory_*`, **no** `temperature_*`;
+  - unmodulated: no `modulator/*` at all.
+- **V5** — parametrised test perturbs each new site's gain-head bias, asserts the output
+  changes, and asserts a non-zero `optax.global_norm` on that head's gradient after one
+  update. A constructed-but-never-read head fails both.
+- **V6** — with `sites.actor` off, `head_actor` is absent, the field is `None`, and the
+  forward pass equals the plainly-computed actor path.
+- **V8** — `test_no_retrace_across_steps`: five jitted steps with all four sites on,
+  exactly one trace.
+
+### C11 — speed and memory (V9 / V10)
+
+Measured on the **local dev host, GPU 0 (RTX 4090, 24 GB)**, env config
+`p3_moderate.yaml`, **seed 42**, 201 iterations (iteration 0 excluded as the compile
+step), same harness. No determinism flag (that would not reflect real training).
+
+| Config | Before (env-steps/s) | After (env-steps/s) | s/it after | Δ |
+|---|---|---|---|---|
+| **V9(a)** `recurrent_ppo_nmn_het_film_g1.yaml` (migrated legacy) | 59171.0 / 58909.3 | 58964.4 / 59039.3 | 0.2777 | **−0.06 %** |
+| **V9(b)** all-four-sites-on (`activation`, temperature off) | — (config did not exist) | 56702.3 | 0.2889 | −3.9 % vs legacy |
+| Reference: `recurrent_ppo_nmn_het_unmod.yaml` (no modulator) | — | 75660.5 | 0.2165 | — |
+
+V9(a) is the sharp one — the migrated config executes an identical computation graph, and
+it lands **within the ±0.2 % run-to-run spread of the two before-runs**. Nothing
+structural changed. V9(b) is a new architecture (two extra FiLM head pairs evaluated and
+applied per step); 3.9 % is well under the plan's 5 % discussion threshold, and is
+reported rather than hidden.
+
+**V10 — peak device memory** over 61 iterations:
+
+| Config | peak_bytes_in_use |
+|---|---|
+| migrated legacy | 2782.4 MiB |
+| all-four-sites-on | 2350.4 MiB |
+
+All-sites-on does **not** exceed the legacy config, so D7 (disabled sites emit `None`,
+never zero-padding stored per step) is not being violated. ⚠️ The unmodulated baseline's
+memory number is **missing**: both GPUs on this host were claimed by another tenant
+(24 GB each, processes outside this container's PID namespace) partway through the
+measurement and the run OOM'd. Its **speed** number above was taken while the GPUs were
+free. Re-measure if the verifier wants the third row.
+
+### Deviations from the plan
+
+1. 🔴 **D16 is overridden: a read-only translation shim now exists at the eval boundary.**
+   The plan decided (D16) that archived NMN runs would simply stop being re-evaluatable —
+   "no compatibility shim, no translation layer at the eval boundary". The user
+   subsequently **settled `plan-reviewer` finding 2 the other way** and directed that a
+   read-only translation be implemented. It is: `src/models/modulation_compat.py`
+   translates a *saved* run's flat `temp_clip` into `temperature.{enabled, clip}` **in
+   memory**, fills in the sites/mechanism the pre-refactor architecture hard-wired, prints
+   one INFO line, and writes nothing back to disk. All three saved-config call sites route
+   through that one function. **The live-config path is not softened** — a config under
+   `configs/` still carrying `temp_clip` still raises the full D9/D16 error, and that is
+   pinned by `test_live_config_with_temp_clip_still_hard_errors`. `eval_rollout.py`'s
+   explicit `--agent_config` is treated as a *live* file (no translation); only the run's
+   own `models/config.yaml` is translated. The shim is deliberately **not** a defaulting
+   layer: it fires only on the specific legacy shape, and a saved config merely missing a
+   mandatory key still fails loudly (`test_saved_config_missing_a_mandatory_key_still_fails`).
+   **`src/models/modulation_compat.py` and `tests/models/test_modulation_compat.py` are
+   therefore two files not in the plan's File Changes list**, flagged here per the
+   scope rule.
+2. 🟡 **V4 required a determinism flag the plan did not mention.** See C0b above — without
+   `--xla_gpu_deterministic_ops=true` the criterion is unachievable on this GPU. This
+   changes *how* V4 is run, not what it proves.
+3. 🟢 **The `target_hidden_size` assertion (plan §1) is implemented in `ActorCriticRNN`,
+   not in `NeuromodulatorRNN`.** The modulator only ever sees one width and cannot check
+   the claim; `ActorCriticRNN` can, and does — it asserts the encoder output, `actor_fc1`,
+   `critic_fc1` and the task GRU are all exactly `hidden_size` wide before constructing the
+   modulator, naming any offender.
+4. 🟢 **Migration comments are dated 2026-09-07 (the day the edit landed), not the plan's
+   illustrative 2026-08-31.** The in-code D9 error text keeps the plan's wording verbatim,
+   including its 2026-08-31 reference to the refactor.
+5. 🟢 **The all-four-sites config used for C10/V9(b) lives in `tmp/`
+   (`tmp/20260907_allsites_smoke.yaml`), not in `configs/`.** The plan's File Changes list
+   names only the 12 migrated files, so a new permanent config would have been unflagged
+   scope expansion. `experiment-designer` owns the real one.
+
+### Known-bug prior art (checked, nothing new to record)
+
+Grepped `docs/develop/active/issues/KNOWN_BUGS.md` directly (sub-agents cannot spawn
+`bug-curator`). Three existing rows bear on this work and **all are already recorded
+accurately**: the `save_snapshot.py` hand-built-whitelist row (OPEN, Low — its text
+already anticipates this refactor's new mandatory keys), the dead-`lr_critic` row (A1,
+OPEN), and the config-boundary-traps row (B1–B4, OPEN). One nuance worth a verifier's
+eye but **not** a new bug: `save_snapshot.py` will now fail *earlier* and with a
+different message (`get_mandatory('agent.modulation.temp_clip')` on a migrated config)
+than its previously-recorded `encoding_config` error. Same broken script, same row.
+
+### Follow-ups for the verifier / user
+
+- `save_snapshot.py` remains broken (pre-existing; registry row exists; separate one-file fix).
+- V10's unmodulated-baseline memory row is missing — the host's GPUs were taken mid-measurement.
+- The plan's Risks item 1 (`lr_critic` is dead, so critic-side FiLM heads will train at
+  5× the advertised critic rate) is **unaffected by this change and still open**; it needs
+  a decision before the two-factor experiment launches, per the plan.
 
 ## Verification Report
 

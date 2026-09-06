@@ -21,6 +21,10 @@
 # Everything else (all PPO/encoding/hierarchical hyperparameters and the rest of
 # the modulation block) is BYTE-IDENTICAL to recurrent_ppo_nmn_film_g1_tempceil5.yaml.
 # Seed is supplied at launch via --seed (NOT a config key).
+# MIGRATION 2026-09-07 (MODULATION_SITE_REFACTOR): `modulation.temp_clip` became
+# `modulation.temperature.{enabled, clip}`, and `modulation.sites` + `modulation.rnn_mechanism`
+# became mandatory keys. The values below reproduce this file's PRE-refactor behaviour
+# exactly — a no-op migration, not a retune.
 
 agent:
   algorithm: "RecurrentPPO"
@@ -63,5 +67,16 @@ agent:
     grouping_size: 4        # <-- PRIMARY sweep axis; num_groups = ceil(128/4) = 32
     percept_bias_init: 3.0
     memory_bias_init: 0.0
-    temp_clip: [0.5, 10.0]     # <-- held non-binding & identical across all 10 screen runs
     memory_clip: [-2.0, 2.0]
+
+    # --- modulation-site refactor (2026-09-07): WHERE the modulator writes.
+    # encoder+rnn / gate_bias / temperature-on == this file's pre-refactor behaviour.
+    sites:
+      encoder: true
+      rnn:     true
+      actor:   false
+      critic:  false
+    rnn_mechanism: "gate_bias"
+    temperature:
+      enabled: true
+      clip: [0.5, 10.0]     # <-- held non-binding & identical across all 10 screen runs

@@ -140,9 +140,17 @@ def test_modulated_rppo_eval_rebuild_succeeds(tmp_path, monkeypatch):
     without error."""
     config = _merged_config(AGENT_CONFIG_MODULATED)
     modulation_config = config.get("agent.modulation")
-    assert modulation_config is not None and "memory_clip" in modulation_config, (
-        "fixture config must actually carry memory_clip to be a faithful repro"
-    )
+    # Finding A was a hand-built modulation whitelist that omitted a key
+    # ActorCriticRNN reads unconditionally. The refactor added more such keys, so
+    # the guard now covers the FULL mandatory set, not just memory_clip.
+    assert modulation_config is not None
+    for _k in ("memory_clip", "sites", "rnn_mechanism", "temperature"):
+        assert _k in modulation_config, (
+            f"fixture config must actually carry '{_k}' to be a faithful repro"
+        )
+    for _s in ("encoder", "rnn", "actor", "critic"):
+        assert _s in modulation_config["sites"], f"fixture config missing sites.{_s}"
+    assert "enabled" in modulation_config["temperature"]
 
     model, _ = _build_rppo_model(config)
     results_dir = _write_results_dir(tmp_path, config, model)

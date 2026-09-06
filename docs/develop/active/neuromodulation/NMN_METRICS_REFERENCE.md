@@ -3,7 +3,7 @@ title: "NMN Metrics Reference: Calculation Details"
 topic: neuromodulation
 status: active
 created: 2026-03-10
-last_updated: 2026-08-31
+last_updated: 2026-09-07
 ---
 
 # NMN Metrics Reference: Calculation Details
@@ -12,7 +12,7 @@ last_updated: 2026-08-31
 > **Author**: Claude
 > **Scope**: Detailed reference for all neuromodulator (NMN) metrics logged to WandB during RecurrentPPO training.
 > **Key files**: `train.py`, `src/models/neuromodulator.py`, `src/models/recurrent_ppo_trainer.py`, `src/models/recurrent_ppo_network.py`, `src/models/modulated_gru_cell.py`
-> **Related**: [NMN_ARCHITECTURE_REVIEW.md](NMN_ARCHITECTURE_REVIEW.md), [NMN_PERFORMANCE_DIAGNOSIS.md](NMN_PERFORMANCE_DIAGNOSIS.md), [WANDB_METRICS_REFERENCE.md](WANDB_METRICS_REFERENCE.md), [[MODULATION_SITE_REFACTOR]] (planned — adds per-site gamma/beta metrics for the actor, critic and RNN-activation sites, and makes `z_memory_*` / `temperature_*` conditional)
+> **Related**: [NMN_ARCHITECTURE_REVIEW.md](NMN_ARCHITECTURE_REVIEW.md), [NMN_PERFORMANCE_DIAGNOSIS.md](NMN_PERFORMANCE_DIAGNOSIS.md), [WANDB_METRICS_REFERENCE.md](WANDB_METRICS_REFERENCE.md), [[MODULATION_SITE_REFACTOR]] (Part A implemented 2026-09-07 — adds per-site gamma/beta metrics for the actor, critic and RNN-activation sites, and makes `z_memory_*` / `temperature_*` conditional; see §2.8)
 
 ---
 
@@ -477,6 +477,52 @@ return jax.nn.relu(mm_latent * gamma2 + beta2)
 
 ---
 
+### 2.8 Per-site metrics added by the modulation-site refactor (2026-09-07)
+
+**Plain-language context**: the modulator can now be pointed at four different
+places in the network — the observation encoder, the memory cell (task GRU), the
+actor's hidden layer, and the critic's hidden layer — and each one is switched on
+or off in the config (`modulation.sites.*`). Each **enabled** site emits its own
+pair of signals: a **gain** (γ, "multiply this neuron by"), and an **offset**
+(β, "then add this"). A site that is switched off logs **nothing at all** — its
+series are simply absent from WandB, rather than present and flat.
+
+| WandB key | Source field | Logged when | Meaning |
+|---|---|---|---|
+| `modulator/gamma_rnn_{mean,std}` | `z_rnn` | `sites.rnn` **and** `rnn_mechanism: "activation"` | Gain applied to the task GRU's emitted output (not its carry state) |
+| `modulator/beta_rnn_{mean,std}` | `z_rnn_add` | same | Offset added to the same signal |
+| `modulator/gamma_actor_{mean,std}` | `z_actor` | `sites.actor` | Gain on `actor_fc1`'s pre-activation |
+| `modulator/beta_actor_{mean,std}` | `z_actor_add` | same | Offset on the same pre-activation |
+| `modulator/gamma_critic_{mean,std}` | `z_critic` | `sites.critic` | Gain on `critic_fc1`'s pre-activation |
+| `modulator/beta_critic_{mean,std}` | `z_critic_add` | same | Offset on the same pre-activation |
+
+All six are FiLM signals in **linear** space (unlike `gamma_uni_*` / `gamma_multi_*`
+under the older `Multiplicative` / `PreActivation` styles, which are pre-sigmoid —
+see §5.1). At initialisation γ ≈ 1.0 and β ≈ 0.0, i.e. the site is a no-op, which is
+what makes "turning a site on cannot hurt at step 0" true.
+
+#### When the older series are ABSENT
+
+Two previously-unconditional series are now conditional, so a missing curve is
+information rather than a bug:
+
+*   **`modulator/z_memory_{mean,std}`** is logged **only** when `sites.rnn` is true
+    **and** `rnn_mechanism` is `"gate_bias"` — the legacy mechanism that writes an
+    additive bias inside the GRU's update gate. Under the new `"activation"`
+    mechanism the same site logs `gamma_rnn_*` / `beta_rnn_*` instead. The name was
+    deliberately **not** reused, because it is a different quantity: `z_memory` is a
+    gate bias, `gamma_rnn` is an output gain. Every archived run keeps its
+    `z_memory_*` history intact.
+*   **`modulator/temperature_{mean,min,max}`** is logged only when
+    `modulation.temperature.enabled` is true. Temperature modulation is now opt-in;
+    all 12 migrated NMN configs set it to `true`, so their behaviour is unchanged.
+
+`modulator/grad_norm` is unconditional whenever any modulation is enabled.
+
+Plan and verification record: [[MODULATION_SITE_REFACTOR]].
+
+---
+
 ## 3. Summary: All Logged Metrics
 
 | WandB Key | Source Field | Shape (T,B,...) | Aggregation | Units | Init Value |
@@ -495,6 +541,22 @@ return jax.nn.relu(mm_latent * gamma2 + beta2)
 | `modulator/beta_uni_std` | `z_unimodal_add` | `(T, B, 9)` | `jnp.std` (flatten all) | Raw additive | ~0.0 |
 | `modulator/beta_multi_mean` | `z_multimodal_add` | `(T, B, 128)` | `jnp.mean` (flatten all) | Raw additive | ~0.0 |
 | `modulator/beta_multi_std` | `z_multimodal_add` | `(T, B, 128)` | `jnp.std` (flatten all) | Raw additive | ~0.0 |
+| `modulator/gamma_rnn_mean` | `z_rnn` | `(T, B, 128)` | `jnp.mean` (flatten all) | Linear FiLM gain | ~1.0 |
+| `modulator/gamma_rnn_std` | `z_rnn` | `(T, B, 128)` | `jnp.std` (flatten all) | Linear FiLM gain | ~0.0 |
+| `modulator/beta_rnn_mean` | `z_rnn_add` | `(T, B, 128)` | `jnp.mean` (flatten all) | Raw additive | ~0.0 |
+| `modulator/beta_rnn_std` | `z_rnn_add` | `(T, B, 128)` | `jnp.std` (flatten all) | Raw additive | ~0.0 |
+| `modulator/gamma_actor_mean` | `z_actor` | `(T, B, 128)` | `jnp.mean` (flatten all) | Linear FiLM gain | ~1.0 |
+| `modulator/gamma_actor_std` | `z_actor` | `(T, B, 128)` | `jnp.std` (flatten all) | Linear FiLM gain | ~0.0 |
+| `modulator/beta_actor_mean` | `z_actor_add` | `(T, B, 128)` | `jnp.mean` (flatten all) | Raw additive | ~0.0 |
+| `modulator/beta_actor_std` | `z_actor_add` | `(T, B, 128)` | `jnp.std` (flatten all) | Raw additive | ~0.0 |
+| `modulator/gamma_critic_mean` | `z_critic` | `(T, B, 128)` | `jnp.mean` (flatten all) | Linear FiLM gain | ~1.0 |
+| `modulator/gamma_critic_std` | `z_critic` | `(T, B, 128)` | `jnp.std` (flatten all) | Linear FiLM gain | ~0.0 |
+| `modulator/beta_critic_mean` | `z_critic_add` | `(T, B, 128)` | `jnp.mean` (flatten all) | Raw additive | ~0.0 |
+| `modulator/beta_critic_std` | `z_critic_add` | `(T, B, 128)` | `jnp.std` (flatten all) | Raw additive | ~0.0 |
+
+**Conditional presence**: the `*_rnn_*`, `*_actor_*` and `*_critic_*` rows appear only
+when their site is enabled; `z_memory_*` only under `rnn_mechanism: "gate_bias"`; and
+`temperature_*` only when `modulation.temperature.enabled` is true (§2.8).
 
 ---
 

@@ -3,7 +3,7 @@ title: Unified Interoceptive Neuromodulation for Grid-World Pain
 topic: neuromodulation
 status: active
 created: 2026-02-11
-last_updated: 2026-08-31
+last_updated: 2026-09-07
 aliases: [neuromodulation_algorithm]
 ---
 
@@ -607,6 +607,57 @@ A standalone recurrent module designed for high "affective inertia," used with t
     - `z_memory`: Memory gate-bias signal, shape `(hidden_size,)`.
     - `temperature`: Bounded temperature scalar, shape `(1,)`.
 
+#### 2A-bis. Selectable modulation sites (modulation-site refactor, 2026-09-07)
+
+Plain-language summary: the modulator used to act through four *different*
+operations at four different places. It now performs the **same** operation —
+feature-wise scale-and-shift, i.e. multiply each neuron by a learned gain
+($\gamma$) and add a learned offset ($\beta$), the technique called **FiLM** — at
+every place it acts, and **which** places it acts on is chosen in the config. That
+lets an experiment vary *where* the modulator writes without also varying *how*.
+
+Config surface (all keys mandatory whenever `modulation.type` is non-null):
+
+```yaml
+modulation:
+  sites:                       # WHERE the modulator writes
+    encoder: true              # unimodal encoder + multimodal hub (the original "Injection A")
+    rnn:     true              # the task GRU
+    actor:   false             # NEW — the actor's hidden layer
+    critic:  false             # NEW — the critic's hidden layer
+  rnn_mechanism: "activation"  # HOW the rnn site is modulated: "activation" | "gate_bias"
+  temperature:                 # the action temperature is now OPT-IN
+    enabled: false
+    # clip: [0.5, 5.0]         # required only when enabled: true
+```
+
+| Site | Head(s) | Where the signal lands |
+|---|---|---|
+| `encoder` | `head_unimodal(_add)`, `head_multimodal(_add)` | pre-activations of both encoder stages (unchanged) |
+| `rnn`, `rnn_mechanism: "gate_bias"` | `head_memory` | additive bias inside the GRU update gate (§5.1a, unchanged) |
+| `rnn`, `rnn_mechanism: "activation"` | `head_rnn(_add)` | FiLM on the task GRU's **emitted output only** |
+| `actor` | `head_actor(_add)` | pre-activation of `actor_fc1` |
+| `critic` | `head_critic(_add)` | pre-activation of `critic_fc1` |
+
+Three constraints worth stating explicitly:
+
+*   **The `"activation"` mechanism never touches the carry.** The task GRU returns
+    `h_new, x_h` as the *same array*; FiLM is applied to the emitted `x_h` only, and
+    the state handed to the next timestep is left untouched. Scaling the carry would
+    re-create the double-gating pathology §5.1 flags as Critical — it destroys the
+    GRU's additive gradient highway. No nonlinearity follows the FiLM there, because
+    `x_h` is already an activation.
+*   **The hand-built `ModulatedGRUCell` is now constructed only for `gate_bias`.** It
+    differs from the plain `nnx.GRUCell` in initialisation scheme and gate polarity,
+    so building it whenever modulation was on imported an initialisation confound into
+    every modulated-vs-baseline comparison. Every other arm now uses the same cell as
+    the baseline.
+*   **A disabled site's `ModulatorOutput` field is `None`**, not zeros or ones — an
+    empty pytree costs nothing under `vmap`/`scan` and keeps fake constants out of the
+    per-step rollout buffer and out of WandB.
+
+Plan and verification record: [[MODULATION_SITE_REFACTOR]].
+
 ### 2B. `DreamerNeuromodulatorRNN` (DreamerV3)
 A dual-mode recurrent modulator for the DreamerV3 world model. It operates in two modes — **observation mode** during RSSM `step()` / `get_action()`, and **imagination mode** during `imagine_step()` — using separate input projections that feed a shared GRU core.
 
@@ -674,18 +725,35 @@ beta = mod_output.z_percept_add                       # Threshold shift
 x_proj = relu(x_linear * gamma + beta)                # Modulated activation
 
 # Layer 2: rnn_cell  (GRUCell or LSTMCell: hidden → hidden)
-# ◄◄ INJECTION B: Internal Gate-Bias (§5.1a) ►►
-# z_memory is injected INSIDE a custom ModulatedGRUCell (see §5 below).
-# Internally: u_t = sigmoid(W_u @ x + U_u @ h_prev + z_memory)
-# This preserves the GRU's gradient highway (no double-gating).
-h_new, x_h = modulated_rnn_cell(h_prev, x_proj, gate_bias=mod_output.z_memory)
+# SITE `rnn` — two mechanisms, chosen by modulation.rnn_mechanism (§2A-bis).
+if rnn_mechanism == "gate_bias":
+    # ◄◄ INJECTION B: Internal Gate-Bias (§5.1a) ►►
+    # z_memory is injected INSIDE a custom ModulatedGRUCell (see §5 below).
+    # Internally: u_t = sigmoid(W_u @ x + U_u @ h_prev + z_memory)
+    # This preserves the GRU's gradient highway (no double-gating).
+    h_new, x_h = modulated_rnn_cell(h_prev, x_proj, gate_bias=mod_output.z_memory)
+else:
+    h_new, x_h = rnn_cell(h_prev, x_proj)             # plain nnx.GRUCell
+    if sites.rnn:                                     # rnn_mechanism == "activation"
+        # FiLM on the EMITTED output only. `h_new` (the carry passed to the next
+        # timestep) is deliberately left untouched — modulating it would re-create
+        # the §5.1 double-gating pathology. No relu: x_h is already an activation.
+        x_h = mod_output.z_rnn * x_h + mod_output.z_rnn_add
 
-# Layer 3: Actor/Critic Heads
-logits = actor_fc2(activate(actor_fc1(x_h)))
-# ◄◄ INJECTION C: Bounded Temperature (§5.3a) ►►
-logits = logits / mod_output.temperature              # Scale exploration (clipped)
+# Layer 3: Actor/Critic Heads — SITES `actor` / `critic`, pre-activation FiLM
+a_pre = actor_fc1(x_h)
+if sites.actor:
+    a_pre = mod_output.z_actor * a_pre + mod_output.z_actor_add
+logits = actor_fc2(activate(a_pre))
 
-value = critic_fc2(activate(critic_fc1(x_h)))
+# ◄◄ INJECTION C: Bounded Temperature (§5.3a) — now OPT-IN ►►
+if temperature.enabled:
+    logits = logits / mod_output.temperature          # Scale exploration (clipped)
+
+c_pre = critic_fc1(x_h)
+if sites.critic:
+    c_pre = mod_output.z_critic * c_pre + mod_output.z_critic_add
+value = critic_fc2(activate(c_pre))
 ```
 
 ### B. DreamerV3: Modulating the World Model (RSSM)

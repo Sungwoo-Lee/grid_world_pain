@@ -22,6 +22,10 @@
 # All other hyperparameters are byte-identical to recurrent_ppo_nmn_het_film_g1.yaml,
 # which itself is the v8 §2.2 controlled config. This keeps the agent diff
 # scope-limited to a single hyperparameter change.
+# MIGRATION 2026-09-07 (MODULATION_SITE_REFACTOR): `modulation.temp_clip` became
+# `modulation.temperature.{enabled, clip}`, and `modulation.sites` + `modulation.rnn_mechanism`
+# became mandatory keys. The values below reproduce this file's PRE-refactor behaviour
+# exactly — a no-op migration, not a retune.
 
 agent:
   algorithm: "RecurrentPPO"
@@ -63,5 +67,16 @@ agent:
     grouping_size: 1
     percept_bias_init: 3.0
     memory_bias_init: 0.0
-    temp_clip: [0.5, 5.0]    # <-- per insight 20260509_1410: head's natural target ∈ [3.0, 5.0)
     memory_clip: [-2.0, 2.0]
+
+    # --- modulation-site refactor (2026-09-07): WHERE the modulator writes.
+    # encoder+rnn / gate_bias / temperature-on == this file's pre-refactor behaviour.
+    sites:
+      encoder: true
+      rnn:     true
+      actor:   false
+      critic:  false
+    rnn_mechanism: "gate_bias"
+    temperature:
+      enabled: true
+      clip: [0.5, 5.0]      # <-- per insight 20260509_1410: head's natural target ∈ [3.0, 5.0)

@@ -22,8 +22,14 @@ MODULATION_CONFIG = {
     'grouping_size': 1,
     'percept_bias_init': 1.0,
     'memory_bias_init': 0.0,
-    'temp_clip': [0.5, 2.0],
     'memory_clip': [-1.0, 1.0],
+    # Modulation-site refactor: WHERE the modulator writes is now explicit, and the
+    # action temperature is opt-in. These values reproduce the pre-refactor network
+    # (encoder + task-GRU gate bias + temperature on), which is what this file's
+    # LSTM guard is about.
+    'sites': {'encoder': True, 'rnn': True, 'actor': False, 'critic': False},
+    'rnn_mechanism': 'gate_bias',
+    'temperature': {'enabled': True, 'clip': [0.5, 2.0]},
 }
 
 ENCODING_CONFIG = {
