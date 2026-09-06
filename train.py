@@ -1148,9 +1148,12 @@ def main():
                 _site_list = ",".join(k for k in ('encoder', 'rnn', 'actor', 'critic')
                                       if _sites.get(k))
                 _temp_on = bool((modulation_config.get('temperature') or {}).get('enabled'))
+                _inputs = modulation_config.get('input_sensors')
+                _inputs_str = _inputs if isinstance(_inputs, str) else ",".join(_inputs or [])
                 print(f"Neuromodulation: ENABLED (type={modulation_config['type']}, "
                       f"mod_hidden={modulation_config['mod_hidden_size']}, "
                       f"grouping={modulation_config['grouping_size']}, "
+                      f"input_sensors=[{_inputs_str}], "
                       f"sites=[{_site_list}], "
                       f"rnn_mechanism={modulation_config.get('rnn_mechanism')}, "
                       f"temperature={'on' if _temp_on else 'off'})")

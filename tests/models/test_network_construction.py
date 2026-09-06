@@ -27,6 +27,7 @@ MODULATION_CONFIG = {
     # action temperature is opt-in. These values reproduce the pre-refactor network
     # (encoder + task-GRU gate bias + temperature on), which is what this file's
     # LSTM guard is about.
+    'input_sensors': 'all',
     'sites': {'encoder': True, 'rnn': True, 'actor': False, 'critic': False},
     'rnn_mechanism': 'gate_bias',
     'temperature': {'enabled': True, 'clip': [0.5, 2.0]},

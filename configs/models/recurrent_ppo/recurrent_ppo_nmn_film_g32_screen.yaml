@@ -69,6 +69,10 @@ agent:
     memory_bias_init: 0.0
     memory_clip: [-2.0, 2.0]
 
+    # --- modulation-site refactor Part B (2026-09-07): WHAT the modulator reads.
+    # "all" == the whole observation vector, i.e. this file's pre-Part-B behaviour.
+    input_sensors: "all"
+
     # --- modulation-site refactor (2026-09-07): WHERE the modulator writes.
     # encoder+rnn / gate_bias / temperature-on == this file's pre-refactor behaviour.
     sites:

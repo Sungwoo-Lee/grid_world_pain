@@ -8,8 +8,8 @@ last_updated: 2026-09-07
 
 # Modulation Site Refactor — uniform FiLM at selectable sites (RecurrentPPO)
 
-> **Status**: PLANNED — **Part A approved and plan-review-cleared** (all five `plan-reviewer` findings addressed, incl. the 🔴 Critical; see [Response to plan-reviewer](#response-to-plan-reviewer-2026-08-31)). **Part B remains a proposal, NOT approved.**
-> **Opened**: 2026-08-31 · **Revised**: 2026-08-31 (post-review)
+> **Status**: IMPLEMENTED — **Part A** (uniform FiLM at selectable sites) landed 2026-09-07 in `83b8140b`; **Part B** (the configurable modulator input slice) was **approved by the user on 2026-09-07** and landed the same day. Both await `senior-developer` verification. The plan-review record is unchanged (all five `plan-reviewer` findings addressed, incl. the 🔴 Critical; see [Response to plan-reviewer](#response-to-plan-reviewer-2026-08-31)).
+> **Opened**: 2026-08-31 · **Revised**: 2026-08-31 (post-review) · **Part B approved**: 2026-09-07
 > **Related**: [[NEUROMODULATION_ALGORITHM]] · [[NMN_METRICS_REFERENCE]] · [[NMN_ARCHITECTURE_REVIEW]] · [[FILM_MODULATION_PLAN]] · [`docs/project/ideas/20260805_film_rl_context_dependent_policy_discussion.md`](../../../project/ideas/20260805_film_rl_context_dependent_policy_discussion.md) §6 · [`modulation_in_rl_lit_review.md`](../../../project/references/modulation_in_rl/modulation_in_rl_lit_review.md) §8, §12
 
 ---
@@ -610,13 +610,13 @@ Ordered. C0a/C0b are genuinely first — doing either late invalidates C1–C4 a
 3. **~~PAPL's precondition for critic modulation is not met~~ — RETRACTED 2026-08-31, the precondition IS met.** The earlier text here claimed our reward is not a function of injury. That is false: the live reward is the step-to-step reduction in homeostatic drive, and injury is one of the two coordinates of that drive (Analysis §F). Nothing about the refactor changes; what changes is what the experiment write-up must say. **The write-up must claim PAPL's licence, not disclaim it**, and must carry instead the two residual caveats in §F: PAPL's conditioner is an open-loop clock while ours is contingent sensed injury delayed by a 3-step smoothing kernel, and Marquis shows the sign of critic conditioning is mechanism-dependent (positive for FiLM, negative for LoRA). This item is left in place rather than deleted so a reader of an older copy of this plan can see it was withdrawn.
 4. **`save_snapshot.py` is broken today and stays broken.** It is a second, never-swept instance of the Finding-A hand-built-whitelist bug, plus a missing `encoding_config`. Recommend asking `bug-curator` to record it (Status OPEN, Severity Low) and fixing it in a separate one-file change.
 5. **Pre-activation vs post-activation for actor/critic** (Analysis §E) — resolved to pre-activation on the strength of the encoder-parity constraint and PAPL. Overrule now if that reading is wrong; changing it later invalidates any runs launched in the meantime.
-6. **Whether to land Part B in the same change.** If Part B is approved now, the same 12 configs get one edit instead of two, and the 2-factor experiment becomes runnable in one step. If deferred, the 12 files are edited twice.
+6. **~~Whether to land Part B in the same change.~~ — DECIDED 2026-09-07: Part B approved, landed as a second change.** The 12 configs were therefore edited twice (once for the `sites`/`rnn_mechanism`/`temperature` block, once for `input_sensors`), which cost one extra pass and nothing else. The 2-factor experiment is now unblocked on both factors.
 
 ---
 
-## Part B — configurable modulator input slice (PROPOSAL — NOT REQUESTED, NOT APPROVED)
+## Part B — configurable modulator input slice (APPROVED 2026-09-07, IMPLEMENTED)
 
-> ⚠️ **The user has not approved this section.** It is presented so it can be accepted or deferred. Part A is complete and landable without any of it. Nothing in Part A depends on Part B.
+> ✅ **Approved by the user on 2026-09-07 and implemented the same day** (see [Implementation Report — Part B](#implementation-report--part-b)). The section below is unchanged from the proposal it was approved as; it is the specification the implementation was built against. Part A remained landable without it, and nothing in Part A depends on it.
 
 ### What it is, in plain terms
 
@@ -909,6 +909,223 @@ than its previously-recorded `encoding_config` error. Same broken script, same r
 - The plan's Risks item 1 (`lr_critic` is dead, so critic-side FiLM heads will train at
   5× the advertised critic rate) is **unaffected by this change and still open**; it needs
   a decision before the two-factor experiment launches, per the plan.
+
+---
+
+## Implementation Report — Part B
+
+> **Implemented by**: developer
+> **Date**: 2026-09-07
+> **Scope**: **Part B only** — the configurable modulator input slice. Part A had already
+> landed at commit `83b8140b`; this change builds on it and touches nothing Part A settled.
+
+### Headline
+
+The neuromodulator — the small second network that continuously re-tunes the main policy —
+used to read **every** sense the agent has, with no way to say otherwise. It can now be
+restricted to a named subset from the config:
+
+```yaml
+agent:
+  modulation:
+    input_sensors: "all"                                          # every sense (unchanged behaviour)
+    # input_sensors: ["Satiation", "Interoceptive Nociception"]   # body signals only
+```
+
+Sensor **names** are turned into **column positions** in the observation vector at model
+construction time, against the run's own `get_observation_breakdown(params)` — never
+hard-coded, because which sensors exist and how wide each one is depends on the environment
+config. `input_sensors` is a new **mandatory** key whenever `modulation.type` is non-null;
+all 12 existing `recurrent_ppo_nmn_*` configs were given `input_sensors: "all"`, which
+preserves their behaviour exactly.
+
+**The acceptance promise holds: `"all"` is bit-identical to the pre-refactor network** — not
+merely close, byte for byte, in the parameter tree, in the forward pass, and in 20
+iterations of real training losses through the optimiser.
+
+### The `"all"` bit-identity result — three independent checks, all bitwise
+
+| Check | What it compares | Result |
+|---|---|---|
+| **Golden fixtures** (`tests/fixtures/modulation/generate_golden.py --check`) | The post-Part-B network against the four `.npz` fixtures captured on the **pre-Part-A** tree at SHA `5c0835afc609152f9b40b64a88fe42f007ed3353` — parameter tree + one fixed-seed forward pass, in both encoding modes | **All four bit-identical**: `flat_baseline` 16 arrays, `flat_legacy` 52, `hier_ln_baseline` 26, `hier_ln_legacy` 62 |
+| **End-to-end training losses (V4 re-run)** | 20 PPO iterations of `recurrent_ppo_nmn_het_film_g1.yaml` (now carrying `input_sensors: "all"`) on `p3_moderate.yaml`, seed 42, against Part A's **pre-change** capture `tmp/20260907_v4_before.npz` | **Bitwise equal over 20 iterations × 6 loss scalars** (total, policy, value, entropy, grad_norm, modulator grad_norm) |
+| **Structural** | `"all"` skips the gather outright rather than applying an identity gather, so the computation graph is *literally* the pre-Part-B graph | see Deviation 1 |
+
+Commands used, for a verifier repeating them:
+
+```bash
+JAX_PLATFORMS=cpu python tests/fixtures/modulation/generate_golden.py --check
+XLA_FLAGS=--xla_gpu_deterministic_ops=true CUDA_VISIBLE_DEVICES=0 \
+  python tmp/20260907_v4_loss_capture.py --out tmp/20260907_partb_v4_after.npz
+python tmp/20260907_v4_loss_capture.py --compare tmp/20260907_v4_before.npz tmp/20260907_partb_v4_after.npz
+```
+
+⚠️ **The determinism flag is mandatory for the V4 half and was used** — Part A's hard-won
+lesson (see its C0b note): without `XLA_FLAGS=--xla_gpu_deterministic_ops=true`, two runs of
+*identical* code diverge from iteration 0 through GPU reduction non-determinism, and the
+"float equality" criterion becomes unachievable in either direction. The flag's run-to-run
+bitwise reproducibility was already verified on the unmodified tree during Part A; the
+"before" file compared against here is that same verified capture, so both halves are under
+the flag. The golden-fixture half needs no flag: it is captured and compared on CPU.
+
+### File-by-file
+
+| File | Change |
+|---|---|
+| `src/models/recurrent_ppo_network.py` | New module-level `_resolve_modulator_input_indices(input_sensors, observation_breakdown, input_dim)`: walks the ordered breakdown accumulating offsets into `{name: (start, stop)}`, returns `tuple(range(input_dim))` for `"all"`, and otherwise validates **every** name and builds the flat index tuple. An unknown name raises a `ValueError` that quotes the offending name **and lists every sensor available under the current environment config**, and says why an absent sensor is an error rather than a silent re-index. In `ActorCriticRNN.__init__`: `input_sensors` read via the existing `_mod_required` (no fallback default), resolved to `self.mod_input_idx: tuple[int, ...]` (plain Python ints → static graphdef metadata, never a trained or checkpointed leaf), and `obs_dim=len(self.mod_input_idx)` passed to `NeuromodulatorRNN`. In `__call__`: the gather happens **after** the symlog compression, so the modulator sees exactly the scaling the task network does. The `observation_breakdown is None` fallback moved a few lines earlier (pure Python, no RNG, no construction) so validation can see the breakdown. |
+| `src/models/modulation_compat.py` | The archived-run translation shim now also fills in `input_sensors: "all"` — the pre-refactor architecture read the whole observation vector — so re-analysing an archived neuromodulated run still works. The INFO line names it. |
+| `train.py` | The startup banner now states what the modulator reads: `Neuromodulation: ENABLED (… input_sensors=[Satiation,Interoceptive Nociception], sites=[encoder,rnn], …)`. See Deviation 2. |
+| 12 × `configs/models/recurrent_ppo/recurrent_ppo_nmn_*film*.yaml` | `input_sensors: "all"` added to the `modulation:` block with a two-line dated migration comment. No other key changed. This is a no-op that preserves current behaviour exactly. |
+| `tests/models/test_modulation_input_slice.py` | **NEW**, 31 tests (see below). |
+| `tests/fixtures/modulation/generate_golden.py` | The legacy-equivalent config now spells `input_sensors: "all"` on the new-API side, so the pre-Part-A fixtures stay valid ground truth. Fixture files themselves are **untouched** — they remain the pre-refactor capture. |
+| `tests/models/test_modulation_sites.py`, `tests/models/test_network_construction.py`, `tests/models/test_modulation_compat.py`, `tests/scripts/test_evaluation_model_rebuild.py` | Hand-built modulation dicts gain `input_sensors`; the Finding-A key-presence guard in `test_evaluation_model_rebuild.py` widened to cover it (the same guard that exists because a hand-built whitelist once missed a mandatory key). |
+
+### What the tests prove
+
+`tests/models/test_modulation_input_slice.py` — **31 passed** (15.1 s, CPU).
+
+| Group | What it pins |
+|---|---|
+| `test_all_{param_tree,forward}_matches_pre_refactor_golden` (×2 modes each) | `"all"` is byte-identical to the pre-refactor network, in both the flat and the hierarchical+LayerNorm encoding modes (the latter is what every real run executes). |
+| `test_all_reads_every_column`, `test_listing_every_sensor_equals_all` | `"all"` really means all — and naming every sensor explicitly produces the identical network. |
+| `test_resolver_matches_hand_computed_indices` (×5) | The resolved indices equal a **hand-counted** table written out in the test file (Satiation 0; Interoceptive Nociception 1; Extero Nociception 2; Olfaction 3–7; Collision 8–12; Proprioception 13–18; Visual 19–26). Hand-computed on purpose: recomputing the layout from the code under test would prove nothing. |
+| `test_forward_pass_reads_exactly_the_hand_computed_columns` (×5) | The strong version. It **runs the model** and recovers, column by column, which parts of the observation actually reach the modulator (bump one column, watch the modulator's hidden state). It never consults `mod_input_idx`, so it measures the forward pass rather than re-asking the resolver. |
+| `test_unselected_columns_still_reach_the_task_network` | Slicing the modulator's input does not slice the policy's: a Visual column the modulator cannot see still changes the action scores. |
+| `test_modulator_gru_input_dimension_follows_the_slice` (×4) | The slice is not cosmetic — the modulator's GRU input kernel is genuinely 27 / 2 / 19 / 8 wide. This is also exactly why a real slice changes the checkpoint shape. |
+| `test_mod_input_idx_is_static_python_ints` | The index tuple appears nowhere in the model's variable state (it would otherwise be checkpointed and handed to the optimiser), and the module still splits and jits. |
+| `test_unknown_sensor_name_raises_and_lists_available_sensors`, `test_unknown_string_shorthand_raises`, `test_empty_list_raises`, `test_missing_input_sensors_key_raises`, `test_null_input_sensors_raises` | Loud failure on every bad spelling, including the no-fallback-defaults contract for the new mandatory key. The unknown-name message must contain **every** available sensor name — asserted per name, so a future message edit cannot quietly drop the list. |
+| `test_hand_computed_breakdown_matches_the_live_environment` | Guards the whole file: if `basic/04`'s observation layout ever drifts from the hand-written table, this fails first and names the drift. |
+| **`test_gated_off_sensor_makes_a_config_naming_it_fail_loudly`** | **The important one.** With interoceptive nociception switched off in the *environment* config, a modulation config still naming it raises. |
+| `test_gated_off_sensor_shifts_every_later_column` | Shows *why* that matters: `Extero Nociception` sits at column 2 normally and at column **1** once the sensor before it is gated off. Silent acceptance would have fed the modulator the wrong data with nothing in the logs. |
+| `test_gated_off_sensor_fails_at_model_construction_too` | The same failure through the real `ActorCriticRNN` construction path — the boundary a training launch actually crosses. |
+
+**The sabotage run — the tests were seen to fail.** Before trusting them, the index build was
+deliberately broken to an off-by-one (`indices.extend(range(start + 1, stop + 1))`) and the
+file re-run: **12 failed, 19 passed**. The failures are exactly the ones that should fail —
+all 5 hand-computed resolver cases, all 5 forward-pass column cases,
+`test_listing_every_sensor_equals_all` and `test_gated_off_sensor_shifts_every_later_column`
+— with diagnostics like `assert (1, 2) == (0, 1)` and
+`assert (20, 21, 22, …) == (19, 20, 21, …)`. The `"all"` bit-identity tests correctly kept
+passing, since `"all"` does not go through the list branch; that separation is the intended
+one. Failure list saved at `tmp/20260907_partb_sabotage_failures.txt`; the sabotage was
+reverted from a byte-for-byte backup (`tmp/20260907_partb_net_good.py.bak`) and the file
+re-run clean (31 passed).
+
+### Test results
+
+All CPU (`JAX_PLATFORMS=cpu`), `-p no:randomly`.
+
+| Command | Result |
+|---|---|
+| `pytest tests/models/test_modulation_input_slice.py` | **31 passed** (15.1 s) |
+| `pytest tests/models/` | **199 passed** (98.1 s) — Part A's 168 plus the 31 new ones; nothing else moved |
+| `pytest tests/scripts/` | **35 passed** (50.5 s) — includes the Finding-A eval-rebuild guard |
+| `pytest tests/training/ tests/algorithms/` | **196 passed, 9 skipped** (791.9 s) — checkpoint restore round-trip and the PPO/return-mode suites |
+| `tests/fixtures/modulation/generate_golden.py --check` | 4/4 fixtures bit-identical |
+
+`tests/test_trajectory_collection.py` was **not** re-run: its 33 failures + 8 errors are
+pre-existing and unrelated (a missing `sensory.visual_value_mode` environment key), proved
+so during Part A by reverting this work's only touched file in that path and getting an
+identical failure set. Part B touches nothing in that path.
+
+**End-to-end smoke through the real `train.py`**, with a genuine slice (not `"all"`):
+`basic/04-jump_attack_10x10.yaml` + a 2-sensor interoceptive slice, 400k timesteps, seed 42,
+GPU 0 — exit 0, no NaN, banner printed
+`input_sensors=[Satiation,Interoceptive Nociception]`, and the run's saved
+`models/config.yaml` round-tripped the key as a list. A separate 201-iteration harness run
+confirms the sliced arm's modulator **receives gradient** (`mod_grad_norm` 0.207 → 0.061 →
+0.063, all finite) and that its losses **differ** from the `"all"` arm's from iteration 0 —
+i.e. the slice is live in real training, not a decoration.
+
+### Speed check (C11 equivalent for Part B)
+
+Local dev host, **GPU 0 (RTX 4090)**, env `p3_moderate.yaml`, seed 42, 201 iterations
+(iteration 0 excluded as the compile step), same harness, **no** determinism flag (that is
+not how training actually runs). "Before" = the tree at `83b8140b` with
+`src/models/recurrent_ppo_network.py` checked out at HEAD, measured in the same sitting.
+
+| Config | Before (env-steps/s) | After (env-steps/s) | s/it after | Δ |
+|---|---|---|---|---|
+| `recurrent_ppo_nmn_het_film_g1.yaml` (`input_sensors: "all"`) | 58819.7 / 58775.2 | 59137.6 / 58872.0 | 0.2770 | **+0.36 %** (within the ±0.1–0.5 % run-to-run spread) |
+| Same config, 2-sensor interoceptive slice | — (did not exist) | 59349.5 | 0.2761 | +0.9 % vs `"all"` — the modulator's GRU reads 2 inputs instead of 27 |
+
+Peak device memory over the same runs: `"all"` **2782.4 MiB before and after** (identical);
+the sliced arm 2776.1 MiB. **No regression to report.**
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python tmp/20260907_v4_loss_capture.py --out <...>.npz --iters 201
+CUDA_VISIBLE_DEVICES=0 python tmp/20260907_v4_loss_capture.py --out <...>.npz --iters 201 \
+  --agent-config tmp/20260907_partb_slice_smoke.yaml
+```
+
+### Part B checkpoints
+
+- [x] **B1 — `"all"` bit-identical.** Three ways: golden fixtures (4/4), 20-iteration training losses vs the pre-Part-A capture (bitwise), and structurally (the gather is skipped for `"all"`).
+- [x] **B2 — a named subset selects exactly the right columns**, checked against a hand-counted breakdown *and* recovered from the forward pass column by column.
+- [x] **B3 — an unknown sensor name raises with the available names listed.** Asserted per name.
+- [x] **B4 — the resolved width changes the modulator GRU's input dimension.** 27 / 2 / 19 / 8.
+- [x] **B5 — a sensor gated off in the environment config makes a config naming it fail loudly**, at the resolver and at model construction; the companion test shows the index drift that would otherwise have happened silently.
+- [x] **B6 — the subset test was seen to fail** against a deliberate off-by-one before it passed (12 failed / 19 passed under sabotage).
+- [x] **B7 — `tests/models/` green** (199 passed).
+- [x] **B8 — speed measured before and after** on the same host/GPU/config/seed; +0.36 %, no regression.
+- [x] **B9 — the plan's stale "Part B NOT approved" header corrected** (status header, the Part B section heading, and Risks item 6).
+
+### Deviations from the plan
+
+1. 🟢 **`"all"` skips the gather entirely instead of applying an identity gather.** The plan's
+   step 6 says `mod_in = x[..., jnp.array(self.mod_input_idx)]` unconditionally. A gather with
+   identity indices is numerically exact, so this is not a correctness difference — but
+   skipping it makes the `"all"` computation graph *literally* the pre-Part-B graph, which
+   turns the bit-identity promise from an empirical result into a structural one. The stored
+   `self.mod_input_idx` is still the full tuple exactly as the plan specifies, so nothing
+   downstream can tell the difference; only `self._mod_input_is_all` (a plain bool, hence
+   static graphdef metadata) selects the path. This is **not** the contiguous fast path the
+   plan rejected — that was about arbitrary adjacent subsets, and it is still not implemented:
+   every real slice takes one gather.
+2. 🟢 **The `train.py` startup banner also prints `input_sensors`.** Not named in Part B's
+   Consequences list. One line, added because a 16-run grid whose whole first factor is *what
+   the modulator reads* should be able to prove from the run log which slice each run got.
+   Flagged rather than assumed.
+3. 🟢 **`src/models/modulation_compat.py` gains one line** (`input_sensors: "all"` for archived
+   runs). Part B's Consequences list does not mention it because the shim did not exist when
+   Part B was drafted — it was itself Part A's Deviation 1, added on the user's ruling. Without
+   this line every archived neuromodulated run would stop being re-analysable, which is exactly
+   the outcome the user ruled against.
+4. 🟢 **The `observation_breakdown is None` fallback moved ~90 lines earlier** in
+   `ActorCriticRNN.__init__`, so the input-slice resolution can see the breakdown. Pure Python
+   dict assignment: no RNG draw, no module construction, no reordering of anything that lands in
+   the parameter tree — and the golden fixtures confirm it (the flat fixture is precisely the
+   `observation_breakdown=None` case, and it stayed bit-identical).
+
+### Known-bug prior art (checked, nothing new to record)
+
+Grepped `docs/develop/active/issues/KNOWN_BUGS.md` directly (sub-agents cannot spawn
+`bug-curator`). Two existing rows bear on this change and **both already cover it**: the
+`save_snapshot.py` hand-built-whitelist row (OPEN, Low — its text already anticipates this
+refactor's new mandatory keys; `input_sensors` is simply one more key its hand-built dict
+lacks, same broken script, same row), and the config-boundary-traps row (B1–B4, OPEN — note
+that `input_sensors` is deliberately the *opposite* of trap B1: an unrecognised value raises
+rather than silently picking something). Nothing found that the registry does not already
+record.
+
+### Follow-ups for the verifier / user
+
+- **Checkpoint consequence, expected and not a bug**: `"all"` preserves the modulator GRU's
+  input width so old checkpoints restore fine; **any real slice changes that width and old
+  checkpoints will not restore into it.** Same reasoning and same non-mitigation as Part A —
+  a sliced modulator is a new architecture with no prior run to resume.
+- A slice is only meaningful **relative to a stated environment config**, since the same names
+  resolve to different columns under different gating. The experiment design must record both
+  (`NMN_INPUT_SITE_GRID` §2.1 already does).
+- `save_snapshot.py` remains broken (pre-existing; registry row exists; separate one-file fix).
+- Part A's open item is unchanged and still gates the launch: **`lr_critic` is dead**, so the
+  critic-side and modulator FiLM heads train at 5× the advertised critic rate (Risks item 1).
+- No documentation under `docs/develop/active/neuromodulation/` other than this plan was
+  touched. If `NEUROMODULATION_ALGORITHM.md` should gain an `input_sensors` note, that is
+  `senior-developer`'s call — Part B's Consequences list does not ask for it.
+
+**Implemented by: developer**
+
 
 ## Verification Report
 

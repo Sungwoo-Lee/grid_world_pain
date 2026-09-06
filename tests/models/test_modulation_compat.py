@@ -53,6 +53,7 @@ MIGRATED = {
     "percept_bias_init": 1.0,
     "memory_bias_init": 0.0,
     "memory_clip": [-2.0, 2.0],
+    "input_sensors": "all",
     "sites": {"encoder": True, "rnn": True, "actor": False, "critic": False},
     "rnn_mechanism": "gate_bias",
     "temperature": {"enabled": True, "clip": [0.5, 3.0]},
@@ -83,6 +84,7 @@ def test_translated_saved_config_builds_the_same_model():
     assert "temp_clip" not in translated
     assert translated["temperature"] == {"enabled": True, "clip": [0.5, 3.0]}
     assert translated["rnn_mechanism"] == "gate_bias"
+    assert translated["input_sensors"] == "all"
 
     a = _build(translated)
     b = _build(dict(MIGRATED))

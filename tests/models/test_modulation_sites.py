@@ -66,6 +66,10 @@ def _mod_cfg(*, encoder=True, rnn=True, actor=False, critic=False,
         "percept_add_bias_init": 0.0,
         "memory_bias_init": 0.0,
         "memory_clip": [-2.0, 2.0],
+        # Part B: "all" == the modulator reads the whole observation vector, which
+        # is what every configuration in THIS file is about (it tests WHERE the
+        # modulator writes; the input slice has its own file).
+        "input_sensors": "all",
         "sites": {"encoder": encoder, "rnn": rnn, "actor": actor, "critic": critic},
         "rnn_mechanism": mechanism,
         "temperature": ({"enabled": True, "clip": list(clip)} if temperature

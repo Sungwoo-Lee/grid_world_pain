@@ -104,6 +104,9 @@ def legacy_equivalent_modulation_config():
     if NEW_MODULATION_API:
         cfg["sites"] = {"encoder": True, "rnn": True, "actor": False, "critic": False}
         cfg["rnn_mechanism"] = "gate_bias"
+        # Part B: "all" == the pre-refactor behaviour (the modulator read the
+        # WHOLE observation vector), so the fixtures stay valid ground truth.
+        cfg["input_sensors"] = "all"
         cfg["temperature"] = {"enabled": True, "clip": list(_TEMP_CLIP)}
     else:
         cfg["temp_clip"] = list(_TEMP_CLIP)

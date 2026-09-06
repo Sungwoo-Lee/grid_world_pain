@@ -24,6 +24,65 @@ def _mod_required(cfg: dict, key: str):
     return cfg[key]
 
 
+def _resolve_modulator_input_indices(input_sensors, observation_breakdown: dict,
+                                     input_dim: int) -> tuple:
+    """Resolve `modulation.input_sensors` to a flat tuple of observation indices.
+
+    Plain-language purpose: the modulator is a small network that reads the
+    agent's senses. By default it reads ALL of them; a config may instead name a
+    subset of sensors ("only the body's internal signals", say), and this
+    function turns those NAMES into the COLUMN POSITIONS they occupy in the
+    observation vector.
+
+    The observation layout is config-dependent — several sensors can be switched
+    off in the environment config, and some widths scale with sensor range — so
+    positions are always resolved against the run's own
+    `get_observation_breakdown(params)` dict and never hard-coded. A name that is
+    not present (typically because that sensor is gated OFF in the environment
+    config) is an ERROR, not a silent re-indexing: silent index drift would feed
+    the modulator the wrong columns with nothing in the logs to show for it.
+
+    Returns a plain tuple of Python ints, so it stays static graph metadata and
+    never becomes a trained or checkpointed leaf.
+    """
+    offsets = {}
+    cursor = 0
+    for name, dim in observation_breakdown.items():
+        offsets[name] = (cursor, cursor + int(dim))
+        cursor += int(dim)
+
+    if isinstance(input_sensors, str):
+        if input_sensors != "all":
+            raise ValueError(
+                f"modulation.input_sensors must be the string \"all\" or a list of "
+                f"sensor names, got {input_sensors!r}. Sensors available under this "
+                f"environment config: {list(offsets)}."
+            )
+        return tuple(range(input_dim))
+
+    if not isinstance(input_sensors, (list, tuple)) or len(input_sensors) == 0:
+        raise ValueError(
+            f"modulation.input_sensors must be the string \"all\" or a NON-EMPTY list "
+            f"of sensor names, got {input_sensors!r}. Sensors available under this "
+            f"environment config: {list(offsets)}."
+        )
+
+    indices = []
+    for name in input_sensors:
+        if name not in offsets:
+            raise ValueError(
+                f"modulation.input_sensors names unknown sensor {name!r}. The "
+                f"observation breakdown is environment-config dependent, so a sensor "
+                f"that is switched off in the environment config is simply absent "
+                f"here. Sensors available under THIS environment config: "
+                f"{list(offsets)}. Naming an absent sensor is an error rather than a "
+                f"silent index shift, which would feed the modulator the wrong columns."
+            )
+        start, stop = offsets[name]
+        indices.extend(range(start, stop))
+    return tuple(indices)
+
+
 class GroupedLinear(nnx.Module):
     """
     Applies independent linear layers to N groups in parallel using einsum.
@@ -227,6 +286,12 @@ class ActorCriticRNN(nnx.Module):
         self.modulation_enabled = modulation_config is not None and modulation_config.get('type') is not None
         self.modulation_type = modulation_config['type'] if self.modulation_enabled else None
 
+        # Observation breakdown is needed by the modulator input-slice resolution
+        # below as well as by the encoder, so default it before validation runs.
+        if observation_breakdown is None:
+            # Fallback for compatibility or if breakdown not provided
+            observation_breakdown = {"Observation": input_dim}
+
         # === Modulation site / mechanism / temperature validation (plan A) ===
         # This lives HERE, in the one place all model-construction call sites funnel
         # through, so a hand-built modulation dict at any call site fails with a clear
@@ -287,6 +352,19 @@ class ActorCriticRNN(nnx.Module):
                     "the modulator GRU would run every step and receive no gradient (dead weight). "
                     "Enable at least one of sites.{encoder,rnn,actor,critic} or temperature.enabled."
                 )
+
+            # --- Part B: WHAT the modulator reads. "all" (the whole observation,
+            # i.e. every prior run's behaviour) or an explicit list of sensor names
+            # resolved against this run's own observation breakdown. Stored as a
+            # plain tuple of ints so it stays static graphdef metadata.
+            self.mod_input_idx = _resolve_modulator_input_indices(
+                _mod_required(modulation_config, 'input_sensors'),
+                observation_breakdown, input_dim,
+            )
+            # "all" keeps the modulator's input identical to the task network's, so
+            # the gather is skipped outright rather than applied as an identity —
+            # the computation graph then stays exactly what it was pre-Part-B.
+            self._mod_input_is_all = (self.mod_input_idx == tuple(range(input_dim)))
         else:
             self.site_encoder = False
             self.site_rnn = False
@@ -295,6 +373,8 @@ class ActorCriticRNN(nnx.Module):
             self.rnn_mechanism = None
             self.temperature_enabled = False
             temp_clip = None
+            self.mod_input_idx = None
+            self._mod_input_is_all = True
 
         # ModulatedGRUCell differs from nnx.GRUCell in init scheme and gate polarity
         # (KNOWN_BUGS: modulated/baseline init confound). Only pay that cost when the
@@ -317,10 +397,6 @@ class ActorCriticRNN(nnx.Module):
             )
 
         # Observation Encoding (Flat or Hierarchical)
-        if observation_breakdown is None:
-            # Fallback for compatibility or if breakdown not provided
-            observation_breakdown = {"Observation": input_dim}
-            
         self.obs_encoder = ObservationEncoder(
             input_dim, hidden_size, observation_breakdown, encoding_config, rngs
         )
@@ -380,7 +456,7 @@ class ActorCriticRNN(nnx.Module):
                 )
 
             self.modulator = NeuromodulatorRNN(
-                obs_dim=input_dim,
+                obs_dim=len(self.mod_input_idx),
                 target_hidden_size=hidden_size,
                 obs_breakdown=observation_breakdown,
                 mod_hidden_size=mod_hidden,
@@ -430,7 +506,14 @@ class ActorCriticRNN(nnx.Module):
             task_h, mod_h = h
 
             # --- Modulator forward pass ---
-            mod_output, mod_h_new = self.modulator(x, mod_h)
+            # Part B: the modulator may read only a named SUBSET of the senses. The
+            # gather happens AFTER the symlog compression above, so the modulator
+            # sees exactly the same scaling the task network does.
+            if self._mod_input_is_all:
+                mod_in = x
+            else:
+                mod_in = x[..., jnp.asarray(self.mod_input_idx)]
+            mod_output, mod_h_new = self.modulator(mod_in, mod_h)
 
             # --- Task path with modulation ---
             # SITE: encoder — perceptual modulation (Phase-dependent)

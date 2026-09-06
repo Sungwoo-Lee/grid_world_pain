@@ -144,7 +144,7 @@ def test_modulated_rppo_eval_rebuild_succeeds(tmp_path, monkeypatch):
     # ActorCriticRNN reads unconditionally. The refactor added more such keys, so
     # the guard now covers the FULL mandatory set, not just memory_clip.
     assert modulation_config is not None
-    for _k in ("memory_clip", "sites", "rnn_mechanism", "temperature"):
+    for _k in ("memory_clip", "sites", "rnn_mechanism", "temperature", "input_sensors"):
         assert _k in modulation_config, (
             f"fixture config must actually carry '{_k}' to be a faithful repro"
         )

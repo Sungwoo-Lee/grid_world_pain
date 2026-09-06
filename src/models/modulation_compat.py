@@ -11,8 +11,9 @@ model construction.
 What it does: when a *saved* config is loaded for evaluation, it rewrites the old
 flat key into the new `temperature: {enabled, clip}` shape IN MEMORY, and fills in
 the site/mechanism keys with the settings that the pre-refactor architecture
-hard-wired (encoder + task-GRU, gate-bias mechanism, temperature on). Nothing is
-written back to disk.
+hard-wired (encoder + task-GRU, gate-bias mechanism, temperature on, and the
+whole observation vector as the modulator's input). Nothing is written back to
+disk.
 
 What it deliberately does NOT do: it does not soften the live-config path. A
 config someone is editing under `configs/` that still carries `temp_clip` still
@@ -35,6 +36,8 @@ from typing import Optional
 # bias), never to the actor or critic, and the action temperature was always on.
 _LEGACY_SITES = {"encoder": True, "rnn": True, "actor": False, "critic": False}
 _LEGACY_RNN_MECHANISM = "gate_bias"
+# ...and it read the ENTIRE observation vector; the input slice did not exist yet.
+_LEGACY_INPUT_SENSORS = "all"
 
 
 def translate_legacy_modulation_config(modulation_config: Optional[dict],
@@ -60,11 +63,13 @@ def translate_legacy_modulation_config(modulation_config: Optional[dict],
     translated.setdefault("sites", dict(_LEGACY_SITES))
     translated.setdefault("rnn_mechanism", _LEGACY_RNN_MECHANISM)
     translated.setdefault("temperature", {"enabled": True, "clip": list(clip)})
+    translated.setdefault("input_sensors", _LEGACY_INPUT_SENSORS)
 
     print(
         f"[INFO] Saved config predates the modulation-site refactor: translated "
         f"modulation.temp_clip={list(clip)} -> temperature.{{enabled: true, clip: {list(clip)}}} "
-        f"with sites={{encoder,rnn}} / rnn_mechanism='{_LEGACY_RNN_MECHANISM}' "
+        f"with sites={{encoder,rnn}} / rnn_mechanism='{_LEGACY_RNN_MECHANISM}' / "
+        f"input_sensors='{_LEGACY_INPUT_SENSORS}' "
         f"(in memory only, {source} is not modified).",
         flush=True,
     )
