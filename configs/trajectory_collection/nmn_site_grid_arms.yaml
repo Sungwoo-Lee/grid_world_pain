@@ -1,0 +1,126 @@
+# NMN input-site grid — trajectory collection for the SIXTEEN GRID ARMS.
+#
+# Driver: scripts/eval/traj_collect/run_collection.py
+# Study:  docs/experiments/active/nmn_input_site_grid/NMN_INPUT_SITE_GRID.md  (§3.3, §4.2)
+# Schema: docs/environment/TRAJECTORY_STORE_SCHEMA.md
+# Sibling: nmn_site_grid_baselines.yaml — the five unmodulated control runs that supply the
+#          null band. IDENTICAL population parameters. That is the whole point of both files.
+#
+# WHAT THIS COLLECTION IS FOR (plain language)
+# --------------------------------------------
+# After the sixteen grid runs finish training, each one is rolled out over a large fixed
+# population of episodes so its BEHAVIOUR can be measured — specifically, how often a step out
+# of the open lands in concealing cover, broken down by how badly wounded the episode started.
+# The comparison is against five already-collected agents with no neuromodulator. For that
+# comparison to mean anything, every agent must be shown THE SAME EPISODES.
+#
+# ############################################################################
+# # THIS FILE CANNOT BE RUN AS-IS. Every `path` below is a PLACEHOLDER.       #
+# # Substitute the real run directory names from the study's Launch Manifest  #
+# # (§3 of the design doc) once training has launched, then run the driver.   #
+# # Until you do, run_collection.py hard-fails on the first entry with        #
+# #   "runs[0] path ... has no models/config.yaml"                            #
+# # which is the intended behaviour: a placeholder must fail loudly, at the   #
+# # spec, before any node is launched.                                        #
+# # The LABELS below are final and match the Launch Manifest cell names; only #
+# # the timestamp-prefixed directory names are unknown at authoring time.     #
+# ############################################################################
+#
+# THE ONE VALUE THAT MUST NOT DRIFT: seed_base 1000000
+# ----------------------------------------------------
+# The five baselines were collected at `seed_base: 1000000`. If any arm below is collected
+# under a different base, its episodes are DIFFERENT WORLDS from the baselines' and every
+# arm-vs-control behavioural comparison degrades from PAIRED to UNPAIRED — silently. Both
+# collections succeed, no error is raised, no warning is printed, and the resulting numbers
+# look exactly as legitimate as paired ones. Nothing downstream can detect it after the fact
+# except by reading the two manifests. That failure is the reason this file exists rather than
+# another shell script.
+#   Do NOT add a per-run `seed_base` override to any entry below. A per-run override is the
+#   right tool only when a run's world differs STRUCTURALLY from the others; all sixteen arms
+#   here share one unmodified environment config (basic/04-jump_attack_10x10.yaml) with each
+#   other and with the five baselines. The two independent variables of this study are both
+#   AGENT-side.
+#
+# PAIRING, AND THE CHECK THAT DOES NOT WORK
+# -----------------------------------------
+# `env_fp` is NOT a same-world check for this study. It hashes the whole resolved config,
+# INCLUDING `seed`, `tag` and the wandb fields, so it differs between two runs whose
+# environment is identical. It already differs across all five baseline stores — which ARE the
+# same world — and it will differ across all sixteen arms below, and across arms vs baselines.
+# Anyone using it as a pairing check here gets a FALSE NEGATIVE and may wrongly conclude the
+# comparison is invalid.
+#   The check that does work, and the one to run: take a few thousand shared episode seeds and
+#   compare the realised draws directly — animal draws, observation draws, starting injury,
+#   spawn cell. On the five baselines these are BIT-IDENTICAL across all stores. Repeat that,
+#   not the fingerprint.
+#
+# `restore_check: strict` IS NOT A SPEC KEY — do not add it, it is a hard error.
+# -----------------------------------------------------------------------------
+# `run_collection.py` rejects unknown top-level keys by design (a typo that silently changes
+# nothing is worse than a crash). Strict restore checking is what you get STRUCTURALLY: the
+# only way to weaken it is `--allow-weak-restore-check` on collect_trajectories.py, and the
+# driver has no path to pass that flag. Every store this spec produces will record
+# `restore_check: strict` in its manifest — check it there.
+#   Strict restore matters more than usual for this study. Ten of the sixteen arms carry a
+#   neuromodulator whose input width differs from the others (27 / 2 / 19 columns), so their
+#   parameter trees differ; the strict check is what turns a mismatched restore into a loud
+#   failure instead of a silently-unmodulated agent producing plausible-looking behaviour.
+#   For the same reason, do NOT set `allow_ambiguous_scene` on any entry: these are runs from
+#   2026-09, long past the pre-2026-07-23 dual-format window that flag exists for.
+#
+# OPERATIONAL NOTES
+# -----------------
+# * `device: gpu` means ONE process per node. collect_worker.sh sets JAX_PLATFORMS=cuda but no
+#   CUDA_VISIBLE_DEVICES, so every GPU worker on a node lands on GPU 0; multi-GPU fan-out does
+#   not work today. `npar: 1` is stated EXPLICITLY because it is a correctness choice, not a
+#   throughput one: the ad hoc baseline collection put three processes on two GPUs at
+#   batch_size 5000 and the third died with RESOURCE_EXHAUSTED. Two of these do not fit on one
+#   card. To go faster, add NODES, not processes per node.
+# * Disk: the baselines came to ~1.9 GB per run, so sixteen arms is roughly 31 GB into
+#   results/trajectories_nmnsite/ (which already holds 9.6 GB of baselines). Check free space
+#   before launching. That directory is gitignored — see the git-safety rules in CLAUDE.md
+#   before any git operation that could clean it.
+# * A KNOWN GAP, flagged rather than papered over. The design asks for TWO readings per run:
+#   this one (final checkpoint) and one at the checkpoint nearest a common ENVIRONMENT-STEP
+#   budget. The second is not expressible in this schema: `checkpoints` is a single list
+#   applied to every run, but each arm's matched-budget checkpoint falls at a DIFFERENT
+#   episode-indexed step (a better agent runs longer episodes, so equal environment steps means
+#   unequal episodes). Collecting that pass will need either a per-run checkpoint capability in
+#   the spec or one spec file per step-group. Do not improvise it with a per-run key — unknown
+#   per-run keys are a hard error, by design.
+
+name: nmn_site_grid_arms
+algo: rppo
+out_root: results/trajectories_nmnsite   # same root as the baselines: one study, one place.
+                                         # No collision risk — store paths key on run_tag.
+episodes: 300000
+seed_base: 1000000         # LOAD-BEARING — see the block above. Must equal the baselines'.
+checkpoints: [final]       # pass 1 of 2; the matched-budget pass is the known gap noted above
+nodes: [106, 107, 108, 109, 110, 111, 112, 113]   # any set works; more nodes = more parallelism
+obs_precision: float32     # must match the baselines, which are float32
+device: gpu
+npar: 1                    # explicit, not defaulted — see the OOM note above
+batch_size: 5000
+shard_episodes: 5000
+blocks_per_cell: 60        # 300,000 / 5,000 = 60 blocks, one process per run — what the
+                           # baselines did
+
+runs:
+  # LABELS ARE FINAL and match the Launch Manifest (design doc §3) cell names.
+  # PATHS ARE PLACEHOLDERS — replace <RUNDIR_*> with the real directory name of each run.
+  - {label: T1_none,      path: results/JAX_RecurrentPPO/<RUNDIR_t1none_s42>}
+  - {label: T2_enc_ALL,   path: results/JAX_RecurrentPPO/<RUNDIR_t2enc_ALL_s42>}
+  - {label: T2_enc_I,     path: results/JAX_RecurrentPPO/<RUNDIR_t2enc_I_s42>}
+  - {label: T2_enc_X,     path: results/JAX_RecurrentPPO/<RUNDIR_t2enc_X_s42>}
+  - {label: T3_rnn_ALL,   path: results/JAX_RecurrentPPO/<RUNDIR_t3rnn_ALL_s42>}
+  - {label: T3_rnn_I,     path: results/JAX_RecurrentPPO/<RUNDIR_t3rnn_I_s42>}
+  - {label: T3_rnn_X,     path: results/JAX_RecurrentPPO/<RUNDIR_t3rnn_X_s42>}
+  - {label: T4_act_ALL,   path: results/JAX_RecurrentPPO/<RUNDIR_t4act_ALL_s42>}
+  - {label: T4_act_I,     path: results/JAX_RecurrentPPO/<RUNDIR_t4act_I_s42>}
+  - {label: T4_act_X,     path: results/JAX_RecurrentPPO/<RUNDIR_t4act_X_s42>}
+  - {label: T5_crt_ALL,   path: results/JAX_RecurrentPPO/<RUNDIR_t5crt_ALL_s42>}
+  - {label: T5_crt_I,     path: results/JAX_RecurrentPPO/<RUNDIR_t5crt_I_s42>}
+  - {label: T5_crt_X,     path: results/JAX_RecurrentPPO/<RUNDIR_t5crt_X_s42>}
+  - {label: T16_quad_ALL, path: results/JAX_RecurrentPPO/<RUNDIR_t16quad_ALL_s42>}
+  - {label: T16_quad_I,   path: results/JAX_RecurrentPPO/<RUNDIR_t16quad_I_s42>}
+  - {label: T16_quad_X,   path: results/JAX_RecurrentPPO/<RUNDIR_t16quad_X_s42>}

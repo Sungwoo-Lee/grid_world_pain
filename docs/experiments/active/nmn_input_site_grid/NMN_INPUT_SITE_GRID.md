@@ -22,6 +22,14 @@ develop_link: docs/develop/active/neuromodulation/MODULATION_SITE_REFACTOR.md
 > findings were answered — §10 records what changed, and the two places where I did something other
 > than what the review asked for, with the reasoning. Every amendment is still pre-registration: all of it was written **before**
 > any run in this grid launched and before any of its data existed.
+> **Amended again**: 2026-09-07, second amendment — still before any run in this grid launched.
+> Building the headline behavioural measure and running it against the five finished unmodulated
+> baselines found a flaw in this pre-registration: the injury bins it registered describe a contrast
+> the environment **cannot produce**. Those bins are re-registered (§4.2), every behavioural
+> threshold is restated against the **five-seed band** rather than the within-run error bar (§2.5),
+> the measurement's own result about the control agent is recorded as a finding (§4.2), and the
+> post-training evaluation population now has committed spec files instead of a scratch script
+> (§3.3). §C records the full list.
 > **Open for the user**: §11 — a smaller, replicated alternative to this grid, recommended by the
 > reviewer, recorded for the user to rule on. This design proceeds as approved in the meantime.
 > **Related**: [[MODULATION_SITE_REFACTOR]] (the implementation this design consumes) ·
@@ -62,6 +70,18 @@ so that "where" can finally be varied on its own.
 The modulator is this project's proposed *mechanism* for that behaviour. If it works, the
 agent's response to an external cue (a predator nearby, a bush nearby) should change with its
 internal state. This grid asks which reading-and-writing arrangement, if any, produces that.
+
+**A result measured before this grid launched, which changes what the grid is asking.** The headline
+behavioural measure described below was built and run against the five already-finished *plain*
+agents — no modulator at all — that this grid uses as its control. In those five agents **the target
+behaviour is absent, and if anything leans the other way.** Starting an episode badly wounded
+changes the chance that a step out of the open lands in cover by somewhere between **−0.53 and
++0.10 percentage points**, against a base rate of about **7 such steps in every 100**, and three of
+the five agents move in the *negative* direction. What the wounded agent does instead is **stop
+moving**: its resting rate rises by **18 to 21 percentage points**, an effect roughly **thirty times
+larger** than anything the cover-seeking measure moves. So this grid is not asking whether the
+modulator *amplifies* an existing tendency to seek cover when hurt. It is asking whether the
+modulator **creates** one. The numbers, the method and the caveats are in §4.2.
 
 ### 1.2 What is being varied
 
@@ -335,10 +355,17 @@ producing a short list for a properly seeded follow-up — not to establish anyt
 §4.2 are computed over **300,000 evaluation episodes per checkpoint**, so their *within-run*
 confidence intervals are very narrow even at one seed. That narrowness measures how precisely each
 agent's behaviour has been characterised; it says **nothing** about whether a second seed of the
-same configuration would behave the same way, and the gap between those two things is large. Both
-numbers are reported side by side — the within-run interval and the five-seed control band measured
-on the existing unmodulated runs (§4.2) — and a difference that clears the first but not the second
-is not a result.
+same configuration would behave the same way, and the gap between those two things is large.
+
+**That gap has now been measured, and it is a factor of about six.** On the five existing
+unmodulated runs, the within-run 95% confidence interval on the headline behavioural statistic
+`Δ_B0` is about **±0.10 percentage points**, while the five-seed band — the range those same five
+identically-configured runs span for no reason but the random seed — is **0.63 points wide**
+(§4.2). The consequence is stated here because it is the single easiest mistake this design could
+invite: **an arm reading `Δ_B0 = +0.3` points would clear its own error bar comfortably and still
+sit inside the null band.** Both numbers are reported side by side for every arm, and **every
+behavioural threshold in §2.5 is stated against the seed band, none against the within-run
+interval.** A difference that clears the first but not the second is not a result.
 
 ### 2.4 Confounds and limitations
 
@@ -355,6 +382,8 @@ is not a result.
 | **C9** | **Right-censoring.** Some arms may not have plateaued at 10M episodes. | High | Pre-registered exclusion rule in §5, item 4. |
 | **C10** | **Checkpoints are not interchangeable across input arms.** Each slice changes the modulator GRU's input width, so the parameter trees differ. | Low — stated, not a defect | These are 16 fully independent trainings. No warm-starting, no shared initialisation beyond the common seed, no cross-arm checkpoint restore. Any attempt to restore across arms will fail loudly (the restore-completeness assertion), which is the desired behaviour. |
 | **C11** | **The offline behavioural measures use a deterministic (argmax) policy** while the training-log survival series reflects the stochastic policy. They measure different objects. | Medium | Both reported side by side, never differenced. Same discipline as the prior study's C8. |
+| **C13** | **The `Eat` action index cannot be verified from the trajectory store.** B0's denominator excludes `Rest` and `Eat`; only `Rest` has a witness column. `Eat` is hard-coded as 5 from the source, and `ate_food` is `False` when `Eat` is chosen on an empty cell, so it cannot confirm the index. | Low — stated, not mitigable from the store | The guard that *is* applied and *does* protect B0: **no row may carry a movement action and the `rested` column at the same time**, verified true on all five baseline runs and re-run on every grid store. If the action ordering ever changed, `Rest` would fail loudly and `Eat` silently. All 16 arms share one environment config with the baselines, which bounds the risk. See §4.2. |
+| **C14** | **`env_fp` is not a same-world check for this study.** It hashes the whole resolved config including `seed`, `tag` and the wandb fields, so it differs across runs whose environment is identical — it already differs across all five baseline stores, which *are* the same world. | Medium — a **false-negative** hazard, not a false-positive one | Pairing is verified **empirically** instead: over 5,000 shared episode seeds the animal draws, observation draws, starting injury and spawn cell are bit-identical across all five baseline stores. Every grid arm will carry a distinct `env_fp` for the same reason, so a reader who treats it as a pairing check will wrongly conclude the comparison is invalid. Stated in §3 and in both collection specs. |
 | **C12** | **`percept_add_bias_init` is read with a fallback default** (`recurrent_ppo_network.py:361` uses `.get(..., 0.0)`), contrary to the project's no-fallback rule. | Low | Pre-existing and out of scope for this design. Mitigated here by setting the key explicitly in all 15 modulated configs so no run depends on the fallback. Flagged to `bug-curator` in the handoff. |
 
 ### 2.5 Pre-registered predictions
@@ -445,31 +474,93 @@ this project used, so it is the honest single slice to fix in advance. (`plan-re
 for both. *Primary evidence is behavioural, not survival* (§4.2); the quantity compared is the
 headline measure **B0**, the bush-entry rate broken down by starting injury.
 
+**The reference every H5 number is scored against, fixed here: the seed band, never the within-run
+interval.** Each arm's `Δ_B0` carries a very narrow within-run confidence interval — about
+**±0.10 percentage points**, because 300,000 episodes characterise one agent precisely — and a
+five-seed control band roughly **six times wider** (0.63 points in the primary window; measured
+values in §4.2). **An arm reading `Δ_B0 = +0.3` points would clear its own error bar comfortably and
+still sit inside the null band**, i.e. inside the range that five runs of the *identical unmodulated
+configuration* already span for no reason but the random seed. Notation used below, per
+(window x predator-condition) cell: **`T`** is the **top** of the five-seed control band for `Δ_B0`
+and **`W`** is that band's **width** (max − min).
+
+**Primary cell for every H5 ruling**: `Δ_B0` in the **first 25 steps** with **no predator within 2
+cells**. Reasons: it is the window in which the randomised wound is still strongly felt; it has the
+largest denominator of the two predator-conditioned readings; and it isolates state-dependence from
+threat-response, which is B3's separate job. The whole-episode and predator-near readings are always
+reported alongside; where they disagree with the primary, the disagreement is reported and the
+primary carries the ruling.
+
+**Per-arm ruling — applies to any single cell of this grid, under any behavioural hypothesis.**
+
+| Where that arm's `Δ_B0` falls | Ruling |
+|---|---|
+| At or below `T` | **No evidence** of added state-dependence. |
+| Above `T`, up to `T + W` | **Candidate, unresolved.** Not an effect and not reportable as one. Under the null, a sixth draw from the control's own seed distribution exceeds the maximum of five with probability about **1 in 6** — so one cell clearing the band is close to what the seed alone delivers. |
+| Above `T + W` | **Candidate real effect.** Goes to a five-seed confirmation (§4.4). Still never a claim at n = 1. |
+
+**No single cell of this grid can confirm a behavioural hypothesis. That is stated here, in the same
+place as the thresholds, rather than discovered afterwards.** The only interpretable behavioural
+readings this design produces are the **counts across the five write targets** defined below; a
+per-cell number is a candidate, never a result.
+
+**The smallest effect this grid can see**, stated so that a null is readable: one band width — about
+**0.6 percentage points** of `Δ_B0` in the primary window, against a base rate near 7%, i.e. roughly
+a **9% relative** change in how often a step out of the open lands in cover. (The whole-episode
+pooled reading has a narrower band, 0.26 points, but a weaker treatment contrast.) **A refutation
+below therefore means "no effect larger than about 0.6 points", not "no effect at all".**
+
 **H5-add (scored first — this is the load-bearing one).** *Directional prediction: an
 interoception-reading modulator produces more injury-dependence of cover-seeking than no modulator
-at all.*
-- *Confirmed if*: at **three or more of the five write targets**, the I arm's injury-dependence of
-  B0 exceeds **cell 1's** (the unmodulated control's) by more than the control's own 5-seed
-  dispersion band, measured before launch on the five existing `MC` seeds (§4.2).
-- *Refuted if*: at three or more targets, the I arms sit inside or below that control band. That
-  outcome says a body-reading modulator adds no state-dependence beyond what the main network — which
-  receives both body channels in every arm, control included — already produces on its own. It is
-  the single most consequential negative this grid can return, and it must be reported as such
-  rather than folded into an "inconclusive" summary.
+at all.* Scored by **counting, across the five write targets at the I input slice, how many have
+`Δ_B0 > T`** in the primary cell:
+
+- *Confirmed if*: **3 or more of the 5.** Under the null — every I arm behaving as a fresh draw from
+  the control's own seed distribution — that count arises with probability about **3.5%**. Two
+  sentences travel with that figure wherever it is reported: it assumes the five targets are
+  independent draws, and they are not quite — they share seed 42 and the identical paired episode
+  population, which correlates them positively and therefore **inflates** the true false-positive
+  rate above 3.5%. It is a screening-level signal, not a p-value.
+- *Unresolved if*: **exactly 2 of the 5** (null probability about 16%).
+- *Refuted if*: **1 or 0 of the 5.** This is the *expected* outcome if the modulator adds nothing
+  (null probability about 80%), which is precisely what makes it a usable refutation criterion. It
+  says a body-reading modulator adds no cover-seeking state-dependence beyond what the main network
+  — which receives both body channels in every arm, the control included — already produces on its
+  own. Given the pre-launch finding that the control produces **none, and if anything slightly
+  negative** (§4.2), such a refutation says the modulator fails to **create** the behaviour, not
+  that it fails to amplify it. It is the single most consequential negative this grid can return and
+  must be reported as such rather than folded into an "inconclusive" summary.
+- *Untested assumption carried with all three rulings, recorded as **A3-B***: that a **modulated**
+  arm's seed dispersion is no wider than the unmodulated control's. Nothing in this project has
+  measured that. If modulated arms are behaviourally noisier, every probability above is optimistic.
 - *Why this is the load-bearing test* (`plan-reviewer` finding 7): H5-spec below can be satisfied
   by a modulator that changes behaviour at all, because X's modulator cannot read satiation and
   reaches injury only indirectly. Only the comparison against the **unmodulated** control asks
   whether the modulator is contributing the state-dependence rather than merely correlating with it.
 
-**H5-spec (the specificity check, scored second).** *Directional prediction: I exceeds X.*
-- *Confirmed if*: at the same write target, the I arm's injury-dependence of B0 exceeds the X arm's,
-  in the same direction, at **three or more of the five write targets**.
-- *Refuted if*: X arms match or exceed I arms at three or more targets. That would say the
-  modulator's benefit, whatever it is, does not come from reading the body — a serious problem for
-  the project's mechanism story, to be reported as such.
+**H5-spec (the specificity check, scored second).** *Directional prediction: I exceeds X.* The two
+arms compared are each a single run, so neither carries a band of its own; the dispersion of a
+*difference* between two independent single draws is wider than the dispersion of one draw by
+roughly a factor of √2. The gate is therefore set at one full band width — **`I − X > W`** — which,
+under a normal approximation to the five-seed band, is about **1.65 standard deviations** of that
+difference, i.e. a per-target false-positive rate near **5%**.
+
+- *Confirmed if*: **3 or more of the 5** write targets satisfy `I − X > W` (null probability about
+  0.1%).
+- *Flagged, unresolved if*: **exactly 2 of the 5** (null probability about 2%).
+- *Refuted if*: **1 or 0 of the 5** — and this ruling is registered together with the reason it is
+  weak: the null delivers that outcome about **98%** of the time, so **an H5-spec refutation is
+  nearly uninformative** and may **not** be written up as evidence that the modulator ignores the
+  body. Only an H5-spec confirmation carries information, and even then only as a screen.
 - *Reported with its own caveat, always*: this contrast is close to true by construction, so a
   confirmation here **without** a matching H5-add confirmation is written up as "consistent with,
   but not evidence for, the mechanism".
+
+**Direction counts; magnitude alone never does.** Every threshold above is one-sided in the
+**positive** direction, because the project's target behaviour is *more* cover-seeking when wounded.
+An arm whose `|Δ_B0|` is large but **negative** is reported as "state dependence in the direction
+opposite to the project's target behaviour" — a finding in its own right, the outcome the
+freeze-to-heal record predicts, and what the five unmodulated controls actually do (§4.2).
 
 *Not evidence for either part*: an ALL-vs-X difference (confound C2); or an I-vs-X difference in
 **survival** alone with no matching behavioural difference (a modulator can raise survival by
@@ -558,6 +649,21 @@ is the launching agent's to clear — the column is here so there is somewhere t
 single-seed screen and it keeps these runs from being pooled with production multi-seed studies in
 any downstream query.
 
+**How these runs are paired for the behavioural comparison, and the check that does *not* work.**
+Every run in this manifest is evaluated afterwards on the same 300,000 episode seeds
+(`seed_base` 1,000,000 — the trajectory-collection spec named in §3.3), which is what makes every
+arm-to-arm behavioural comparison **paired**: episode *i* presents the same world to every agent, so
+a difference between two arms cannot be a difference in the worlds they were shown. The obvious way
+to *verify* that would be the `env_fp` fingerprint the trajectory collector stamps into each store's
+manifest — and **it does not work here.** `env_fp` hashes the whole resolved configuration,
+including `seed`, `tag` and the WandB fields, so it differs between two runs whose environment is
+identical. It already differs across all five unmodulated baseline stores, which *are* the same
+world, and it will differ across all 16 grid arms for exactly the same reason. **Anyone using
+`env_fp` as a same-world check on this experiment gets a false negative.** Pairing on the five
+baselines was therefore verified empirically instead: over 5,000 shared episode seeds the animal
+draws, the observation draws, the starting injury and the spawn cell are **bit-identical** across
+all five stores. That direct check — not `env_fp` — is the one to repeat on the grid arms.
+
 ### 3.1 Configs to Produce (second pass — NOT yet written)
 
 All 16 runs share one environment config, unmodified. Each run gets its own agent config, because
@@ -633,6 +739,54 @@ One invocation per run, through `run_command.py` onto the assigned node. Shown f
 `--seed`, `--num-envs` and `--checkpoint-frequency` are **not** passed: they are config-owned
 (`configs/train/default.yaml`, overridden by `configs/train/recurrent_ppo.yaml`) per the project's
 config-owns-values convention.
+
+### 3.3 Trajectory-collection specs (post-training evaluation population)
+
+Training produces the runs; the **behavioural** measures of §4.2 are computed afterwards, by rolling
+each finished agent out over a large fixed population of episodes and storing every step. That
+collection is a scientific act with its own parameters, so it gets its own committed spec files
+rather than a shell script — this study's baseline collection was driven ad hoc and its commands
+survived only in a scratch file, which is the same gap the sensor-ladder study's own spec header
+complains about.
+
+| Spec | Covers | State |
+|---|---|---|
+| `configs/trajectory_collection/nmn_site_grid_baselines.yaml` | The five unmodulated `MC` runs that supply the control band (§4.2). | **Regenerated from the five stores already on disk.** Re-running it reproduces the population, not the original invocation. |
+| `configs/trajectory_collection/nmn_site_grid_arms.yaml` | All 16 grid arms. | **Written; not runnable yet.** Every run path is a placeholder, because the run directory names do not exist until launch. The labels are final and match the Cell column of the manifest above. |
+
+Both specs pin the same population parameters: **300,000 episodes**, **`seed_base` 1,000,000**,
+`obs_precision: float32`, final checkpoint, deterministic (argmax) policy, one collector process per
+node.
+
+**The one value that must not drift is `seed_base: 1000000`.** It is what makes every arm-to-arm and
+arm-to-baseline behavioural comparison **paired** — episode *i* presents the same world to every
+agent. Collect an arm under any other base and the comparison silently degrades from paired to
+unpaired: both collections succeed, no error is raised, no warning is printed, and the resulting
+numbers look exactly as legitimate as paired ones. Nothing downstream can detect it after the fact
+except by reading the two manifests. Preventing that specific silent failure is the reason these two
+files exist.
+
+**Three things about the spec schema, recorded so nobody improvises around them:**
+
+- **`restore_check: strict` is not a spec key** — adding it is a hard error, because
+  `run_collection.py` rejects unknown top-level keys by design. Strict restore checking is what the
+  driver gives you *structurally*: the only way to weaken it is a flag on the collector that the
+  driver has no path to pass. Every store records `restore_check` in its own manifest; check it
+  there. This matters more than usual here, because ten of the sixteen arms carry a modulator whose
+  input width differs from the others, so their parameter trees differ — the strict check is what
+  turns a mismatched restore into a loud failure rather than a silently-unmodulated agent producing
+  plausible-looking behaviour.
+- **`device: gpu` means one process per node**, and `npar: 1` is stated explicitly in both specs as
+  a correctness choice rather than a throughput one. The ad hoc baseline collection put three
+  processes on two GPUs at batch size 5,000 and the third died out of memory. To go faster, add
+  nodes, not processes per node.
+- **A known gap in the schema, flagged rather than papered over.** §4.2 asks for two readings per
+  run — final checkpoint and nearest-to-matched-budget. The second is **not expressible** in the
+  current spec: `checkpoints` is one list applied to every run, but each arm's matched-budget
+  checkpoint falls at a different episode-indexed step, because a better agent runs longer episodes
+  and equal environment steps therefore means unequal episodes. That pass will need either a per-run
+  checkpoint capability or one spec per step group. It is not improvisable with a per-run key —
+  unknown per-run keys are a hard error, by design.
 
 ---
 
@@ -737,16 +891,70 @@ is a known footgun (row `t` holds the environment state **at** `t` together with
 **arrived at** `t`, per [[TRAJECTORY_STORE_SCHEMA]] §3.1):
 
 - *Denominator*: rows `t` with `agent_in_bush[t] == False` **and** `action[t+1] ∈ {0,1,2,3}` (the
-  four moves). Both `Rest` (action 4) and `Eat` (action 5) are excluded — the denominator is "the
-  agent decided to move", not "the agent was not resting". The `rested` column is used to verify the
-  index convention per run rather than trusting the hard-coded 4.
+  four moves). Both `Rest` and `Eat` are excluded — the denominator is "the agent decided to move",
+  not "the agent was not resting".
+
+  **A verification limit, recorded because it cannot be fixed from the store.** The `Rest` index
+  *is* independently checkable per run: the store carries a `rested` column, and the guard actually
+  applied to all five baseline runs is that **no row may carry a movement action and `rested` at the
+  same time** — which held on every one of them. The `Eat` index has **no such witness**. It is
+  hard-coded as **5** from `src/environment/core.py`, and no stored column identifies it: `ate_food`
+  is `False` whenever `Eat` is chosen on an empty cell, so it cannot confirm the index. If the
+  action ordering ever changed, the `Rest` exclusion would fail **loudly** and the `Eat` exclusion
+  would fail **silently**. The mitigation available today is that movement-vs-`rested` guard,
+  re-run on every store and its result reported, plus the fact that all 16 grid arms share one
+  environment config with the five baselines. Stated so no future reader assumes the `Eat`
+  exclusion was verified.
 - *Numerator*: those same rows with `agent_in_bush[t+1] == True`.
-- *Injury binning*: by the **randomised starting injury** the environment drew before the agent
-  acted — the only causally identified internal-state variable available — using the fixed edges
-  already in `scripts/analysis/context_dependence.py` (`INJ_EDGES = [1e-9, 25, 50]`, giving bins
-  *exactly 0* / *0-25* / *25-50* / *50+*). **Fixed edges, not quartiles**: quartiles are defined by
-  the sample and would sit at different injury values in different arms, which would make the arms
-  incomparable. Realised bin counts are reported.
+- *Injury binning* — **RE-REGISTERED 2026-09-07**, before any grid run existed, because the
+  previously registered edges described a contrast that **cannot occur**. Bins are formed on the
+  **randomised starting injury** the environment drew before the agent acted — the only causally
+  identified internal-state variable available.
+
+  **What was wrong.** The first version of this section adopted the edges already implemented in
+  `scripts/analysis/context_dependence.py` (`INJ_EDGES = [1e-9, 25, 50]`), giving bins *exactly 0* /
+  *0–25* / *25–50* / *50+*, and defined `Δ_B0` as top-populated minus bottom-populated bin. But the
+  environment draws starting injury from a **continuous uniform distribution over 0 to 100**
+  (`src/environment/core.py:1103-1107`, bounds `start_injury_low: 0` and `start_injury_high: 100`
+  set in `basic/03-random_init_10x10.yaml` and inherited by `basic/04`). A continuous draw is never
+  *exactly* zero: across 15,000 sampled episodes the smallest starting injury observed was
+  **0.0058**, with **zero** exact zeros. The "exactly 0" bin is therefore **structurally empty**;
+  the minimum-count substitution rule fired on all five baseline runs; and every `Δ_B0` actually
+  computed was *0–25* versus *≥50* — a narrower injury contrast than the document implied, taken
+  against a bottom bin whose label reads "uninjured" and which is not.
+
+  **The re-registered edges: `[25, 50, 75]` — four bins, 0–25 / 25–50 / 50–75 / 75–100.** `Δ_B0` is
+  the **75–100 bin minus the 0–25 bin**. Three reasons, in order of weight:
+
+  1. **No empty bin, and no bin that misdescribes itself.** Every bin is populated by construction
+     and every label is honest about the injuries it contains.
+  2. **They are fixed edges *and* the population quartiles at the same time.** Because the draw is
+     uniform on 0–100, the quartile boundaries are the known constants 25 / 50 / 75, so these edges
+     produce four equal-probability bins (about 75,000 of 300,000 episodes each) **without** being
+     defined by the sample. That resolves the tension recorded in §10.1(b): `plan-reviewer` asked
+     for quartiles; this design refused *sample-defined* quartiles because they would sit at
+     different injury values in each of the sixteen arms and destroy comparability. Under a known
+     uniform draw the two requirements coincide, so both are met.
+  3. **A stronger treatment contrast, at a cost in precision that does not bind.** The top bin
+     becomes *75–100* rather than *50–100*, roughly doubling the injury separation between the two
+     compared bins. It also halves that bin's sample, widening the within-run binomial interval by
+     about √2 — from roughly ±0.10 to roughly ±0.13 percentage points. That is irrelevant here,
+     because §2.5 scores everything against the five-seed band (0.63 points), which is about five
+     times wider than either figure. Buying effect size with precision is the right trade when
+     precision is not the binding constraint.
+
+  **The cost, stated rather than buried.** These are **not** the edges the fourteen-agent reference
+  record ([[INJURY_HIDING_SIGN_RECONCILIATION]]) used. That record's numbers are therefore cited in
+  this document for **sign and order of magnitude only** — never as a numeric null for anything
+  scored here. Every number this grid is scored against comes from the five unmodulated baselines
+  recomputed on the edges above (see "The control band as measured", below). All four measures
+  B0–B3 use **one** set of edges, so no reader has to track two binnings.
+
+  **Minimum bin size and substitution**, unchanged in rule and tightened in reporting: a bin needs
+  at least 2,000 qualifying denominator steps; otherwise the next bin inward is taken. With about
+  75,000 episodes per bin the rule is not expected to fire at all, and if it fires on any arm that
+  is itself reportable — it would mean that arm almost never steps out of the open. Realised bin
+  counts are reported for every arm.
 - *Predator condition*: at row `t`, `near` = any **active predator** within Chebyshev distance 2 of
   the agent, matching `NEAR_D = 2` in the same script. Reported separately for `near` and `far`.
 - *Windows, both always reported*: the **first 25 steps** (`t <= 25`, the window in which the
@@ -767,10 +975,13 @@ is a known footgun (row `t` holds the environment state **at** `t` together with
 
 **The statistic that carries H5.** For each arm, window and predator condition:
 
-`Δ_B0 = B0(top populated injury bin) − B0(bottom populated injury bin)`, in percentage points.
+`Δ_B0 = B0(75–100 injury bin) − B0(0–25 injury bin)`, in percentage points, under the re-registered
+edges above.
 
-A bin needs at least 2,000 qualifying denominator steps to be used; otherwise the next bin inward is
-taken and the substitution is reported.
+The two bins are **named explicitly** rather than as "top populated" and "bottom populated". That
+wording is exactly what let an empty bin change the contrast silently in the first version of this
+design, and it is not used again. If the 2,000-step minimum-count rule does fire, the substitution
+is reported **in the same table cell as the number**, never in a footnote.
 
 **Direction is pre-registered, and magnitude alone does not count.** The project's target behaviour
 is *more* cover-seeking when wounded, so the predicted sign of `Δ_B0` is **positive**. An arm whose
@@ -792,28 +1003,86 @@ The original B3 — the same range computed on bush *occupancy* via
 a **companion to B1**, under the standing rule that any change in it is discounted by whatever
 change B1 shows in the same arm. It is not the primary evidence for anything.
 
-#### The null band, measured before launch rather than assumed
+#### The control band as measured — and what it says about the unmodulated agent
 
-**This is the pre-registration's load-bearing step and it happens before any grid run starts.**
-`Δ_B0`, `B1`, `B2` and `B3` are computed on the **five existing unmodulated `MC` seeds**
-(`rppo_cmp10m_mc_s42` through `s46`, already on disk with final checkpoints), which are the same
-environment, the same agent configuration and the same budget as cell 1. That gives:
+**This is the pre-registration's load-bearing step, and it has now been done.** `Δ_B0`, `B1`, `B2`
+and `B3` were computed on the **five existing unmodulated `MC` seeds** (`rppo_cmp10m_mc_s42`
+through `s46`), which share this grid's environment, agent configuration and budget with cell 1.
+Their trajectory stores are on disk under `results/trajectories_nmnsite/` — 9.6 GB, 300,000 episodes
+per run, `seed_base` 1,000,000, final checkpoints. The measurement gives two things: the **level**
+of `Δ_B0` for an unmodulated agent in this exact world (the null H5-add is scored against) and its
+**five-seed dispersion** (the only estimate this project has of how far a one-seed behavioural
+number can move for reasons that have nothing to do with the modulator).
 
-- the **level** of `Δ_B0` for an unmodulated agent in this exact world — the null that H5-add is
-  scored against; and
-- its **5-seed dispersion**, the only estimate this project will have of how much a one-seed
-  behavioural number can move for reasons that have nothing to do with the modulator.
-
-**The control band** is the min-to-max range of `Δ_B0` across those five seeds, per window and
-predator condition. A grid arm counts as exceeding the control only if its `Δ_B0` lies **above the
-top of that band**, in the predicted positive direction. Under rule C7, if the training path is
-confirmed unchanged the band is used for both level and dispersion; if it is not, the band is used
-for **dispersion only** and cell 1 supplies the level, with the band's width carried over.
+**Definition of the band**, unchanged: the min-to-max range of `Δ_B0` across the five seeds,
+computed **per (window x predator condition) cell**. A grid arm counts as exceeding the control only
+if its `Δ_B0` lies **above the top of that band**, in the predicted positive direction; §2.5 sets
+the per-arm and count-across-targets rulings, and `T` / `W` there refer to this band's top and
+width. Under rule C7, if the training path is confirmed unchanged the band is used for both level
+and dispersion; if it is not, the band is used for **dispersion only**, cell 1 supplies the level,
+and the band's width is carried over.
 
 Two numbers accompany every arm and are never conflated: the **within-run** binomial 95% confidence
-interval on `Δ_B0` (how precisely that one agent has been characterised — it will be narrow) and the
-**five-seed control band** (how much a second seed of the *same* configuration could move — it will
-be much wider). A difference that clears the first but not the second is not a result.
+interval on `Δ_B0` (how precisely that one agent has been characterised) and the **five-seed control
+band** (how much a second seed of the *same* configuration could move). A difference that clears the
+first but not the second is not a result.
+
+##### The measured band — on the OLD edges, and why it must be recomputed
+
+**These are the values as measured on the superseded edges** (`0–25` versus `≥50`, after the empty
+"exactly 0" bin forced a substitution on all five runs — see the binning discussion above). They are
+recorded here because they show the **resolution** this design has to work with, which does not
+change materially with the edges. **They are not the band the thresholds will be scored against**;
+that band is recomputed on the re-registered edges `[25, 50, 75]` before any grid behavioural number
+is read (§6.3).
+
+| Reading | Five-seed range of `Δ_B0` | Band width `W` | Within-run 95% CI |
+|---|---|---|---|
+| First 25 steps, predator far (**the primary cell**) | −0.526 to +0.102 pp | **0.629 pp** | ±0.10 pp |
+| Whole episode, predator conditions pooled | −0.248 to +0.010 pp | **0.258 pp** | ±0.10 pp |
+
+Base rate of B0 itself across the five runs: **6.9% to 8.1%** of qualifying steps.
+
+**The line to reckon with**: the within-run interval is **±0.10 pp** and the five-seed band is
+**0.63 pp** — roughly **six times wider**. An arm reading `Δ_B0 = +0.3 pp` clears its own error bar
+comfortably and still sits **inside** the null band. This is why every behavioural threshold in §2.5
+is stated against the band and none against the interval, and why §2.5 says in the same breath that
+**no single cell of this grid can confirm a behavioural hypothesis**.
+
+**Pre-launch, this band is FINAL-checkpoint only.** The checkpoint rule below asks for two readings
+per run — nearest-to-matched-budget and final — and only the **final** one is computable today,
+because the matched budget is not defined until the grid runs establish a common environment-step
+count. That matches this design's own sequencing; it is stated explicitly so that nobody later reads
+the pre-launch band as if it were the matched-budget band.
+
+##### A substantive finding, not a footnote: the unmodulated control does not show the target behaviour
+
+Measuring the band produced a result about the **control** that changes what this grid is asking,
+and it is recorded here as a finding rather than as calibration exhaust.
+
+1. **The target behaviour is absent, and if anything leans the other way.** Starting an episode
+   badly wounded changes the chance that a step out of the open lands in cover by between
+   **−0.53 and +0.10 percentage points**, against a base rate near **7%**. **Three of the five seeds
+   are negative.** The project's target behaviour — more cover-seeking when hurt — is not present in
+   the plain agent at a magnitude this measurement can see.
+2. **What the wounded agent does instead is stop moving, by a margin about thirty times larger.**
+   B1, the rest rate in the top injury bin minus the bottom bin, moves **+18.2 to +20.9 percentage
+   points** across the five seeds. The freeze-to-heal effect that B0 exists to exclude is roughly
+   **30x** anything B0 itself moves. B0's design — scoring only steps on which the agent *chose to
+   move* — is therefore not a refinement; it is the difference between measuring a decision and
+   measuring a posture.
+3. **The demoted B2 shows the artefact cleanly, on real data.** On seed 42, plain bush occupancy
+   reads a **+2.83 pp per bin** trend with injury — which reads as "hides more when injured" —
+   and excluding rest steps **flips it to −0.86**. One measurement, two opposite headlines,
+   depending only on whether frozen steps are counted. This is the concrete instance of the artefact
+   that `plan-reviewer` finding 3 warned about, and it retroactively justifies withdrawing B2's
+   threshold.
+
+**Consequence for how H5 is read**, stated before any grid data exists: **H5-add is not asking
+whether the modulator amplifies an existing tendency. It is asking whether the modulator creates
+one.** That is a harder question and a cleaner one — there is no baseline effect for a modulated arm
+to inherit — and it makes an H5-add refutation (§2.5) correspondingly more informative: it would say
+the mechanism fails to produce the behaviour at all, in the one place the project's thesis needs it.
 
 #### Checkpoint rule
 
@@ -827,20 +1096,34 @@ Every behavioural measure is computed at **two checkpoints per run, both reporte
    in this project was collected.
 
 Where the two disagree, the matched-budget reading carries the verdict and the disagreement is
-reported. The five baseline seeds are collected at their final checkpoints before launch (for the
-null band) and re-collected at their nearest-to-matched checkpoints once the common budget is known;
-they save a checkpoint every 200,000 episodes, so a nearby one always exists.
+reported.
+
+**State as of 2026-09-07, stated so the pre-launch band is not over-read.** The five baseline seeds
+have been collected at their **final** checkpoints only, and that is the only band that exists
+today. Reading (1) — nearest-to-matched-budget — **is not computable until the grid runs define a
+common environment-step budget**, because there is nothing yet to match to. Once that budget is
+known, the five baselines are re-collected at their nearest checkpoints under the same spec
+(§3.3); they save a checkpoint every 200,000 episodes, so a nearby one always exists. Until then,
+every band quoted in this document is a **final-checkpoint** band and is labelled as one.
 
 #### Collection parameters
 
 Pre-registered so the collections are comparable: **300,000 episodes per checkpoint**, on
-`basic/04` — the training world, not a purpose-built probe scene — with a **shared `seed_base`
-across every run in the grid and every baseline seed**, which makes all arm-to-arm comparisons
-**paired** on identical episode draws. This matches the sensor-ladder study's collection size, whose
-stores are on disk as the precedent, at roughly 2 GB per collection. (The first version of this
-design said "roughly 200 evaluation episodes per run"; that was simply wrong and is corrected here
-and in §2.3.) The policy is deterministic (argmax) at collection time, which is
-confound C11.
+`basic/04` — the training world, not a purpose-built probe scene — with **`seed_base` = 1,000,000
+shared by every run in the grid and every baseline seed**, which makes all arm-to-arm comparisons
+**paired** on identical episode draws. `obs_precision: float32`; strict restore checking. The policy
+is deterministic (argmax) at collection time, which is confound C11.
+
+**These parameters are no longer prose — they are a spec file.** §3.3 names two collection specs
+under `configs/trajectory_collection/`: one that reproduces the five-baseline collection already on
+disk, and one that collects the 16 grid arms. **The `seed_base` value 1,000,000 is the load-bearing
+one**: if a grid arm were collected under any other base, its episodes would be different worlds
+from the baselines' and the comparison would degrade from **paired** to **unpaired** — silently,
+with no error and no warning, because both collections would succeed. That is exactly the failure
+the spec files exist to prevent.
+
+(The first version of this design said "roughly 200 evaluation episodes per run"; that was simply
+wrong and is corrected here and in §2.3.)
 
 ### 4.3 Diagnostic outcome — is the modulator doing anything at all?
 
@@ -947,6 +1230,18 @@ Each ambiguous outcome is ruled **now**, before the data exists.
    fewer cells than a 16-cell screen appears to promise — which is the argument §11 makes for the
    staged alternative.
 
+9. **Every arm's `Δ_B0` sits inside the control band.** Pre-decided 2026-09-07, once the band was
+   measured and its width was known. Ruling: this is the **modal expected outcome**, not a failure,
+   and it is scored exactly as §2.5 says — H5-add **refuted** at 1 or 0 of 5 targets clearing the
+   band, **unresolved** at 2. It must be written up with its own limit attached: the grid can only
+   see `Δ_B0` effects larger than roughly one band width (about 0.6 percentage points in the primary
+   window, against a ~7% base rate — a 9% relative change), so "refuted" means *no effect larger
+   than that*, never *no effect*. It may **not** be written up as "the modulator does nothing"
+   without that clause. Given the pre-launch finding that the unmodulated control shows **no**
+   cover-seeking state-dependence to begin with (§4.2), this outcome would say the modulator fails
+   to **create** the target behaviour — which is the more consequential reading and the one to lead
+   with.
+
 ---
 
 ## 6. Metrics and tooling requested
@@ -963,31 +1258,30 @@ Each ambiguous outcome is ruled **now**, before the data exists.
 ### 6.2 Analysis tooling requested (not new metrics)
 
 Neither item below is a training-time metric, so **neither gates the launch of the grid**. Both are
-small additions to existing analysis scripts, and the first must exist before any behavioural
-verdict is read.
+small additions to existing analysis scripts. Item (a) has since been **built and run**; item (b) is
+still outstanding and still non-blocking.
 
-**(a) The bush-entry rate (B0) — needed before the null band can be measured.** Every column it
-requires already exists in the trajectory store (`agent_in_bush`, `action`, `rested`, `agent_row`,
-`agent_col`, `animal_row`, `animal_col`, `animal_active`, plus the episode table's starting draws),
-so this is arithmetic over data already on disk, not new logging. What is needed is the measure
-itself — the transition-based denominator of §4.2 — added to
-`scripts/analysis/context_dependence.py` alongside the existing occupancy measures, with the
-starting-injury binning and the `NEAR_D = 2` predator condition it already implements. Roughly a
-few dozen lines. **Priority: this runs on the five existing `MC` seeds before launch**, because the
-null band is what makes the pre-registered behavioural threshold meaningful; a threshold with an
-assumed null is exactly what finding 3 objected to. The demoted B2 needs the same scripts' existing
-Rest-exclusion option, which also does not yet exist.
+**(a) The bush-entry rate (B0) — DONE, 2026-09-07.** The measure was built into
+`scripts/analysis/context_dependence.py` and run against all five existing unmodulated `MC` seeds.
+Every column it needs already existed in the trajectory store (`agent_in_bush`, `action`, `rested`,
+`agent_row`, `agent_col`, `animal_row`, `animal_col`, `animal_active`, plus the episode table's
+starting draws), so it was arithmetic over data on disk rather than new logging. The measured
+control band, the resolution it implies, and the substantive finding it produced about the
+unmodulated agent are in §4.2. **The exercise also found a flaw in this pre-registration** — the
+structurally empty "exactly 0" injury bin — which is why §4.2's binning was re-registered and why
+§6.3 below requests one recomputation.
 
-**Ordering rule, stated so nobody has to guess under time pressure.** The grid's launch is already
-gated on refactor Part B, so this work fits inside that wait and *before launch* is the default. If
-it somehow is not ready when Part B is, the launch **does not** wait: the hard requirement is that
-the null band is computed **before any behavioural number from a grid run is read**. That is not a
-weakening of the pre-registration, and the reason is worth stating plainly — the band is measured on
-five runs that finished on 2026-09-05, which no grid run can influence, and the rule for turning
-them into a band (min-to-max of `Δ_B0` across the five seeds, per window and predator condition,
-exceeded only from above in the positive direction) is fixed in §4.2 above. What would break
-pre-registration is choosing the band *after* seeing the grid's behaviour, and that is forbidden
-either way.
+**Ordering rule, stated so nobody has to guess under time pressure.** It now applies to the §6.3
+recomputation rather than to the original build, and it is unchanged in substance: the launch does
+**not** wait on it. The hard requirement is that the band on the re-registered edges exists **before
+any behavioural number from a grid run is read**. That is not a weakening of the pre-registration,
+and the reason is worth stating plainly — the band is measured on five runs that finished on
+2026-09-05, which no grid run can influence; the bin edges are fixed in §4.2 by an argument that
+depends only on the environment's sampling distribution, not on any measured value; and the rule for
+turning the five seeds into a band (min-to-max of `Δ_B0`, per window and predator condition,
+exceeded only from above in the positive direction) is fixed in §4.2 and §2.5 above. What would
+break pre-registration is choosing the edges or the band *after* seeing the grid's behaviour, and
+that is forbidden either way.
 
 **(b) The critic-value pre-check for H3 (§2.5).** Plot the distribution of critic values conditioned
 on injury, on the existing `MC` checkpoints. The value output is computed inside
@@ -997,13 +1291,53 @@ sequences through a loaded checkpoint's critic — recurrent, so per-episode seq
 result **does not gate the launch and does not move any H3 threshold** (§2.5); it changes only
 whether an H3 null reads as expected or as surprising.
 
-### 6.3 What is already covered and needs nothing
+### 6.3 Requested: recompute the control band on the re-registered bin edges
+
+**Handed back as a request, not performed here** — this agent designs and configures; it does not
+run the analysis.
+
+**What.** Recompute the five-seed control band for `Δ_B0`, and the companion measures `B1`, `B2` and
+`B3`, on the **re-registered injury bin edges `[25, 50, 75]`** (four bins 0–25 / 25–50 / 50–75 /
+75–100; `Δ_B0` = 75–100 bin minus 0–25 bin). The edges live as the module constant `INJ_EDGES` in
+`scripts/analysis/context_dependence.py`, currently `[1e-9, 25.0, 50.0]`, so this is a one-constant
+change plus a rerun — **but it is a change under `scripts/`, which is outside this agent's write
+surface**, so it is routed rather than made. Whether the edges become the new constant or a
+command-line option is the implementer's call; if it becomes an option, the value used must be
+recorded in the output alongside the numbers.
+
+**Why it is cheap.** No re-collection is needed. All five trajectory stores are already on disk at
+`results/trajectories_nmnsite/` — 9.6 GB, 300,000 episodes per run, `seed_base` 1,000,000, final
+checkpoints — and the recomputation is a re-read of data that already exists.
+
+**What is needed back**, per (window x predator condition) cell, for both windows (first 25 steps,
+whole episode) and all three predator conditions (near, far, pooled):
+
+- the five per-seed values of `Δ_B0`, and the band `T` (top) and `W` (width = max − min) derived
+  from them — these are the constants §2.5's thresholds are written against;
+- the within-run 95% confidence interval on `Δ_B0` for each seed, so the seed-band-versus-interval
+  ratio can be restated on the new edges;
+- the base rate of `B0` itself, and the realised denominator count in each of the four bins, so the
+  2,000-step minimum-count rule can be confirmed not to fire;
+- `B1` (rest rate, top bin minus bottom bin) and the `B2` with/without-rest pair, on the new edges,
+  for the descriptive record.
+
+**Label everything final-checkpoint.** The nearest-to-matched-budget reading is not computable until
+the grid runs define a common environment-step budget (§4.2, checkpoint rule).
+
+**When.** Before any behavioural number from a grid run is read. It does **not** gate the launch —
+the band is measured on five runs that finished on 2026-09-05 and cannot be influenced by anything
+the grid does, and the rule for turning them into a band is fixed in §4.2 and §2.5 above. What would
+break pre-registration is choosing the band *after* seeing the grid's behaviour, and that is
+forbidden either way.
+
+### 6.4 What is already covered and needs nothing
 
 - The per-site gain and offset training-time series (§4.3) are in the site refactor's own File
   Changes section and will exist when Part A lands.
 - The return-scale metrics requested by the return-mode study (`returns/std`, `targets/std`,
   `advantages/std_preclip`, `value/explained_variance`) would be useful here too but are **not
   requested by this design** — nothing in §2.5 or §4 is bottlenecked on them.
+
 
 ---
 
@@ -1066,15 +1400,24 @@ outcomes is pre-registered in §2.5, and the launch does not wait on it. The B0 
 different and **does** have to exist before any behavioural number is read, because the null band
 depends on it.
 
-**(b) The injury breakdown uses fixed bin edges, not quartiles.** The instruction was to break B0
-down by starting-injury **quartile**. Quartiles are defined by the sample, so the boundary between
-"lightly wounded" and "badly wounded" would sit at a different injury value in each of the sixteen
-arms, and the arms would no longer be comparable on the axis the whole measure is about. §4.2
-therefore uses the fixed edges already implemented in `scripts/analysis/context_dependence.py`
-(exactly 0 / 0-25 / 25-50 / 50+), which are identical across arms, already tooled, and already the
-binning the fourteen-agent reference record used. Realised bin counts are reported so a reader can
-see the resulting balance. The contrast is still top-bin minus bottom-bin, exactly as a quartile
-contrast would be.
+**(b) The injury breakdown uses fixed bin edges, not quartiles — and that answer was half wrong.**
+The instruction was to break B0 down by starting-injury **quartile**. The original response refused,
+on the ground that quartiles are defined by the sample, so the boundary between "lightly wounded"
+and "badly wounded" would sit at a different injury value in each of the sixteen arms and the arms
+would stop being comparable on the axis the whole measure is about. That reasoning is correct, but
+the substitute chosen — the edges already implemented in `scripts/analysis/context_dependence.py`
+(*exactly 0* / *0–25* / *25–50* / *50+*) — was not, and building the measure exposed why: the
+environment draws starting injury from a **continuous** uniform distribution, so the *exactly 0* bin
+is **structurally empty** and the realised contrast was quietly *0–25* versus *≥50* on all five
+baseline runs.
+
+**Resolved 2026-09-07, and the two requirements turn out not to conflict at all.** Because the draw
+is uniform on 0–100, the **population** quartile boundaries are the known constants **25 / 50 / 75**
+— fixed numbers, not sample statistics. Adopting them gives quartiles (four equal-probability bins,
+as the review asked) *and* identical edges in every arm (as this design required), simultaneously.
+The re-registered edges are `[25, 50, 75]` and `Δ_B0` is the 75–100 bin minus the 0–25 bin. Full
+reasoning, including the cost — loss of numeric comparability with the fourteen-agent reference
+record — is in §4.2. The recomputation of the control band on the new edges is requested in §6.3.
 
 ---
 
@@ -1142,9 +1485,13 @@ document specifies until you rule otherwise.
 | PAPL's value-modulation precondition is met | [[MODULATION_SITE_REFACTOR]] Analysis §F | Traced to `src/environment/core.py:49-53` and `:728-731`; note the reader's footgun there — `calculate_drive` is the reward's drive, while `drive_hunger` / `drive_injury` are logging-only. |
 | Wall clock ~10.8 h for 10M episodes | run directory `results/JAX_RecurrentPPO/20260904-173804_rppo_cmp10m_mc_s42` | Directory mtimes, first to last write. |
 | No tag collision on `rppo_nmnsite_` | `results/JAX_RecurrentPPO/` | 387 run directories scanned; zero matches. |
-| Movement actions are 0-3; `Rest` is 4, `Eat` is 5 | `src/environment/core.py:580-581,660-661` | `rested = (action == 4)` when the rest action is enabled; `eat_action_idx = 5` under the same condition. The store's `rested` column re-verifies this per run. |
+| Movement actions are 0-3; `Rest` is 4, `Eat` is 5 | `src/environment/core.py:580-581,660-661` | `rested = (action == 4)` when the rest action is enabled; `eat_action_idx = 5` under the same condition. **Only the `Rest` index has a witness in the store.** The guard actually applied is that no row may carry a movement action and the `rested` column at the same time — verified true on all five baseline runs. `Eat` has **no** stored column that identifies it (`ate_food` is `False` when `Eat` is chosen on an empty cell), so its index 5 is taken on trust from the source. See §4.2. |
 | Predator-near threshold: Chebyshev distance 2 | `scripts/analysis/context_dependence.py:53` (`NEAR_D = 2`) | Reused unchanged so B0 and the existing occupancy measures share one definition of "near". |
-| Starting-injury bin edges 0 / 0-25 / 25-50 / 50+ | `scripts/analysis/context_dependence.py:50` (`INJ_EDGES`) | Same edges the fourteen-agent reference record used; fixed rather than sample-defined so the sixteen arms are comparable. See §10.1(b). |
+| Starting-injury bin edges **25 / 50 / 75** (bins 0-25 / 25-50 / 50-75 / 75-100) | **Re-registered 2026-09-07.** The population quartiles of the environment's own starting-injury draw. | The draw is `jax.random.uniform(minval=0, maxval=100)` (`src/environment/core.py:1103-1107`) with bounds from `basic/03-random_init_10x10.yaml:118-119`, inherited by `basic/04`. A uniform draw's quartile boundaries are the constants 25 / 50 / 75, so these edges are fixed *and* equal-probability. Supersedes `INJ_EDGES = [1e-9, 25, 50]` at `scripts/analysis/context_dependence.py:85`, whose first bin ("exactly 0") is structurally empty. See §4.2 and §10.1(b). |
+| Starting injury is continuous on (0, 100); zero exact zeros in 15,000 episodes; minimum observed **0.0058** | Sampled from the environment during the 2026-09-07 B0 build | Consistent with a uniform draw on 0-100: the expected minimum of 15,000 such draws is about 0.0067. This is why the "exactly 0" bin cannot be populated. |
+| Five-seed control band for `Δ_B0`: **-0.526 to +0.102 pp** (first 25 steps, predator far) and **-0.248 to +0.010 pp** (whole episode, pooled); base rate 6.9-8.1%; within-run 95% CI **+/-0.10 pp** | Measured 2026-09-07 on the five stores at `results/trajectories_nmnsite/` | **On the SUPERSEDED edges**, final checkpoints only. Recorded for resolution, not as the scoring band; §6.3 requests the recomputation on the re-registered edges. The seed band is about **6x** the within-run interval, which is why every behavioural threshold in §2.5 is stated against the band. |
+| `B1` (rest rate, top minus bottom injury bin): **+18.2 to +20.9 pp** across the five baselines; `B2` on seed 42 flips from **+2.83** to **-0.86 pp/bin** when rest steps are excluded | Same measurement | The freeze-to-heal effect is roughly **30x** anything `Δ_B0` moves, and the `B2` flip is the artefact `plan-reviewer` finding 3 predicted, shown on real data. See §4.2. |
+| `env_fp` differs across the five baseline stores and is **not** an environment difference | The five `_manifest.json` files (a4cbd376c9 / 0c7260c592 / 2770336d22 / 9e8a6ca5e1 / eb11489e2c) | `env_fp` hashes the whole resolved config including `seed`, `tag` and the wandb fields, so identical worlds fingerprint differently. Pairing was verified **empirically** instead: over 5,000 shared episode seeds the animal draws, observation draws, starting injury and spawn cell are bit-identical across all five stores. Every grid arm will likewise carry a distinct `env_fp`. See §3. |
 | Early window = first 25 steps | `scripts/analysis/context_dependence.py:54` (`EARLY = 25`) | Matches the window of the reference record. |
 | 300,000 episodes per trajectory collection | `results/trajectories_lad/*/*/*/_manifest.json` (`n_episodes: 300000`) | The sensor-ladder study's own collections, on disk, at ~2.0 GB each. Supersedes the earlier "roughly 200 episodes" figure in §2.3, which was wrong. |
 | A checkpoint exists near any budget | `results/JAX_RecurrentPPO/20260904-173804_rppo_cmp10m_mc_s42/models/` | 52 checkpoints, one per 200,000 episodes, retained for each of the five `MC` seeds. |
@@ -1166,6 +1513,7 @@ semantics unchanged, because `training-runner` and `experiment-analyzer` both ke
 | Date | Change | Author |
 |------|--------|--------|
 | 2026-09-07 | Initial pre-registered design. Configs deliberately not produced — blocked on dependencies D-A, D-B, D-C (§2.7). | `experiment-designer` |
+| 2026-09-07 | **Second amendment — corrections found by building the measure, before any run launched.** (1) **Injury bins re-registered** from `[1e-9, 25, 50]` (bins *exactly 0* / 0-25 / 25-50 / 50+) to **`[25, 50, 75]`** (bins 0-25 / 25-50 / 50-75 / 75-100): starting injury is drawn continuously on 0-100, so the "exactly 0" bin is structurally empty, the substitution rule fired on all five baselines, and every realised `Δ_B0` was a narrower contrast than the doc implied. The new edges are the population quartiles of a uniform draw, so they are fixed *and* equal-probability — which also resolves §10.1(b). (2) **Every behavioural threshold in §2.5 restated against the five-seed band, none against the within-run interval**, with the measured 6x gap stated (band 0.63 pp vs interval +/-0.10 pp), per-arm rulings tabulated, count-across-targets rules given explicit null probabilities, and the unresolvability of any single cell at n = 1 stated in the same place as the thresholds. (3) **A substantive pre-launch finding recorded** (§1.1, §4.2): in the unmodulated control the project's target behaviour is absent and three of five seeds lean negative, while the freeze-to-heal effect is ~30x larger — so H5-add asks whether the modulator *creates* the behaviour, not whether it amplifies it. (4) **Two trajectory-collection specs committed** (§3.3) at `seed_base` 1,000,000, replacing an ad hoc script. (5) `env_fp` recorded as **not** a same-world check (§3); the `Eat`-index verification limit recorded (§4.2); the pre-launch band labelled **final-checkpoint only** (§4.2). (6) Recomputation of the band on the new edges requested in §6.3. **Design size, shape, and all survival-side thresholds unchanged.** | `experiment-designer` |
 | 2026-09-07 | **Amended in answer to `plan-reviewer`'s NOT READY verdict, before any run launched.** §4.2 rewritten around a motion-based headline measure (B0, bush-entry rate) with its null band measured pre-launch on the five existing unmodulated seeds; the old B2 threshold withdrawn and B1/B2 demoted to descriptives; B3 rebuilt on moving steps. Resolution bands raised from 10/25 to 15/30 with the arithmetic corrected. Target-vs-control hypotheses now scored at the ALL slice as primary. H5 split into H5-add (versus the control) and H5-spec (versus X). "Trap, unresolved" failure mode added (§5 item 8) with a follow-up slot (§4.4 priority 1b). C7 replication gate added (§4.1). `lr_critic` contradiction resolved (§3.1). Privileged-information caveat added to H3 plus a non-blocking critic-value pre-check. `percept_bias_init` marked inert. `Code SHA` column added to the manifest. §10 (response to the review) and §11 (the staged alternative, open for the user) added. **Design size and shape unchanged.** | `experiment-designer` |
 
 ---

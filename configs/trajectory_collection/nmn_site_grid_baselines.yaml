@@ -1,0 +1,104 @@
+# NMN input-site grid — trajectory collection for the FIVE UNMODULATED BASELINES.
+#
+# Driver: scripts/eval/traj_collect/run_collection.py
+# Study:  docs/experiments/active/nmn_input_site_grid/NMN_INPUT_SITE_GRID.md  (§4.2)
+# Schema: docs/environment/TRAJECTORY_STORE_SCHEMA.md
+# Sibling: nmn_site_grid_arms.yaml — the 16 grid arms, same population, same parameters.
+#
+# WHAT THIS COLLECTION IS FOR (plain language)
+# --------------------------------------------
+# Five already-finished agents with NO neuromodulator, trained on the same world, with the
+# same settings and the same budget as the grid's control cell. Rolling them out over a large
+# fixed population of episodes gives the study its NULL BAND: how much a behavioural number
+# moves between two runs of the IDENTICAL configuration, for no reason but the random seed.
+# Every behavioural threshold in the design is scored against that band, not against a
+# within-run confidence interval — the band is about six times wider.
+#
+# THIS FILE WAS NOT THE FILE USED, and that is why it exists.
+# ----------------------------------------------------------
+# The collection was driven ad hoc on 2026-09-07 from a throwaway shell script
+# (tmp/20260907_collect_baselines.sh), which is exactly the gap the header of
+# sensor_ladder_pass1.yaml complains about: a study whose evaluation population has no
+# recorded way to reproduce it. Every value below was read back out of the `_manifest.json`
+# the collector itself wrote into each of the five stores, which records every resolved
+# parameter — defaulted or not — so the value actually used is never in doubt. Re-running
+# this spec reproduces the POPULATION; it does not reproduce the original invocation, which
+# is unrecoverable.
+#
+# Stores on disk: results/trajectories_nmnsite/ — 9.6 GB total, ~2.0 GB per run.
+#
+# VALIDATED against those stores on 2026-09-07 with
+#   run_collection.py configs/trajectory_collection/nmn_site_grid_baselines.yaml --validate-only
+# which resolved this spec to the five existing stores and found all of them complete:
+#   run                                  blocks  episodes    steprows      MB   B/step
+#   ..._mc_s42                               60    300000    50265815  2081.0     41.4
+#   ..._mc_s43                               60    300000    50374225  2058.8     40.9
+#   ..._mc_s44                               60    300000    49220512  2004.9     40.7
+#   ..._mc_s45                               60    300000    50656615  2138.9     42.2
+#   ..._mc_s46                               60    300000    50326358  1982.9     39.4
+# Exit code 0. Re-running the collection itself would therefore be a no-op resume.
+#
+# PAIRING, AND THE CHECK THAT DOES NOT WORK
+# -----------------------------------------
+# All five runs share `seed_base: 1000000`, so they are PAIRED: episode i faces the same
+# environment draw in every store. The usual way to verify that is the `env_fp` field — and
+# it DOES NOT WORK HERE. `env_fp` hashes the whole resolved config, INCLUDING `seed`, `tag`
+# and the wandb fields, so it differs between two runs whose environment is identical. It
+# differs across all five stores below (a4cbd376c9 / 0c7260c592 / 2770336d22 / 9e8a6ca5e1 /
+# eb11489e2c) and those five ARE the same world. Anyone using `env_fp` as a same-world check
+# on this study gets a FALSE NEGATIVE.
+#   Pairing was verified EMPIRICALLY instead, and that is the check to repeat: over 5,000
+#   shared episode seeds the animal draws, the observation draws, the starting injury and the
+#   spawn cell are BIT-IDENTICAL across all five stores.
+#
+# `restore_check: strict` IS NOT A SPEC KEY — do not add it, it is a hard error.
+# -----------------------------------------------------------------------------
+# `run_collection.py` rejects unknown top-level keys by design. Strict restore checking is
+# what you get STRUCTURALLY: the only way to weaken it is `--allow-weak-restore-check` on
+# collect_trajectories.py, and the driver has no path to pass that flag. Every one of the five
+# stores below records `restore_check: strict`, and any store produced by this spec will too.
+# The same applies per run: no entry below carries `allow_ambiguous_scene`, and none may.
+#
+# OPERATIONAL NOTE — device: gpu means ONE process per node.
+# ---------------------------------------------------------
+# collect_worker.sh sets JAX_PLATFORMS=cuda but no CUDA_VISIBLE_DEVICES, so every GPU worker
+# on a node lands on GPU 0; multi-GPU fan-out does not work today. `npar: 1` is therefore
+# stated EXPLICITLY rather than left to the default, because it is not a throughput choice —
+# it is a correctness one. The ad hoc baseline run put three processes on two GPUs at
+# batch_size 5000 and the third died with
+#   RESOURCE_EXHAUSTED: Out of memory while trying to allocate 16.00MiB
+# (seed 44; it was re-run alone and its store is complete). Two of these at batch_size 5000
+# do not fit on one card.
+
+name: nmn_site_grid_baselines
+algo: rppo
+out_root: results/trajectories_nmnsite
+episodes: 300000
+seed_base: 1000000         # LOAD-BEARING. Shared with nmn_site_grid_arms.yaml. A different
+                           # value here or there silently degrades every arm-vs-baseline
+                           # comparison from PAIRED to UNPAIRED — both collections succeed,
+                           # no error, no warning.
+checkpoints: [final]       # Pre-launch, FINAL-CHECKPOINT ONLY. The design also wants a
+                           # nearest-to-matched-budget reading, which is NOT COMPUTABLE until
+                           # the grid runs establish a common environment-step budget: there
+                           # is nothing yet to match to. That second pass gets its own spec.
+nodes: [101, 103, 104, 105]   # what was available; any set works
+obs_precision: float32     # matches the stores on disk; the measured saving from float16 on
+                           # this environment (12.8% store-wide) is below the study's
+                           # pre-registered 20% adoption threshold — see example.yaml
+device: gpu
+npar: 1                    # explicit, not defaulted — see the OOM note above
+batch_size: 5000
+shard_episodes: 5000
+blocks_per_cell: 60        # 300,000 / 5,000 = 60 blocks, all in one process per run, which
+                           # is what the ad hoc script did (--blocks 0:60)
+
+runs:
+  # Comment gives each store's resolved final checkpoint step and its env_fp, so the stores on
+  # disk are checkable against this file. The step differs per run because each run's last
+  # checkpoint lands wherever its 10,000,000-episode budget ran out.
+  - {label: mc_s42, path: results/JAX_RecurrentPPO/20260904-173804_rppo_cmp10m_mc_s42}   # final = 10000044, env_fp a4cbd376c9
+  - {label: mc_s43, path: results/JAX_RecurrentPPO/20260904-173904_rppo_cmp10m_mc_s43}   # final = 10000060, env_fp 0c7260c592
+  - {label: mc_s44, path: results/JAX_RecurrentPPO/20260904-174005_rppo_cmp10m_mc_s44}   # final = 10000032, env_fp 2770336d22
+  - {label: mc_s45, path: results/JAX_RecurrentPPO/20260904-174106_rppo_cmp10m_mc_s45}   # final = 10000100, env_fp 9e8a6ca5e1
+  - {label: mc_s46, path: results/JAX_RecurrentPPO/20260904-174208_rppo_cmp10m_mc_s46}   # final = 10000005, env_fp eb11489e2c
