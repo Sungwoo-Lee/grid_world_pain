@@ -9,8 +9,42 @@ perceptual features. The sharp prediction is therefore NOT "the modulated agent 
 differently" — it is that the modulated agent's **response to external cues should vary more with its
 internal state**. That is an interaction, and it is what this tool measures.
 
-The three measures, weakest evidence to strongest
--------------------------------------------------
+B0 — bush-entry rate (the headline behavioural measure)
+-------------------------------------------------------
+`B0 = P(in a bush at t+1 | not in a bush at t, and a MOVEMENT action was chosen at t)`.
+
+Every measure built on *where the agent is* inherits a known artefact: a wounded agent mostly
+freezes to heal, and whether that registers as "hides more" depends only on whether it happened to
+be standing on a bush when it stopped. B0 escapes that by scoring a **movement decision** instead of
+a location — an agent that freezes leaves the DENOMINATOR rather than loading the numerator, because
+both `Rest` and `Eat` are excluded.
+
+Row alignment is the footgun. Row `t` carries the environment state AT `t` together with the action
+that ARRIVED at `t` (see docs/environment/TRAJECTORY_STORE_SCHEMA.md §1), so an entry event is
+
+    agent_in_bush[t]   == False
+    action[t+1]        in {0,1,2,3}
+    agent_in_bush[t+1] == True
+
+i.e. the deciding row is `t` but the action and the outcome are both read off row `t+1`. Shifting
+that by one silently measures something else. `tests/scripts/test_context_dependence_b0.py` pins it.
+
+Binned by the episode's RANDOMISED STARTING injury (the value at `t = 0`, drawn before the agent
+acted — the only causally identified internal-state variable available) using FIXED edges, never
+quantiles: sample-defined bins would sit at different injury values in each run and destroy the
+cross-run comparability the measure exists for.
+
+`Δ_B0` = B0(top populated injury bin) − B0(bottom populated injury bin), in percentage points.
+Its predicted sign is **positive** (more cover-seeking when wounded). A large NEGATIVE Δ_B0 is not a
+confirmation; it is state dependence in the direction opposite to the project's target behaviour.
+
+Reported alongside: B1 (rest rate per injury bin — what B0's denominator removes), B3
+(`B0(predator near) − B0(predator far)` within each bin, and its range across bins), and a
+robustness variant of B0 whose denominator is a REALISED DISPLACEMENT (the agent's cell actually
+changed) rather than a chosen move, which drops moves a rock blocked.
+
+The three older occupancy measures, weakest evidence to strongest
+-----------------------------------------------------------------
 1. `state_span`   — how much hiding changes across internal-state cells, with no predator nearby.
                     Pure internal-state dependence of baseline behaviour.
 2. `proximity_effect_range`    — the PROX EFFECT in each internal-state cell, defined as
@@ -40,11 +74,13 @@ Run from the repo root. Re-run this against new neuromodulator checkpoints as th
 metrics are defined so they are comparable across runs and across worlds.
 """
 from __future__ import annotations
-import argparse, glob, json, os, sys, time
+import argparse, json, os, sys, time
 import numpy as np, pyarrow.parquet as pq, yaml
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from hiding_drivers import slot_layout, find_store, listcol   # noqa: E402
+from hiding_drivers import slot_layout, find_stores, shard_files, listcol   # noqa: E402
+
+MOVE_ACTIONS = (0, 1, 2, 3)   # up/down/left/right; `Rest` is 4 and `Eat` 5 (core.py:580,661)
 
 INJ_EDGES  = [1e-9, 25.0, 50.0]
 NUT_EDGES  = [25.0, 50.0, 75.0]
@@ -56,24 +92,41 @@ LABELS = {"injury":    ["injury 0", "0-25", "25-50", ">=50"],
           "felt_pain": ["felt 0", "0-8", "8-18", "18-32", "32+"]}
 
 
-def sweep(store, lay, state, kernel, verbose=True):
+def _episode_side(stores, lay):
+    """Shared episode-table read: sorted seeds + the per-episode animal-active mask."""
+    ep = pq.read_table(shard_files(stores, "episodes"),
+                       columns=["episode_seed", "animal_active"])
+    seeds = ep.column("episode_seed").to_numpy()
+    o = np.argsort(seeds)
+    seed = seeds[o]
+    if seed.max() - seed.min() + 1 != len(seed):
+        raise SystemExit("episode seeds are not contiguous; this reader assumes they are")
+    return int(seed[0]), np.array(ep.column("animal_active").to_pylist(), bool)[o]
+
+
+def sweep(stores, lay, state, kernel, exclude_rest=False, verbose=True):
     """One pass. Returns counts[state_bin, predator_near, in_bush] and the early/randomised
-    version binned by the STARTING value of the same body variable."""
+    version binned by the STARTING value of the same body variable.
+
+    `exclude_rest` drops every row whose ARRIVING action was `Rest`, which turns the occupancy
+    measure into B2 ("bush occupancy conditioned on acting"). It is a descriptive companion, not
+    an escape from the freeze-to-heal artefact: conditioning on "not resting" does not remove it,
+    because injury and position both plausibly cause whether the agent rests. B0 is the measure
+    that escapes it."""
     na = len(lay["pred"]) + len(lay["neutral"])
-    epf = sorted(glob.glob(store + "episodes_*.parquet"))
-    ep = pq.read_table(epf, columns=["episode_seed", "animal_active"])
-    o = np.argsort(ep.column("episode_seed").to_numpy())
-    seed0 = int(ep.column("episode_seed").to_numpy()[o][0])
-    act = np.array(ep.column("animal_active").to_pylist(), bool)[o]
+    seed0, act = _episode_side(stores, lay)
     P = lay["pred"]
     nb = len(LABELS[state])
     C = np.zeros((nb, 2, 2)); E = np.zeros((nb, 2, 2))
     body_col = "nutrition" if state == "nutrition" else "injury_level"
     edges = {"injury": INJ_EDGES, "nutrition": NUT_EDGES, "felt_pain": PAIN_EDGES}[state]
-    files = sorted(glob.glob(store + "steps_*.parquet")); t0 = time.time()
+    files = shard_files(stores, "steps"); t0 = time.time()
+    cols = ["episode_seed", "t", "agent_in_bush", body_col,
+            "agent_row", "agent_col", "animal_row", "animal_col"]
+    if exclude_rest:
+        cols.append("rested")
     for fi, f in enumerate(files):
-        tb = pq.read_table(f, columns=["episode_seed", "t", "agent_in_bush", body_col,
-                                       "agent_row", "agent_col", "animal_row", "animal_col"])
+        tb = pq.read_table(f, columns=cols)
         sd = tb.column("episode_seed").to_numpy(); t = tb.column("t").to_numpy(); N = len(t)
         body = tb.column(body_col).to_numpy(zero_copy_only=False).astype(np.float64)
         bu = tb.column("agent_in_bush").to_numpy(zero_copy_only=False).astype(np.int64)
@@ -100,6 +153,8 @@ def sweep(store, lay, state, kernel, verbose=True):
         pn = near[:, P].any(1).astype(np.int64)
 
         m = t >= 2
+        if exclude_rest:
+            m = m & ~tb.column("rested").to_numpy(zero_copy_only=False)
         b = np.digitize(prev[m], edges)
         k = (b * 2 + pn[m]) * 2 + bu[m]
         C += np.bincount(k, minlength=nb * 4).reshape(nb, 2, 2)
@@ -110,6 +165,193 @@ def sweep(store, lay, state, kernel, verbose=True):
         if verbose and fi % 50 == 0:
             print(f"  shard {fi}/{len(files)} ({time.time()-t0:.0f}s)", flush=True)
     return C, E
+
+
+ENTRY_LABELS = LABELS["injury"]          # B0 bins by the RANDOMISED STARTING injury
+ENTRY_MIN_N  = 2000                      # min qualifying denominator steps for a bin to be used
+WINDOWS      = (f"first_{EARLY}", "whole_episode")
+VARIANTS     = ("action", "displacement")
+
+
+def sweep_entry(stores, lay, verbose=True):
+    """B0/B1 pass — bush ENTRY out of the open, per starting-injury bin and predator condition.
+
+    Returns
+    -------
+    ENT  : (2 windows, 2 variants, 4 injury bins, 2 predator-near, 2 entered) counts.
+           Axis -1 is the outcome `agent_in_bush[t+1]`; ENT[..., 1] is the numerator and
+           ENT[...].sum(-1) the denominator.
+    REST : (2 windows, 4 injury bins, 2) counts of chosen actions, [..., 1] = `Rest` (B1).
+    diag : index-convention checks, so the hard-coded action numbering is verified per run.
+
+    THE ROW ALIGNMENT (docs/environment/TRAJECTORY_STORE_SCHEMA.md §1): row `t` holds the state AT
+    `t` and the action that ARRIVED at `t`. The deciding row is therefore `t`, while BOTH the
+    action and the outcome are read from row `t+1`. Successor validity is checked with
+    `t[i+1] == t[i] + 1`, which is false at the last row of an episode and at a shard boundary, so
+    an episode's final row can never pair with the next episode's spawn row."""
+    na = len(lay["pred"]) + len(lay["neutral"])
+    seed0, act = _episode_side(stores, lay)
+    P = lay["pred"]
+    nb = len(ENTRY_LABELS)
+    ENT = np.zeros((2, 2, nb, 2, 2)); REST = np.zeros((2, nb, 2))
+    diag = {"rest_action_values": set(), "action_values": set(),
+            "displaced_without_move_action": 0, "n_rows": 0, "n_episodes": 0}
+    files = shard_files(stores, "steps"); t0 = time.time()
+    cols = ["episode_seed", "t", "action", "rested", "agent_in_bush", "injury_level",
+            "agent_row", "agent_col", "animal_row", "animal_col"]
+    for fi, f in enumerate(files):
+        tb = pq.read_table(f, columns=cols)
+        sd = tb.column("episode_seed").to_numpy(); t = tb.column("t").to_numpy(); N = len(t)
+        a  = tb.column("action").to_numpy(zero_copy_only=False).astype(np.int64)
+        rested = tb.column("rested").to_numpy(zero_copy_only=False)
+        bu = tb.column("agent_in_bush").to_numpy(zero_copy_only=False)
+        inj = tb.column("injury_level").to_numpy(zero_copy_only=False).astype(np.float64)
+        ar = tb.column("agent_row").to_numpy(); ac = tb.column("agent_col").to_numpy()
+        st = np.flatnonzero(t == 0); ends = np.append(st[1:], N)
+        start_inj = np.repeat(inj[st], ends - st)
+        diag["n_rows"] += N; diag["n_episodes"] += len(st)
+        diag["action_values"] |= set(np.unique(a).tolist())
+        diag["rest_action_values"] |= set(np.unique(a[rested]).tolist())
+
+        # --- row t+1, only where it exists and belongs to the same episode -------------
+        nxt = np.zeros(N, bool); nxt[:-1] = t[1:] == t[:-1] + 1
+        sh = lambda v: np.concatenate([v[1:], v[:1]])      # value at t+1 (garbage where ~nxt)
+        move_next = np.isin(sh(a), MOVE_ACTIONS)
+        bush_next = sh(bu)
+        disp_next = (sh(ar) != ar) | (sh(ac) != ac)
+
+        AR = listcol(tb.column("animal_row"), na); AC = listcol(tb.column("animal_col"), na)
+        near = (np.maximum(np.abs(AR - ar[:, None]), np.abs(AC - ac[:, None])) <= NEAR_D) \
+               & act[sd - seed0]
+        pn = near[:, P].any(1).astype(np.int64)
+        b = np.digitize(start_inj, INJ_EDGES)
+        ent = bush_next.astype(np.int64)
+        diag["displaced_without_move_action"] += int((nxt & disp_next & ~move_next).sum())
+
+        open_now = nxt & ~bu
+        den = {"action": open_now & move_next, "displacement": open_now & disp_next}
+        for wi, wm in enumerate((t <= EARLY, np.ones(N, bool))):
+            for vi, vn in enumerate(VARIANTS):
+                m = den[vn] & wm
+                if m.any():
+                    k = (b[m] * 2 + pn[m]) * 2 + ent[m]
+                    ENT[wi, vi] += np.bincount(k, minlength=nb * 4).reshape(nb, 2, 2)
+            # B1 — rest rate over rows carrying a chosen action (t >= 1, i.e. action >= 0)
+            mr = wm & (a >= 0)
+            if mr.any():
+                k = b[mr] * 2 + rested[mr].astype(np.int64)
+                REST[wi] += np.bincount(k, minlength=nb * 2).reshape(nb, 2)
+        if verbose and fi % 50 == 0:
+            print(f"  [B0] shard {fi}/{len(files)} ({time.time()-t0:.0f}s)", flush=True)
+
+    bad = diag["rest_action_values"] & set(MOVE_ACTIONS)
+    if bad:
+        raise SystemExit(f"action-index convention violated: `rested` is True on action(s) {bad}, "
+                         f"which this script counts as movement. Re-derive MOVE_ACTIONS.")
+    for k in ("rest_action_values", "action_values"):
+        diag[k] = sorted(diag[k])
+    return ENT, REST, diag
+
+
+def _prop_ci(x, n):
+    """Rate in percentage points and its 95% Wald half-width, or NaN if the cell is empty."""
+    if n <= 0:
+        return np.nan, np.nan
+    p = x / n
+    return 100 * p, 100 * 1.96 * np.sqrt(max(p * (1 - p), 0.0) / n)
+
+
+def entry_metrics(ENT, min_n=ENTRY_MIN_N):
+    """B0 per (window, variant, predator condition, injury bin), plus Δ_B0 and B3.
+
+    `cond` is 'near' (a predator within Chebyshev NEAR_D), 'far' (none), or 'any' (pooled).
+    Δ_B0 takes the TOP minus the BOTTOM *populated* bin, where populated means at least `min_n`
+    qualifying denominator steps; when a bin is too small the next bin inward is used and the
+    substitution is recorded in `bins_used`."""
+    out = {}
+    for wi, w in enumerate(WINDOWS):
+        for vi, v in enumerate(VARIANTS):
+            A = ENT[wi, vi]                                   # (bin, near, entered)
+            slices = {"far": A[:, 0, :], "near": A[:, 1, :], "any": A.sum(1)}
+            for cond, M in slices.items():
+                rows = []
+                for i, lab in enumerate(ENTRY_LABELS):
+                    n = float(M[i].sum()); x = float(M[i, 1])
+                    rate, hw = _prop_ci(x, n) if n >= min_n else (np.nan, np.nan)
+                    rows.append(dict(bin=lab, n=n, entries=x, b0=rate, b0_ci95=hw))
+                ok = [i for i, r in enumerate(rows) if np.isfinite(r["b0"])]
+                if len(ok) >= 2:
+                    lo, hi = ok[0], ok[-1]
+                    p1, n1 = rows[hi]["b0"] / 100, rows[hi]["n"]
+                    p0, n0 = rows[lo]["b0"] / 100, rows[lo]["n"]
+                    d = 100 * (p1 - p0)
+                    ci = 100 * 1.96 * np.sqrt(p1 * (1 - p1) / n1 + p0 * (1 - p0) / n0)
+                    used = [rows[lo]["bin"], rows[hi]["bin"]]
+                else:
+                    d = ci = np.nan; used = [r["bin"] for r in rows if np.isfinite(r["b0"])]
+                out[f"{w}|{v}|{cond}"] = dict(
+                    window=w, variant=v, predator=cond, rows=rows,
+                    delta_b0=d, delta_b0_ci95=ci, bins_used=used,
+                    substituted=bool(len(ok) >= 2 and (ok[0] != 0 or ok[-1] != len(rows) - 1)))
+            # B3 — threat response within each bin, and its range across bins
+            b3 = []
+            for i, lab in enumerate(ENTRY_LABELS):
+                nn, nf = float(A[i, 1].sum()), float(A[i, 0].sum())
+                if nn >= min_n and nf >= min_n:
+                    b3.append(dict(bin=lab, threat_response=100 * (A[i, 1, 1] / nn - A[i, 0, 1] / nf)))
+            rng = (max(r["threat_response"] for r in b3) - min(r["threat_response"] for r in b3)) \
+                  if len(b3) > 1 else np.nan
+            out[f"{w}|{v}|B3"] = dict(window=w, variant=v, rows=b3, threat_response_range=rng)
+    return out
+
+
+def entry_rest_metrics(REST):
+    """B1 — fraction of acting steps on which the agent chose `Rest`, per starting-injury bin."""
+    out = {}
+    for wi, w in enumerate(WINDOWS):
+        rows = []
+        for i, lab in enumerate(ENTRY_LABELS):
+            n = float(REST[wi, i].sum()); x = float(REST[wi, i, 1])
+            rate, _ = _prop_ci(x, n)
+            rows.append(dict(bin=lab, n=n, rest_rate=rate))
+        fin = [r for r in rows if np.isfinite(r["rest_rate"])]
+        out[w] = dict(rows=rows,
+                      delta_rest=(fin[-1]["rest_rate"] - fin[0]["rest_rate"]) if len(fin) > 1
+                                 else np.nan)
+    return out
+
+
+def show_entry(E, R, diag, title):
+    print(f"\n=== {title} — B0 bush-entry rate ===")
+    print(f"  action values seen {diag['action_values']}   `rested` on action(s) "
+          f"{diag['rest_action_values']}  (must be disjoint from {list(MOVE_ACTIONS)})")
+    print(f"  {diag['n_episodes']:,} episodes / {diag['n_rows']:,} rows;  displaced without a "
+          f"movement action: {diag['displaced_without_move_action']:,}")
+    for w in WINDOWS:
+        for v in VARIANTS:
+            print(f"\n-- window {w}   denominator: {v} --")
+            print(f"{'start injury':14}{'B0 far':>12}{'B0 near':>12}{'B3 near-far':>13}"
+                  f"{'n far':>12}{'n near':>12}")
+            far = E[f"{w}|{v}|far"]["rows"]; nr = E[f"{w}|{v}|near"]["rows"]
+            for a, b in zip(far, nr):
+                f_ = f"{a['b0']:.2f}%" if np.isfinite(a["b0"]) else "—"
+                n_ = f"{b['b0']:.2f}%" if np.isfinite(b["b0"]) else "—"
+                d_ = f"{b['b0']-a['b0']:+.2f}" if np.isfinite(a["b0"]) and np.isfinite(b["b0"]) else "—"
+                print(f"{a['bin']:14}{f_:>12}{n_:>12}{d_:>13}{a['n']:>12,.0f}{b['n']:>12,.0f}")
+            for cond in ("any", "far", "near"):
+                m = E[f"{w}|{v}|{cond}"]
+                sub = "  (bins substituted)" if m["substituted"] else ""
+                print(f"  Δ_B0 [{cond:>4}] = {m['delta_b0']:+.2f} pp  ±{m['delta_b0_ci95']:.2f} "
+                      f"(within-run 95% CI)   {m['bins_used']}{sub}")
+            print(f"  B3 range across bins: {E[f'{w}|{v}|B3']['threat_response_range']:.2f} pp")
+    print("\n-- B1 rest rate (descriptive; this is what B0's denominator removes) --")
+    for w in WINDOWS:
+        cells = "  ".join(f"{r['bin']}: {r['rest_rate']:.1f}%" for r in R[w]["rows"]
+                          if np.isfinite(r["rest_rate"]))
+        print(f"  {w:16} {cells}   Δ = {R[w]['delta_rest']:+.1f} pp")
+    print("\nReading it: Δ_B0's PRE-REGISTERED direction is POSITIVE (more cover-seeking when")
+    print("wounded). A large negative Δ_B0 is state dependence in the direction OPPOSITE to the")
+    print("project's target behaviour, not a confirmation.")
 
 
 def metrics(C, labels, min_n=2e4):
@@ -168,6 +410,13 @@ def main():
     ap.add_argument("--run"); ap.add_argument("--checkpoint", default=None)
     ap.add_argument("--store-root", default="results/trajectories")
     ap.add_argument("--state", default="felt_pain", choices=["injury", "nutrition", "felt_pain"])
+    ap.add_argument("--measures", default="all", choices=["all", "occupancy", "entry"],
+                    help="'entry' = B0/B1/B3 only (one pass); 'occupancy' = the older "
+                         "P(in a bush) measures only; 'all' = both (two passes)")
+    ap.add_argument("--exclude-rest", action="store_true",
+                    help="B2: drop rows whose arriving action was `Rest` from the OCCUPANCY "
+                         "measures. Descriptive only — it does not remove the freeze-to-heal "
+                         "artefact, which is what B0 exists for.")
     ap.add_argument("--label", default=None, help="name for this run in the output")
     ap.add_argument("--out", default=None, help="write metrics JSON here")
     ap.add_argument("--compare", nargs=2, metavar=("A.json", "B.json"),
@@ -179,6 +428,8 @@ def main():
         assert A["state"] == B["state"], "the two runs used different --state"
         print(f"### context dependence on {A['state']}: {A['label']}  vs  {B['label']}\n")
         for tag in ("observed", "randomised_early"):
+            if tag not in A or tag not in B:
+                print(f"--- {tag}: absent (run with --measures all/occupancy) ---"); continue
             ra, rb = A[tag]["rows"], B[tag]["rows"]
             ma, mb = A[tag]["metrics"], B[tag]["metrics"]
             print(f"--- {tag} ---")
@@ -211,22 +462,36 @@ def main():
     TAU = float(cfg["sensory"]["interoceptive_kernel_tau"])
     k = np.arange(KL, dtype=np.float64); raw = (k / TAU) * np.exp(1.0 - k / TAU)
     kernel = raw / raw.sum()
-    store = find_store(a.run, a.checkpoint, a.store_root)
+    stores = find_stores(a.run, a.checkpoint, a.store_root)
     label = a.label or os.path.basename(a.run.rstrip("/"))[16:]
-    print(f"run   {a.run}\nstore {store}\nstate {a.state}   label {label}")
-    if a.state == "felt_pain":
-        print(f"kernel tau={TAU} len={KL}  (weights lag1..lag{KL-1}, current step excluded)")
+    print(f"run   {a.run}\nstore {' '.join(stores)}\nstate {a.state}   label {label}")
 
-    C, E = sweep(store, lay, a.state, kernel)
-    labs = LABELS[a.state]
-    rows_o, m_o = metrics(C, labs)
-    rows_e, m_e = metrics(E, labs)
-    show(rows_o, m_o, f"{label} — observed internal state (associational)")
-    show(rows_e, m_e, f"{label} — RANDOMISED starting state, first {EARLY} steps (causal)")
-    out = {"label": label, "run": a.run, "state": a.state, "store": store,
-           "observed": {"rows": rows_o, "metrics": m_o},
-           "randomised_early": {"rows": rows_e, "metrics": m_e}}
-    dest = a.out or f"results/analysis/context_dependence/{label}_{a.state}.json"
+    out = {"label": label, "run": a.run, "state": a.state, "store": stores,
+           "checkpoint": a.checkpoint, "exclude_rest": bool(a.exclude_rest)}
+
+    if a.measures in ("all", "entry"):
+        ENT, REST, diag = sweep_entry(stores, lay)
+        Em, Rm = entry_metrics(ENT), entry_rest_metrics(REST)
+        show_entry(Em, Rm, diag, label)
+        out["entry"] = {"b0": Em, "b1": Rm, "diagnostics": diag,
+                        "min_n": ENTRY_MIN_N, "early_window": EARLY,
+                        "injury_edges": INJ_EDGES, "move_actions": list(MOVE_ACTIONS)}
+
+    if a.measures in ("all", "occupancy"):
+        if a.state == "felt_pain":
+            print(f"kernel tau={TAU} len={KL}  (weights lag1..lag{KL-1}, current step excluded)")
+        C, E = sweep(stores, lay, a.state, kernel, exclude_rest=a.exclude_rest)
+        labs = LABELS[a.state]
+        rows_o, m_o = metrics(C, labs)
+        rows_e, m_e = metrics(E, labs)
+        tag = " [Rest steps excluded — B2]" if a.exclude_rest else ""
+        show(rows_o, m_o, f"{label} — observed internal state (associational){tag}")
+        show(rows_e, m_e, f"{label} — RANDOMISED starting state, first {EARLY} steps (causal){tag}")
+        out["observed"] = {"rows": rows_o, "metrics": m_o}
+        out["randomised_early"] = {"rows": rows_e, "metrics": m_e}
+
+    suffix = "_norest" if a.exclude_rest else ""
+    dest = a.out or f"results/analysis/context_dependence/{label}_{a.state}{suffix}.json"
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     json.dump(out, open(dest, "w"), indent=1, default=float)
     print(f"\nwritten: {dest}")
