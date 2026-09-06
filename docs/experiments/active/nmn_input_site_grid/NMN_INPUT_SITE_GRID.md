@@ -11,8 +11,14 @@ develop_link: docs/develop/active/neuromodulation/MODULATION_SITE_REFACTOR.md
 
 # What the neuromodulator reads x what it re-tunes — a 16-cell screening grid
 
-> **Status**: PRE-REGISTERED — design only. **Configs not yet written**; they depend on two
-> config keys that do not exist in the code at the time of writing (see §2.7 Dependencies).
+> **Status**: PRE-REGISTERED — **configs now written and verified; ready for pre-flight review.**
+> The two config keys this design waited on are in the code (the modulation-site refactor's
+> Part A and Part B, both landed 2026-09-07), and the one open question about how returns are
+> computed has been answered in this design's favour, so nothing in §2.7 blocks a launch any
+> more. All sixteen agent configuration files exist under
+> `configs/models/recurrent_ppo/nmn_input_site_grid/`, were written by a committed generator
+> rather than by hand, and every one of them has been loaded through the real training path and
+> used to build an actual model — see §3.1.
 > **Date**: 2026-09-07
 > **Author**: `experiment-designer`
 > **Mode**: fully pre-registered. Every prediction, threshold and failure-mode ruling in §2.5,
@@ -375,8 +381,8 @@ interval.** A difference that clears the first but not the second is not a resul
 | **C2** | **ALL and X differ by 8 dimensions, not 2** (both interoceptive channels *plus* six proprioception channels), because proprioception is deliberately in neither restricted slice. | **Critical for the ALL-vs-X reading** | Not mitigable within this design; it follows from the user's recorded decision. **The pre-registered rule: no ALL-vs-X difference is ever attributed to interoception.** The interoceptive contrast is I vs X, and only that one. |
 | **C3** | **Input width is not matched across the input factor** (27 / 2 / 19). Any I-vs-X difference confounds *which* information the modulator reads with *how much*, and with the size of its input layer. | **High for H5** | Not mitigable with a name-keyed sensor selector. Stated in every H5 verdict. A width-matched follow-up is available and named in §4.4: `Extero Nociception` alone (1 dim) against `Satiation` + `Interoceptive Nociception` (2 dims). |
 | **C4** | **Pinning `rnn_mechanism: activation` breaks continuity with the historical neuromodulated record**, every run of which used the legacy gate-bias operator on the memory site. | Medium | Deliberate. Uniformity across sites is what makes Factor 2 a single factor; continuity with a record that confounds site with mechanism is worth less. The trade is recorded so a future reader does not read cell `t3rnn` as a replication of past memory-site runs. |
-| **C5** | **Learning rates.** Today one optimiser trains the shared trunk, both heads and the modulator at `lr_actor`, and the advertised `lr_critic` is read by nobody. If [[FIX_MC_RETURN_UNITS_AND_LEARNING_RATES]] lands first, `lr_critic` and a new `lr_modulator` become live. | **Critical if unhandled** | **Pre-launch requirement**: all 16 configs must set `lr_actor = lr_critic = lr_modulator = 0.0005`, **cell 1 included**. `lr_critic` currently has no consumer, so this changes nothing about how these runs train today; it is a guard against the fix landing later and a rerun from cell 1's saved config silently training the critic at one fifth of the rate the rest of the grid used. It is the **one deliberate deviation** from byte-identity with `recurrent_ppo_cmp_mc.yaml` (which carries `lr_critic: 0.0001`) and is recorded as such in §3.1 requirement 5. Verified by `env-config-reviewer` before launch. (`plan-reviewer` finding 4.) |
-| **C6** | **The meaning of `return_mode: MC` may change under the pending fix.** That fix's Part 1 proposes replacing the MC branch with "raw critic target, normalised advantage" — which is exactly the `MC_FIXED` mode that the later 25-run study measured as roughly an order of magnitude slower and 70 steps worse at matched experience. | **Critical, pre-launch blocker** | The two documents were written four days apart and have not been reconciled. **This grid must not launch until it is established which semantics `return_mode: MC` will carry.** If the fix lands as written, every arm here inherits a 10x experience penalty and the 10M-episode budget becomes far too small. Escalated to the user in the handoff; see §2.7. |
+| **C5** | **Learning rates.** Today one optimiser trains the shared trunk, both heads and the modulator at `lr_actor`, and the advertised `lr_critic` is read by nobody. If [[FIX_MC_RETURN_UNITS_AND_LEARNING_RATES]] lands first, `lr_critic` and a new `lr_modulator` become live. | **Critical if unhandled** | **Pre-launch requirement**: all 16 configs must set `lr_actor = lr_critic = lr_modulator = 0.0005`, **cell 1 included**. `lr_critic` currently has no consumer, so this changes nothing about how these runs train today; it is a guard against the fix landing later and a rerun from cell 1's saved config silently training the critic at one fifth of the rate the rest of the grid used. It is the **one deliberate deviation** from byte-identity with `recurrent_ppo_cmp_mc.yaml` (which carries `lr_critic: 0.0001`) and is recorded as such in §3.1 requirement 5. Verified by `env-config-reviewer` before launch. (`plan-reviewer` finding 4.) **Status 2026-09-07**: `lr_actor` and `lr_critic` are both `0.0005` in all 16 written configs. **`lr_modulator` is deliberately absent** — no such key exists anywhere in the code today, and writing a key no loader reads would be inventing schema. When the learning-rate fix does land and introduces it, these configs must be revisited before any rerun from them. |
+| **C6** | **The meaning of `return_mode: MC` may change under the pending fix.** That fix's Part 1 proposes replacing the MC branch with "raw critic target, normalised advantage" — which is exactly the `MC_FIXED` mode that the later 25-run study measured as roughly an order of magnitude slower and 70 steps worse at matched experience. | ~~Critical, pre-launch blocker~~ → **RESOLVED 2026-09-07** | The two documents have now been reconciled, in this design's favour: the proposed change was implemented as the separate `MC_FIXED` mode, run at 5 seeds, and lost decisively, so [[FIX_MC_RETURN_UNITS_AND_LEARNING_RATES]] now carries a do-not-apply banner on it. `return_mode: MC` keeps the semantics assumed throughout this design, the 10M-episode budget stands, and comparability with the existing five-seed `MC` record is preserved. Verified from the code as well as the docs: nothing under `src/` has changed since commit `e1aab726`. |
 | **C7** | **Continuity of cell 1 with the five existing `MC` seeds** depends on no change to the training path between commit `788e5983` (those runs) and launch. | Medium | The site refactor promises the unmodulated path is bit-identical (its checks V1/C1). The pending fix does **not** — it changes loss values by design. **Pre-registered rule**: the five existing seeds are used for **dispersion** (how much seeds vary) and never for **level** (what the baseline is) unless the training path is confirmed unchanged. **Pre-registered sanity gate (the "C7 gate")**: cell 1 runs at seed 42 on the same environment, same agent config and same budget as the existing run `20260904-173804_rppo_cmp10m_mc_s42`, so it must **replicate** it — see §4.1 for the exact tolerance. If the unmodulated control does not reproduce the known result, the code path changed underneath the grid and **every** comparison in it is suspect, so the gate is checked first, before any hypothesis is scored. |
 | **C8** | **Budget is in episodes, not environment steps, and better agents run longer episodes.** In the prior study total experience differed 3.3x across arms at a fixed episode budget. | **Critical** | Handled by design: the primary comparison is made at **matched environment steps** (the trainer logs `timesteps` directly), with the episode-axis number reported alongside. See §4.1. |
 | **C9** | **Right-censoring.** Some arms may not have plateaued at 10M episodes. | High | Pre-registered exclusion rule in §5, item 4. |
@@ -592,18 +598,20 @@ giving roughly **12-16 hours wall clock for the whole grid**. The prior batch pa
 per node, so tighter packing is feasible; placement is `training-runner`'s call against the live
 GPU state, following the pack-node-first policy.
 
-### 2.7 Dependencies — why the configs are not written yet
+### 2.7 Dependencies — all three now cleared
 
-This design deliberately stops short of producing YAML. Three things must land first.
+The design was written before the code it needs existed, and deliberately stopped short of
+producing YAML until three things landed. **All three have.** The table is kept rather than
+deleted, because which commit each arm depends on is part of the record.
 
 | # | Dependency | State at time of writing | Blocks |
 |---|---|---|---|
-| **D-A** | **Part A of the site refactor** — the `agent.modulation.sites.{encoder,rnn,actor,critic}`, `agent.modulation.rnn_mechanism` and `agent.modulation.temperature.{enabled,clip}` keys, plus FiLM at the action and value heads. | **In implementation now.** The 12 existing neuromodulated configs are being migrated as this is written. | Factor 2 entirely. |
-| **D-B** | **Part B of the site refactor** — the `agent.modulation.input_sensors` key (`"all"` or an explicit list of sensor names, resolved to indices against the run's own observation breakdown). | **Approved 2026-09-07; not yet built.** Note that [[MODULATION_SITE_REFACTOR]]'s status header still reads "Part B remains a proposal, NOT approved" — that header is stale and should be corrected by its owner. | Factor 1 entirely. |
-| **D-C** | **A ruling on `return_mode: MC` semantics** — see confound C6. | **Unresolved.** Two project documents currently disagree. | The whole grid's budget and its comparability with the existing 5-seed baseline. |
+| **D-A** | **Part A of the site refactor** — the `agent.modulation.sites.{encoder,rnn,actor,critic}`, `agent.modulation.rnn_mechanism` and `agent.modulation.temperature.{enabled,clip}` keys, plus FiLM at the action and value heads. | **CLEARED 2026-09-07** — landed in commit `83b8140b`. All four site keys are individually mandatory; a config with every site off *and* temperature off is refused outright. | Factor 2 entirely. |
+| **D-B** | **Part B of the site refactor** — the `agent.modulation.input_sensors` key (`"all"` or an explicit list of sensor names, resolved to indices against the run's own observation breakdown). | **CLEARED 2026-09-07** — landed in commit `e1aab726`. Mandatory whenever `modulation.type` is non-null; an unknown sensor name is a hard error rather than a silent re-indexing. | Factor 1 entirely. |
+| **D-C** | **A ruling on `return_mode: MC` semantics** — see confound C6. | **CLEARED 2026-09-07.** The proposed change to the MC branch was built as the separate `MC_FIXED` mode, run at scale, and lost decisively (25 runs; raw-target arms reached roughly 67–98 survival steps against 156–160 for the z-scored-target arms at matched experience). [[FIX_MC_RETURN_UNITS_AND_LEARNING_RATES]] now carries a do-not-apply banner for it, so `return_mode: MC` keeps the semantics this design assumed and the 10M-episode budget stands. | The whole grid's budget and its comparability with the existing 5-seed baseline. |
 
-Configs are produced in a **second pass**, once D-A and D-B are in the code and D-C has a ruling.
-The §3.1 table below specifies exactly what that pass will write.
+All three are cleared, and the configs were produced in the second pass on 2026-09-07. §3.1 below
+records what was written and what was checked.
 
 ---
 
@@ -645,6 +653,15 @@ row that does not is a run that cannot be reconstructed and is excluded from eve
 relaunch under §5 item 1 checks out that same SHA in a worktree. (`plan-reviewer` finding 2, which
 is the launching agent's to clear — the column is here so there is somewhere to record the answer.)
 
+**What that SHA has to contain, fixed here so the runner can check it in one command.** The
+training code this grid depends on is the modulation-site refactor: its Part A (selectable FiLM
+sites) is commit `83b8140b` and its Part B (the modulator input slice) is commit `e1aab726`, both
+of 2026-09-07. **Nothing under `src/` has changed since `e1aab726`**, and the sixteen agent
+configuration files were committed on top of it as `03e590a4`. So whatever HEAD is at launch, it
+must (a) have `e1aab726` as an ancestor, (b) show no difference under `src/` against it, and (c) be
+the same on all 16 rows with a clean working tree. A grid launched from two different SHAs is not a
+controlled comparison, whatever the diff between them turns out to be.
+
 `wandb-job-type` is **`pilot`**, not `prod`, on every row. That is the honest label for a
 single-seed screen and it keeps these runs from being pooled with production multi-seed studies in
 any downstream query.
@@ -664,12 +681,20 @@ baselines was therefore verified empirically instead: over 5,000 shared episode 
 draws, the observation draws, the starting injury and the spawn cell are **bit-identical** across
 all five stores. That direct check — not `env_fp` — is the one to repeat on the grid arms.
 
-### 3.1 Configs to Produce (second pass — NOT yet written)
+### 3.1 Configs — WRITTEN AND VERIFIED (2026-09-07, commit `03e590a4`)
 
 All 16 runs share one environment config, unmodified. Each run gets its own agent config, because
 agent configs in this repo do not support `extends:` and are self-contained.
 
-| Run | Config (env) | Config (agent) — to be written |
+**In plain language, what exists now.** All sixteen agent configuration files have been written.
+They were not typed out sixteen times: a small program in the same folder produces them, and it
+builds each one by reading the shared settings straight out of the already-established unmodulated
+agent file and then changing only the two things this study varies. Every one of the sixteen was
+then loaded the way the trainer loads it and used to build a real network, which is how the claims
+below about "the modulator reads 2 numbers here and 19 there" were established — they were read off
+the constructed network, not worked out on paper.
+
+| Run | Config (env) | Config (agent) — written, verified |
 |-----|--------------|--------------------------------|
 | 1 | `configs/environment/experiment/basic/04-jump_attack_10x10.yaml` | `configs/models/recurrent_ppo/nmn_input_site_grid/nmnsite_t1none.yaml` |
 | 2 | same | `configs/models/recurrent_ppo/nmn_input_site_grid/nmnsite_t2enc_ALL.yaml` |
@@ -716,6 +741,69 @@ agent configs in this repo do not support `extends:` and are self-contained.
 6. **`env-config-reviewer` runs on all 16 files before launch**, with explicit attention to C5
    (learning rates), the input-sensor name spellings against
    `get_observation_breakdown`, and the sites/mechanism/temperature block.
+
+#### How each requirement was met (recorded 2026-09-07)
+
+| # | Requirement | How it was satisfied |
+|---|---|---|
+| 1 | Generated, not hand-copied | `configs/models/recurrent_ppo/nmn_input_site_grid/generate_site_grid_arms.py`, committed alongside the sixteen files. It lives under `configs/` rather than `scripts/` so it does not trigger the scripts dependency-map contract, following the precedent generator in the sensory-directional sweep. `--check` re-derives every file and fails on any byte of drift; `--verify` adds the model-construction pass below. |
+| 2 | Explicit learning rates in all 16 | `lr_actor: 0.0005` and `lr_critic: 0.0005` are present in every file, control included. **`lr_modulator` was NOT added**: no such key exists anywhere in the code today (`grep` over `src/`, `train.py` and `configs/` returns nothing), and writing a key no loader reads would be inventing schema, which this design forbids. The requirement's own wording made it conditional on the key existing. |
+| 3 | `percept_add_bias_init: 0.0` stated explicitly | Present in all 15 modulated files, so no run depends on the fallback default flagged as confound C12. |
+| 4 | `memory_bias_init` and `memory_clip` present | Present in all 15 modulated files, though inert under `rnn_mechanism: activation`. |
+| 5 | Control identical to its ancestor except `lr_critic` | True **by construction**, not by inspection: the generator loads `configs/models/recurrent_ppo/recurrent_ppo_cmp_mc.yaml` and mutates exactly that one key. Independently re-checked as a flattened key-by-key comparison — the only difference found is `agent.lr_critic`. |
+| 6 | `env-config-reviewer` before launch | **Outstanding.** The one requirement still open; see the handoff note at the end of this section. |
+
+#### What was verified, and how
+
+Everything below was produced by `generate_site_grid_arms.py --verify`, which loads each config
+through the same merge order the trainer uses and then **constructs the model**. A file that merely
+parses as YAML proves nothing here: the point of the refactor's mandatory keys is that a wrong
+config is refused loudly, so the refusal is collected now rather than at launch.
+
+- **All sixteen load, construct and take a step.** Every arm builds a model and returns finite
+  action scores and a finite value estimate on a forward pass.
+- **The modulator's input width was read off the built network**, not computed by hand: 27 numbers
+  under ALL, 2 under I, 19 under X — confirmed three ways per arm (the resolved index tuple, the
+  modulator GRU's declared input width, and the actual row count of its input weight matrix).
+- **The four site switches were read off both the network and the modulator inside it**, so a
+  copy-paste that left two sites on would have been caught. Every arm resolves to exactly the
+  combination §2.1 specifies.
+- **The environment is the same for all sixteen.** Each arm's observation layout was recomputed and
+  compared: `Satiation 1, Interoceptive Nociception 1, Extero Nociception 1, Olfaction 5,
+  Collision 5, Proprioception 6, Visual 8 = 27` in every case. The sensor-name spellings in the
+  restricted slices are exactly these keys.
+- **Config-to-config differences are only the intended ones.** Flattened key-by-key: the control
+  differs from its ancestor `recurrent_ppo_cmp_mc.yaml` in `agent.lr_critic` and nothing else; each
+  modulated arm differs from the reference arm (`nmnsite_t2enc_ALL.yaml`) only in the four
+  `sites.*` switches and `input_sensors`.
+- **The mechanism controls hold.** Every modulated arm resolves to the uniform FiLM operator, the
+  `activation` RNN mechanism, temperature **off**, `grouping_size: 1`, `mod_hidden_size: 16`, and —
+  importantly for confound C4's flip side — the **same plain GRU cell the unmodulated control uses**,
+  not the legacy modulated cell.
+- **Negative controls: the loud failures really are loud.** A deliberately misspelled sensor name, a
+  missing site key, and all-sites-off-with-temperature-off each raise an error at construction
+  rather than building a plausible-looking wrong model.
+
+Re-run at any time (CPU only; it never competes with training for a GPU):
+
+```
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
+  configs/models/recurrent_ppo/nmn_input_site_grid/generate_site_grid_arms.py --verify
+```
+
+#### Still outstanding before launch
+
+- **`env-config-reviewer` pre-flight** on all sixteen files (requirement 6). Points to put in front
+  of it: the learning-rate deviation of C5; the sensor-name spellings against
+  `get_observation_breakdown`; the sites / `rnn_mechanism` / temperature block; the deliberate
+  absence of `temperature.clip` when temperature is disabled; and the deliberate absence of
+  `lr_modulator`.
+- **The trajectory-collection spec for the arms cannot be completed yet.**
+  `configs/trajectory_collection/nmn_site_grid_arms.yaml` still carries its `<RUNDIR_*>`
+  placeholders, and it has to: each entry needs a run **directory** name, and those are stamped with
+  the launch timestamp, so they do not exist until the runs do. The labels are already final and
+  match the Cell column of the manifest; only the timestamps are missing. Fill them after launch,
+  from the manifest's Log path column.
 
 ### 3.2 Launch command
 
