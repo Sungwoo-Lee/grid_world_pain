@@ -8,7 +8,38 @@ last_updated: 2026-09-01
 
 # Fix: MC return units + wiring the critic and modulator learning rates
 
-> **Status**: PLANNED — amended 2026-09-01 after adversarial plan review
+> ## ⛔ Fix 1 WAS RUN AND REFUTED — DO NOT APPLY IT (added 2026-09-07)
+>
+> **Fix 1 of this plan — replace the MC branch's z-scored critic target with a raw
+> target plus normalised advantages — was implemented as the separate `MC_FIXED`
+> return mode, run at scale, and lost decisively to the code it was meant to
+> replace.** It is not a latent improvement waiting to be applied; it is a measured
+> regression.
+>
+> Evidence: 25 runs, 5 arms × 5 seeds, `basic/04`, 10M episodes
+> ([[return_mode_cmp_10M]]). At matched environment steps the z-scored-target arms
+> reached ~156–160 mean survival steps while the raw-target arms reached ~67–98 —
+> roughly an **order of magnitude more experience** to reach any given survival
+> level, and far worse seed-to-seed reproducibility (spread 22–81 steps against 2–5).
+> The convention this plan proposed is the one nine mainstream PPO libraries use,
+> but all nine also carry an upstream **reward normaliser** that this codebase does
+> not have; MC's return-rescaling has been standing in for it, and removing the
+> stand-in without installing the real thing is what `MC_FIXED` measured.
+>
+> **Consequence for anyone editing the trainer:** do not change the semantics of the
+> `MC` branch. `MC_FIXED`, `GAE_NORM` and `MC_RAW` already exist as separate modes,
+> so any further comparison is a config change, not a code change. Live experiments
+> depend on `MC` continuing to mean what it means today — see
+> [[NMN_INPUT_SITE_GRID]], whose entire budget is sized on it.
+>
+> **Fix 2 (wiring `lr_critic` and `lr_modulator`) is unaffected and still stands.**
+> `lr_critic` is read by nothing today, so actor and critic already share one
+> learning rate; wiring it to the same 0.0005 is behaviour-preserving.
+>
+> The genuinely untested repair is an upstream reward normaliser plus the textbook
+> convention — see [[return_mode_cmp_10M]] §"what the missing piece is".
+
+> **Status**: PLANNED — Fix 1 **WITHDRAWN** (refuted 2026-09-05, see above); Fix 2 still planned. Amended 2026-09-01 after adversarial plan review
 > **Opened**: 2026-09-01
 > **Related**: [[MODULATION_SITE_REFACTOR]] (must land **before** its fixture capture) · [[KNOWN_BUGS]] rows "P1 #5" and "A1" · `docs/reviews/diagnosis_20260723/findings_rppo_trainer.md` Findings 1 and 3 · `docs/reviews/diagnosis_20260723/review_full_diagnosis_20260723.md` P1 #5
 
