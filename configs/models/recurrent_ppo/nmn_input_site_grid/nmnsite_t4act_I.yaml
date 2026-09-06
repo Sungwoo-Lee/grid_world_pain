@@ -1,0 +1,69 @@
+# GENERATED FILE -- DO NOT EDIT BY HAND.
+# Regenerate with:
+#   python configs/models/recurrent_ppo/nmn_input_site_grid/generate_site_grid_arms.py
+# Drift check (writes nothing):  ... generate_site_grid_arms.py --check
+#
+# NMN input x site grid -- t4act
+# Study: docs/experiments/active/nmn_input_site_grid/NMN_INPUT_SITE_GRID.md
+#
+# WHERE the modulator writes: cell 4 -- the hidden layer of the action head, pre-activation.
+# WHAT the modulator reads:   slice I -- the body's own signals only: fullness, and the smoothed internal ache that is the agent's only trace of its own wound (2 of the 27 observation numbers).
+#
+# Everything else is identical across all sixteen arms of the grid and is inherited
+# from configs/models/recurrent_ppo/recurrent_ppo_cmp_mc.yaml (see the generator).
+# The modulator uses ONE mechanism at every site -- FiLM, i.e. multiply each neuron
+# by a learned gain and add a learned offset -- so that WHERE it acts is varied
+# without also varying HOW it acts. `rnn_mechanism: activation` keeps the task GRU
+# the same plain cell the unmodulated control uses; the legacy gate-bias operator
+# would swap the cell and reintroduce a known initialisation confound.
+# Temperature modulation is OFF in every arm: it is a fifth, differently-shaped
+# channel (it divides the action scores) and leaving it on would confound all five
+# write targets with it.
+#
+# Seed is config-owned (configs/train/default.yaml: 42); no --seed is passed at launch.
+
+agent:
+  algorithm: RecurrentPPO
+  lr_actor: 0.0005
+  lr_critic: 0.0005
+  gamma: 0.95
+  K_epochs: 4
+  eps_clip: 0.1
+  sequence_length: 128
+  frame_stack: 1
+  fc_layers: [128, 128]
+  actor_fc_layers: [128, 128]
+  critic_fc_layers: [128, 128]
+  hidden_size: 128
+  entropy_coef: 0.01
+  gae_lambda: 0.95
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  use_layer_norm: true
+  rnn_type: GRU
+  activation: relu
+  return_mode: MC
+  encoding_mode: hierarchical
+  hierarchical_params:
+    default_mlp: [128, 128]
+    unimodal_overrides:
+      visual: [128, 128]
+      olfaction: [128, 128]
+    multimodal_hub: [128, 128]
+  modulation:
+    type: FiLM
+    mod_hidden_size: 16
+    grouping_size: 1
+    percept_bias_init: 3.0
+    percept_add_bias_init: 0.0
+    memory_bias_init: 0.0
+    memory_clip: [-2.0, 2.0]
+    input_sensors: ["Satiation", "Interoceptive Nociception"]
+    sites:
+      encoder: false
+      rnn: false
+      actor: true
+      critic: false
+    rnn_mechanism: activation
+    temperature:
+      enabled: false

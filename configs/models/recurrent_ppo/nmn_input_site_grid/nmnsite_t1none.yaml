@@ -1,0 +1,53 @@
+# GENERATED FILE -- DO NOT EDIT BY HAND.
+# Regenerate with:
+#   python configs/models/recurrent_ppo/nmn_input_site_grid/generate_site_grid_arms.py
+# Drift check (writes nothing):  ... generate_site_grid_arms.py --check
+#
+# NMN input x site grid -- t1none
+# Study: docs/experiments/active/nmn_input_site_grid/NMN_INPUT_SITE_GRID.md
+#
+# THE UNMODULATED CONTROL (cell 1). No neuromodulator is constructed at all:
+# `modulation.type: null` collapses to the plain agent, so none of the
+# modulation keys the other fifteen carry is read here.
+#
+# This file is IDENTICAL to configs/models/recurrent_ppo/recurrent_ppo_cmp_mc.yaml
+# -- the unmodulated Monte-Carlo arm of the 25-run return-mode study -- except for
+# `lr_critic` (0.0001 there, 0.0005 here, as in all sixteen files of this grid).
+# `lr_critic` is read by no code path today, so this run trains exactly as that
+# arm's five existing seeds did; the key is set for the benefit of a later rerun
+# from this saved config. That lineage is what makes this run a REPLICATION check
+# (the design's C7 gate): if it does not reproduce the known result, the training
+# path changed underneath the grid and every comparison in it is suspect.
+#
+# Seed is config-owned (configs/train/default.yaml: 42); no --seed is passed at launch.
+
+agent:
+  algorithm: RecurrentPPO
+  lr_actor: 0.0005
+  lr_critic: 0.0005
+  gamma: 0.95
+  K_epochs: 4
+  eps_clip: 0.1
+  sequence_length: 128
+  frame_stack: 1
+  fc_layers: [128, 128]
+  actor_fc_layers: [128, 128]
+  critic_fc_layers: [128, 128]
+  hidden_size: 128
+  entropy_coef: 0.01
+  gae_lambda: 0.95
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  use_layer_norm: true
+  rnn_type: GRU
+  activation: relu
+  return_mode: MC
+  encoding_mode: hierarchical
+  hierarchical_params:
+    default_mlp: [128, 128]
+    unimodal_overrides:
+      visual: [128, 128]
+      olfaction: [128, 128]
+    multimodal_hub: [128, 128]
+  modulation:
+    type: null
