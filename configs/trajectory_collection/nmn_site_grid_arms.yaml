@@ -96,7 +96,7 @@ out_root: results/trajectories_nmnsite   # same root as the baselines: one study
 episodes: 300000
 seed_base: 1000000         # LOAD-BEARING — see the block above. Must equal the baselines'.
 checkpoints: [final]       # pass 1 of 2; the matched-budget pass is the known gap noted above
-nodes: [106, 107, 108, 109, 110, 111, 112, 113]   # any set works; more nodes = more parallelism
+nodes: [107, 108, 109, 110, 111, 112, 113]   # 106 and 101-105,114 hold the GAE twin (diary 2026-09-07)   # any set works; more nodes = more parallelism
 obs_precision: float32     # must match the baselines, which are float32
 device: gpu
 npar: 1                    # explicit, not defaulted — see the OOM note above
@@ -108,19 +108,19 @@ blocks_per_cell: 60        # 300,000 / 5,000 = 60 blocks, one process per run �
 runs:
   # LABELS ARE FINAL and match the Launch Manifest (design doc §3) cell names.
   # PATHS ARE PLACEHOLDERS — replace <RUNDIR_*> with the real directory name of each run.
-  - {label: T1_none,      path: results/JAX_RecurrentPPO/<RUNDIR_t1none_s42>}
-  - {label: T2_enc_ALL,   path: results/JAX_RecurrentPPO/<RUNDIR_t2enc_ALL_s42>}
-  - {label: T2_enc_I,     path: results/JAX_RecurrentPPO/<RUNDIR_t2enc_I_s42>}
-  - {label: T2_enc_X,     path: results/JAX_RecurrentPPO/<RUNDIR_t2enc_X_s42>}
-  - {label: T3_rnn_ALL,   path: results/JAX_RecurrentPPO/<RUNDIR_t3rnn_ALL_s42>}
-  - {label: T3_rnn_I,     path: results/JAX_RecurrentPPO/<RUNDIR_t3rnn_I_s42>}
-  - {label: T3_rnn_X,     path: results/JAX_RecurrentPPO/<RUNDIR_t3rnn_X_s42>}
-  - {label: T4_act_ALL,   path: results/JAX_RecurrentPPO/<RUNDIR_t4act_ALL_s42>}
-  - {label: T4_act_I,     path: results/JAX_RecurrentPPO/<RUNDIR_t4act_I_s42>}
-  - {label: T4_act_X,     path: results/JAX_RecurrentPPO/<RUNDIR_t4act_X_s42>}
-  - {label: T5_crt_ALL,   path: results/JAX_RecurrentPPO/<RUNDIR_t5crt_ALL_s42>}
-  - {label: T5_crt_I,     path: results/JAX_RecurrentPPO/<RUNDIR_t5crt_I_s42>}
-  - {label: T5_crt_X,     path: results/JAX_RecurrentPPO/<RUNDIR_t5crt_X_s42>}
-  - {label: T16_quad_ALL, path: results/JAX_RecurrentPPO/<RUNDIR_t16quad_ALL_s42>}
-  - {label: T16_quad_I,   path: results/JAX_RecurrentPPO/<RUNDIR_t16quad_I_s42>}
-  - {label: T16_quad_X,   path: results/JAX_RecurrentPPO/<RUNDIR_t16quad_X_s42>}
+  - {label: T1_none,      path: results/JAX_RecurrentPPO/20260907-045531_rppo_nmnsite_t1none_s42}
+  - {label: T2_enc_ALL,   path: results/JAX_RecurrentPPO/20260907-050220_rppo_nmnsite_t2enc_ALL_s42}
+  - {label: T2_enc_I,     path: results/JAX_RecurrentPPO/20260907-050221_rppo_nmnsite_t2enc_I_s42}
+  - {label: T2_enc_X,     path: results/JAX_RecurrentPPO/20260907-050222_rppo_nmnsite_t2enc_X_s42}
+  - {label: T3_rnn_ALL,   path: results/JAX_RecurrentPPO/20260907-050223_rppo_nmnsite_t3rnn_ALL_s42}
+  - {label: T3_rnn_I,     path: results/JAX_RecurrentPPO/20260907-050224_rppo_nmnsite_t3rnn_I_s42}
+  - {label: T3_rnn_X,     path: results/JAX_RecurrentPPO/20260907-050225_rppo_nmnsite_t3rnn_X_s42}
+  - {label: T4_act_ALL,   path: results/JAX_RecurrentPPO/20260907-050226_rppo_nmnsite_t4act_ALL_s42}
+  - {label: T4_act_I,     path: results/JAX_RecurrentPPO/20260907-050227_rppo_nmnsite_t4act_I_s42}
+  - {label: T4_act_X,     path: results/JAX_RecurrentPPO/20260907-050227_rppo_nmnsite_t4act_X_s42}
+  - {label: T5_crt_ALL,   path: results/JAX_RecurrentPPO/20260907-050229_rppo_nmnsite_t5crt_ALL_s42}
+  - {label: T5_crt_I,     path: results/JAX_RecurrentPPO/20260907-050230_rppo_nmnsite_t5crt_I_s42}
+  - {label: T5_crt_X,     path: results/JAX_RecurrentPPO/20260907-050231_rppo_nmnsite_t5crt_X_s42}
+  - {label: T16_quad_ALL, path: results/JAX_RecurrentPPO/20260907-050232_rppo_nmnsite_t16quad_ALL_s42}
+  - {label: T16_quad_I,   path: results/JAX_RecurrentPPO/20260907-050232_rppo_nmnsite_t16quad_I_s42}
+  - {label: T16_quad_X,   path: results/JAX_RecurrentPPO/20260907-050233_rppo_nmnsite_t16quad_X_s42}
