@@ -3242,3 +3242,86 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 # 15   rppo_nmnsite_t16quad_I_s42     t16quad     I      113:0     290554   ldsttwlo  logs/20260907_050229_rppo_nmnsite_t16quad_I_s42.log
 # 16   rppo_nmnsite_t16quad_X_s42     t16quad     X      113:1     290742   hxey8k3h  logs/20260907_050230_rppo_nmnsite_t16quad_X_s42.log
 # ---------------------------------------------------------------------------
+
+# ===========================================================================
+# WAVE: NMN input x site grid -- GAE_NORM twin  (16 runs, launched 2026-09-07)
+# ---------------------------------------------------------------------------
+# The estimator-swapped twin of the MC grid recorded above: same 16 arms, same
+# env, same seed, differing from their MC counterparts in exactly one agent-config
+# key -- return_mode: GAE_NORM instead of MC.
+#
+# Config-owned and therefore NOT passed on the CLI: --seed (42), --num-envs (128),
+# --checkpoint-frequency (200000 via configs/train/recurrent_ppo.yaml).
+# --episodes IS passed explicitly (10,000,000) as the convention requires.
+#
+# Nodes 107/108/109/112 were deliberately left untouched (both GPUs) so the four
+# still-training stragglers from the MC wave keep a clean node.
+#
+# Run 1 below is the active block; runs 2-16 differ from it ONLY in
+# --agent_config, --device and the tag/wandb-name pair, and are recorded in the
+# table that follows. Each run was staged to a unique /tmp/train_cmd_<epoch>_<rand>.sh
+# on its target node (CIFS-bypass), asserted non-empty + carrying its own --tag,
+# then launched with `run_command.py --no-tail`.
+# ===========================================================================
+
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+  --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+  --agent_config configs/models/recurrent_ppo/nmn_input_site_grid_gaenorm/nmngaenorm_t1none.yaml \
+  --episodes 10000000 --device cuda:0 --log-interval 10 \
+  --tag "rppo_nmngaenorm_t1none_s42" --wandb-name "rppo_nmngaenorm_t1none_s42" \
+  --wandb-group "nmn_input_site_grid_gaenorm" --wandb-job-type "pilot"
+
+# Runs 2-16 (same command shape; only these three fields differ):
+#  2  --agent_config .../nmngaenorm_t2enc_ALL.yaml    --device cuda:1  --tag/--wandb-name rppo_nmngaenorm_t2enc_ALL_s42
+#  3  --agent_config .../nmngaenorm_t2enc_I.yaml      --device cuda:0  --tag/--wandb-name rppo_nmngaenorm_t2enc_I_s42
+#  4  --agent_config .../nmngaenorm_t2enc_X.yaml      --device cuda:1  --tag/--wandb-name rppo_nmngaenorm_t2enc_X_s42
+#  5  --agent_config .../nmngaenorm_t3rnn_ALL.yaml    --device cuda:0  --tag/--wandb-name rppo_nmngaenorm_t3rnn_ALL_s42
+#  6  --agent_config .../nmngaenorm_t3rnn_I.yaml      --device cuda:1  --tag/--wandb-name rppo_nmngaenorm_t3rnn_I_s42
+#  7  --agent_config .../nmngaenorm_t3rnn_X.yaml      --device cuda:0  --tag/--wandb-name rppo_nmngaenorm_t3rnn_X_s42
+#  8  --agent_config .../nmngaenorm_t4act_ALL.yaml    --device cuda:1  --tag/--wandb-name rppo_nmngaenorm_t4act_ALL_s42
+#  9  --agent_config .../nmngaenorm_t4act_I.yaml      --device cuda:0  --tag/--wandb-name rppo_nmngaenorm_t4act_I_s42
+# 10  --agent_config .../nmngaenorm_t4act_X.yaml      --device cuda:1  --tag/--wandb-name rppo_nmngaenorm_t4act_X_s42
+# 11  --agent_config .../nmngaenorm_t5crt_ALL.yaml    --device cuda:0  --tag/--wandb-name rppo_nmngaenorm_t5crt_ALL_s42
+# 12  --agent_config .../nmngaenorm_t5crt_I.yaml      --device cuda:1  --tag/--wandb-name rppo_nmngaenorm_t5crt_I_s42
+# 13  --agent_config .../nmngaenorm_t5crt_X.yaml      --device cuda:0  --tag/--wandb-name rppo_nmngaenorm_t5crt_X_s42
+# 14  --agent_config .../nmngaenorm_t16quad_ALL.yaml  --device cuda:1  --tag/--wandb-name rppo_nmngaenorm_t16quad_ALL_s42
+# 15  --agent_config .../nmngaenorm_t16quad_I.yaml    --device cuda:2  --tag/--wandb-name rppo_nmngaenorm_t16quad_I_s42
+# 16  --agent_config .../nmngaenorm_t16quad_X.yaml    --device cuda:3  --tag/--wandb-name rppo_nmngaenorm_t16quad_X_s42
+#
+# LAUNCH RECORD -- all 16 verified TRAINING, exactly one PID per tag, 2026-09-07T16:05
+# Verification beyond process-existence: every run's log grew between two samples
+# 100 s apart (39-62 KB of new output each), and every assigned GPU is resident and
+# busy (86-100% util, 4.5-6.8 GB). Nodes 107/108/109/112 untouched (MC-wave stragglers).
+# Ground truth from each run's OWN saved models/config.yaml:
+#   return_mode = GAE_NORM on ALL SIXTEEN (the point of this wave);
+#   modulation.sites and modulation.input_sensors match the intended arm on all 16;
+#   run 1 (t1none) has modulation.type = null;
+#   TOP-LEVEL seed: 42 and episodes: 10000000 on all 16; num_envs 128.
+# NOTE: read seed/episodes from the TOP-LEVEL keys -- the nested training: pair is a
+# known stale duplicate that always reads 42/100 (see KNOWN_BUGS.md).
+# provenance.json git_short = 6695aa29 on ALL SIXTEEN (no split-SHA wave).
+# git_dirty = "unknown" on all 16 -- expected, not a defect: provenance shells out to
+# git with a 10 s timeout and sixteen simultaneous launches lose that race on the NAS.
+#
+# Staging note: scripts were staged with `ssh ... "cat > $TMP" < stage.sh` WITHOUT the
+# -n flag (which would force stdin to /dev/null and write 0 bytes), and each staged
+# file was asserted non-empty AND carrying its own --tag before run_command.py ran.
+# All 16 asserted STAGE_OK at 541-556 bytes.
+# Run  Tag                              Arm      Slice  Node:GPU  PID      WandB     Log
+# 1    rppo_nmngaenorm_t1none_s42       t1none   -      101:0     452172   xvw6uzrs  logs/20260907_155850_rppo_nmngaenorm_t1none_s42.log
+# 2    rppo_nmngaenorm_t2enc_ALL_s42    t2enc    ALL    101:1     452294   dtai9q6q  logs/20260907_155852_rppo_nmngaenorm_t2enc_ALL_s42.log
+# 3    rppo_nmngaenorm_t2enc_I_s42      t2enc    I      102:0     2916318  a0qrdefg  logs/20260907_155852_rppo_nmngaenorm_t2enc_I_s42.log
+# 4    rppo_nmngaenorm_t2enc_X_s42      t2enc    X      102:1     2916436  9ovumjg0  logs/20260907_155853_rppo_nmngaenorm_t2enc_X_s42.log
+# 5    rppo_nmngaenorm_t3rnn_ALL_s42    t3rnn    ALL    103:0     444457   k3nkwafh  logs/20260907_155854_rppo_nmngaenorm_t3rnn_ALL_s42.log
+# 6    rppo_nmngaenorm_t3rnn_I_s42      t3rnn    I      103:1     444577   3om5z4jv  logs/20260907_155855_rppo_nmngaenorm_t3rnn_I_s42.log
+# 7    rppo_nmngaenorm_t3rnn_X_s42      t3rnn    X      104:0     456738   igrblp5d  logs/20260907_155856_rppo_nmngaenorm_t3rnn_X_s42.log
+# 8    rppo_nmngaenorm_t4act_ALL_s42    t4act    ALL    104:1     456860   bo6t6y4m  logs/20260907_155857_rppo_nmngaenorm_t4act_ALL_s42.log
+# 9    rppo_nmngaenorm_t4act_I_s42      t4act    I      105:0     543334   3whh6e86  logs/20260907_155858_rppo_nmngaenorm_t4act_I_s42.log
+# 10   rppo_nmngaenorm_t4act_X_s42      t4act    X      105:1     543456   3jqmnf3a  logs/20260907_155900_rppo_nmngaenorm_t4act_X_s42.log
+# 11   rppo_nmngaenorm_t5crt_ALL_s42    t5crt    ALL    106:0     530591   rinfx023  logs/20260907_155900_rppo_nmngaenorm_t5crt_ALL_s42.log
+# 12   rppo_nmngaenorm_t5crt_I_s42      t5crt    I      106:1     530713   e1ty78id  logs/20260907_155902_rppo_nmngaenorm_t5crt_I_s42.log
+# 13   rppo_nmngaenorm_t5crt_X_s42      t5crt    X      114:0     270517   76krj6ri  logs/20260907_155902_rppo_nmngaenorm_t5crt_X_s42.log
+# 14   rppo_nmngaenorm_t16quad_ALL_s42  t16quad  ALL    114:1     270737   u69q0auc  logs/20260907_155904_rppo_nmngaenorm_t16quad_ALL_s42.log
+# 15   rppo_nmngaenorm_t16quad_I_s42    t16quad  I      114:2     270998   khcs2pxc  logs/20260907_155905_rppo_nmngaenorm_t16quad_I_s42.log
+# 16   rppo_nmngaenorm_t16quad_X_s42    t16quad  X      114:3     271243   d4okzt4v  logs/20260907_155907_rppo_nmngaenorm_t16quad_X_s42.log
+# ---------------------------------------------------------------------------
