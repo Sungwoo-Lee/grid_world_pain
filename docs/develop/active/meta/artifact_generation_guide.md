@@ -10,7 +10,7 @@ last_updated: 2026-09-01
 
 ## Purpose
 
-A shareable HTML artifact was built for the bush-dwell analysis
+A shareable HTML artifact was built for the bush-hiding analysis
 ([[a01_hiding_drivers]]). It took roughly a dozen revisions, and almost every revision was
 triggered by the reader catching something rather than by the author noticing it. This document
 records those failures so the next artifact starts where this one finished.
@@ -32,14 +32,14 @@ the reader a translation on every occurrence and eventually breaks something.
 | invented | correct | how it was caught |
 |---|---|---|
 | ambush predator | `hiding_predator` | reader |
-| share of time hidden | **bush dwell** | reader |
+| share of time hidden | **bush hiding** | reader |
 | predator's eyesight | `detection_range` | reader |
 | strike delay / reach | `attack_delay` / `attack_range` | reader |
 | starting injury / hunger | `start_injury` / `start_nutrition` | reader |
 | resting bonus, healing dial | `recovery_accel_rate` | author, after the pattern was pointed out |
 | chosen steps | **steps** (the `t=0` row is the initial state, not a step) | reader |
 
-**"Bush dwell" is the model case.** It is shorter, it matches the tooling, and it removed a real
+**"Bush hiding" is the model case.** It is shorter, it matches the tooling, and it removed a real
 ambiguity the author had created — "hiding" was doing double duty for the behaviour and for the
 `hiding_predator` resource.
 

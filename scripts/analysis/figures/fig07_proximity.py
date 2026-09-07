@@ -5,7 +5,7 @@ QUESTION. Before crediting olfaction with anything, check the simpler driver: is
 close? And test the obvious reverse reading, that predators linger near an already-hidden agent
 rather than the agent taking cover because one arrived.
 
-MEASURE. Bush dwell at step t, split by what was within Chebyshev distance 2 at step t-1. Lagging
+MEASURE. Bush hiding at step t, split by what was within Chebyshev distance 2 at step t-1. Lagging
 is the point: it means the agent's choice at t cannot have produced the classification.
 
 CONDITIONING. None beyond the lag. All action steps of the run.
@@ -55,8 +55,8 @@ def main():
     lab = ["neither", "a predator within 2 tiles", "a rabbit within 2 tiles (no predator)"]
     rows = [dict(state=lab[i], steps=float(same[i]), bush_dwell=float(100*dwell[i]/max(same[i],1)))
             for i in (1, 2, 0)]
-    print(f"\n=== Figure 7: bush dwell by what was nearby ONE STEP EARLIER ===")
-    print(f"{'nearby at t-1':40}{'steps':>16}{'bush dwell':>13}")
+    print(f"\n=== Figure 7: bush hiding by what was nearby ONE STEP EARLIER ===")
+    print(f"{'nearby at t-1':40}{'steps':>16}{'bush hiding':>13}")
     for r in rows:
         print(f"{r['state']:40}{r['steps']:>16,.0f}{r['bush_dwell']:>12.1f}%")
     save("fig07_proximity", {"figure": 7, "run": a.run, "near_distance": NEAR_D,

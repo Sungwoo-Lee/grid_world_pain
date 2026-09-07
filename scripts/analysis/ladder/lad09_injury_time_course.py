@@ -24,7 +24,7 @@ WHAT THE PANELS SHOW.
       hiding peaks around step 15. Behaviour follows the FEELING, three steps behind it, not the
       body state it is a delayed trace of.
 
-  C - the perceptual dose-response. Bush dwell against how strongly the agent is feeling hurt right
+  C - the perceptual dose-response. Bush hiding against how strongly the agent is feeling hurt right
       now, pooled over every step of every episode. This is an ASSOCIATIONAL panel and is marked as
       such: an agent feels hurt because it got hurt, which depends on what it was doing. Panels A
       and B carry the causal claim, because the starting wound they are keyed to was assigned at
@@ -99,7 +99,7 @@ ax[2].set_ylim(_dmin - 3, _dmax + 9)
 ax[2].set_title("C.  How hard it hides by how hurt it FEELS\n"
                 "associational - a hurt agent got hurt somehow", fontsize=9.4, loc="left", pad=8)
 ax[2].set_xlabel("perceived nociception right now  (0-100)")
-ax[2].set_ylabel("bush dwell  (% of those steps spent in a bush)")
+ax[2].set_ylabel("bush hiding  (% of those steps spent in a bush)")
 ax[2].legend(handles=h, fontsize=7.0, loc="upper left", framealpha=0.92, frameon=True)
 
 # --- D: the cost -------------------------------------------------------------------------------

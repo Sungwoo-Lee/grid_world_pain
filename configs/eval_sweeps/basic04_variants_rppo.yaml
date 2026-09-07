@@ -19,7 +19,7 @@ conditions: all
 episodes: 30
 nodes: [101, 102, 103, 104, 105, 108, 110, 113]
 x_axis: steps
-plot_measures: [bush_dwell, spatial_spread, survival_steps]
+plot_measures: [bush_hiding, spatial_spread, survival_steps]
 runs:
   - {label: v01_slowmove, path: results/JAX_RecurrentPPO/20260721-044210_rppo_b04v01_slowmove_128env_n111}
   - {label: v02_shortjump, path: results/JAX_RecurrentPPO/20260721-044920_rppo_b04v02_shortjump_128env_n111}

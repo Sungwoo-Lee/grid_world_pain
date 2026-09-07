@@ -1,11 +1,11 @@
 #!/usr/bin/env python
-"""FIGURE 10 — bush dwell by wound level and by elapsed time.
+"""FIGURE 10 — bush hiding by wound level and by elapsed time.
 
 QUESTION. Injury accumulates over an episode and so does much else, so the wound-dwell link might
 just be a proxy for "late in the episode". Splitting by elapsed time as well as wound level tests
 that directly.
 
-MEASURE. Bush dwell in each (elapsed-step band x injury band) cell.
+MEASURE. Bush hiding in each (elapsed-step band x injury band) cell.
 
 CONDITIONING. Action steps only. No proximity condition — this figure is about the time confound,
 not about isolating the wound from threat.
@@ -43,7 +43,7 @@ def main():
         if not a.quiet and fi % 50 == 0:
             print(f"  shard {fi}/{len(files)} ({time.time()-t0:.0f}s)", flush=True)
     grid = (100*d/np.maximum(n, 1)).round(1)
-    print("\n=== Figure 10: bush dwell by elapsed time (rows) and wound (columns) ===")
+    print("\n=== Figure 10: bush hiding by elapsed time (rows) and wound (columns) ===")
     print(f"{'steps into episode':22}" + "".join(f"{c:>14}" for c in ILAB))
     for i in range(NT):
         print(f"{str(TB[i])+'-'+str(TB[i+1]):22}" +

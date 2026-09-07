@@ -1,7 +1,7 @@
 """FIGURE 6 - Which features of the world drive hiding, and does that change with the senses?
 
 QUESTION. Figures 1-9 each isolate one thing. This one steps back: across every feature of the
-world that is randomised before the agent acts, which ones move bush dwell, and by how much - in
+world that is randomised before the agent acts, which ones move bush hiding, and by how much - in
 each of the fourteen arms at once. If sight and smell matter, the map should change shape down the
 ladder, not just change intensity.
 
@@ -12,11 +12,11 @@ agent has done anything, so none of them can be a consequence of its behaviour. 
 consequences - how much it ate, how long it survived, how injured it got - are deliberately absent;
 they belong to a different question and would swamp this one.
 
-HOW IT IS COMPUTED. A quasi-binomial regression per arm on the episode-level bush-dwell rate
+HOW IT IS COMPUTED. A quasi-binomial regression per arm on the episode-level bush-hiding rate
 (bush steps out of steps), all nine features entered together so each is adjusted for the others.
 Standard errors are scaled by the Pearson overdispersion, which runs 13-27 here - without that
 scaling every p-value in the table would be meaningless. The number plotted is the effect of moving
-that feature by one standard deviation, converted to percentage points of bush dwell. Red = hides
+that feature by one standard deviation, converted to percentage points of bush hiding. Red = hides
 more, blue = hides less. Cells are directly comparable across arms because all fourteen replayed
 the same 1,000,000 worlds, so each feature has the same spread in every column.
 """
@@ -68,7 +68,7 @@ for i in range(len(terms)):
             ax.text(j, i, f"{M[i,j]:+.1f}", ha="center", va="center", fontsize=6.6,
                     color="white" if abs(M[i, j]) > v * 0.55 else PL.INK)
 cb = fig.colorbar(im, ax=ax, pad=0.015, fraction=0.028)
-cb.set_label("effect on bush dwell of moving this feature by one standard deviation\n"
+cb.set_label("effect on bush hiding of moving this feature by one standard deviation\n"
              "(percentage points; red = hides more, blue = hides less)", fontsize=8)
 ax.set_title("Adjusted for all the other features in the same regression. The number printed in "
              "each cell is the exact value,\nso rows that saturate the colour scale can still be "

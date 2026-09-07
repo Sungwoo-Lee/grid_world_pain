@@ -95,7 +95,7 @@ code{font-family:var(--mono);font-size:.85em;background:var(--panel);padding:.1e
 <p class="lede">Our agent is a small forager in a ten-by-ten field. It must eat to stay alive
 and avoid predators that hunt it. Bushes scattered around the field will conceal it &mdash; but a
 bush holds no food, so every moment hidden is a moment not spent eating. That trade is the whole of
-its problem, and the single number this document is about is the <strong>bush-dwell
+its problem, and the single number this document is about is the <strong>bush-hiding
 fraction</strong>: the share of an episode's steps the agent spends standing in a bush.</p>
 
 <div class="panel">
@@ -106,13 +106,13 @@ fraction</strong>: the share of an episode's steps the agent spends standing in 
     binds in roughly a quarter of episodes.</dd>
   <dt>what it can do</dt><dd>Six actions: move in one of four directions, <em>eat</em>, or
     <em>rest</em>. Entering a bush is just a move onto a bush tile &mdash; there is no separate
-    "hide" action, which is why bush dwell is measured as occupancy rather than as a choice.</dd>
+    "hide" action, which is why bush hiding is measured as occupancy rather than as a choice.</dd>
   <dt>what can hurt it</dt><dd>Three things: a <code>predator</code> (15&ndash;120 damage), a
     <code>hiding_predator</code> buried in the terrain, which damages the agent when it steps on one
     (15&ndash;45), and a <code>rock</code> (1&ndash;5). Injury runs 0&ndash;100 and 100 is fatal.</dd>
   <dt>&ldquo;near&rdquo;</dt><dd>Throughout this document, within <strong>2 tiles</strong> measured
     so that diagonals count the same as straights &mdash; a 5&times;5 box centred on the agent.</dd>
-  <dt>per step or per episode</dt><dd>Bush dwell is always a share of <em>steps</em>. Where a figure
+  <dt>per step or per episode</dt><dd>Bush hiding is always a share of <em>steps</em>. Where a figure
     reports something per episode &mdash; how often the agent starved, how long it survived &mdash;
     the row says so.</dd>
 </dl>
@@ -143,7 +143,7 @@ number in an observation vector. Everything below is about what a signal does to
 <div class="panel">
 <div class="fignum">Vocabulary &mdash; names taken from the run's own config file</div>
 <dl class="dl">
-  <dt>bush dwell</dt><dd>bush steps divided by the episode's steps &mdash; the share of its time
+  <dt>bush hiding</dt><dd>bush steps divided by the episode's steps &mdash; the share of its time
     the agent spends standing in a bush. Every chart axis in this document uses this one name. The outcome measured
     everywhere below. The <code>t=0</code> row is excluded from both: it records the initial state
     before any action was taken, so it is not a step.</dd>
@@ -220,7 +220,7 @@ world rolls them before the agent acts, these are causes.</p>
 <figure class="panel">
   <div class="fignum">Figure 2 &mdash; ranked causes</div>
   <div id="rank"></div>
-  <figcaption>Bar length is the change in bush dwell per one standard deviation (1 SD) of that factor
+  <figcaption>Bar length is the change in bush hiding per one standard deviation (1 SD) of that factor
   &mdash; a common scale, so that <code>predator_count</code> and <code>detection_range</code>
   can be honestly compared. This is <strong>every setting the environment varies</strong>: the
   store was audited column by column, and anything with more than one distinct value across a
@@ -229,7 +229,7 @@ world rolls them before the agent acts, these are causes.</p>
   <code>lose_interest_multiplier</code>, and every visual and resource property) are absent
   because they cannot have an effect. Three genuine controls land at zero:
   <code>rock_count</code>, where on the map the agent wakes up, and <code>max_stamina</code>.</figcaption>
-<div class="method"><b>How this was computed</b><dl><dt>outcome</dt><dd>bush dwell = bush steps &divide; action steps, per episode. The spawn row (<code>t=0</code>) is excluded from both, because the agent did not choose where it woke</dd><dt>model</dt><dd>a regression that models the <em>rate</em> of bush dwell directly &mdash; each step is a hit or a miss &mdash; so episode length does not have to be carried as a separate variable (a quasi-binomial GLM with a logit link)</dd><dt>error bars</dt><dd>steps within an episode are nowhere near independent, so the data are far lumpier than the model assumes. The uncertainty is widened by about 4&times; to compensate (overdispersion 13&ndash;25, absorbed by scaling the standard errors)</dd><dt>bar length</dt><dd>the change in bush dwell, in percentage points, for a <strong>typical episode-to-episode swing</strong> in that factor &mdash; one standard deviation, written 1 SD. Predator count varies by about 0.8 predators from episode to episode, so its bar is the effect of 0.8 predators, not of one. Using a common unit is what lets a count and a stamina value be compared at all</dd><dt>subsets</dt><dd>factors defined for every episode use all 1,000,000. Predator traits use the 333,743 exactly-one-predator episodes so the trait is unambiguous; rabbit olfaction uses the 333,766 one-rabbit episodes</dd><dt>a caution</dt><dd>rows are fitted on different subsets: factors defined in every episode use all 1,000,000, predator traits use only the 333,743 episodes with exactly one predator, rabbit odour the 333,766 with exactly one rabbit. The bars are comparable in unit, not in population</dd><dt>significance</dt><dd>not used for ranking. At n = 10<sup>6</sup> every factor clears any threshold; ordering is by effect size only</dd></dl></div>
+<div class="method"><b>How this was computed</b><dl><dt>outcome</dt><dd>bush hiding = bush steps &divide; action steps, per episode. The spawn row (<code>t=0</code>) is excluded from both, because the agent did not choose where it woke</dd><dt>model</dt><dd>a regression that models the <em>rate</em> of bush hiding directly &mdash; each step is a hit or a miss &mdash; so episode length does not have to be carried as a separate variable (a quasi-binomial GLM with a logit link)</dd><dt>error bars</dt><dd>steps within an episode are nowhere near independent, so the data are far lumpier than the model assumes. The uncertainty is widened by about 4&times; to compensate (overdispersion 13&ndash;25, absorbed by scaling the standard errors)</dd><dt>bar length</dt><dd>the change in bush hiding, in percentage points, for a <strong>typical episode-to-episode swing</strong> in that factor &mdash; one standard deviation, written 1 SD. Predator count varies by about 0.8 predators from episode to episode, so its bar is the effect of 0.8 predators, not of one. Using a common unit is what lets a count and a stamina value be compared at all</dd><dt>subsets</dt><dd>factors defined for every episode use all 1,000,000. Predator traits use the 333,743 exactly-one-predator episodes so the trait is unambiguous; rabbit olfaction uses the 333,766 one-rabbit episodes</dd><dt>a caution</dt><dd>rows are fitted on different subsets: factors defined in every episode use all 1,000,000, predator traits use only the 333,743 episodes with exactly one predator, rabbit odour the 333,766 with exactly one rabbit. The bars are comparable in unit, not in population</dd><dt>significance</dt><dd>not used for ranking. At n = 10<sup>6</sup> every factor clears any threshold; ordering is by effect size only</dd></dl></div>
 </figure>
 
 <p>Two features dominate everything else: whether predators exist at all, and how far they can
@@ -249,12 +249,12 @@ channels, it is mostly just reading one of them.</div>
 <p>Ranking compresses each factor to one number. Here is the actual shape of each &mdash; how
 hiding and how long it lives change as the factor is dialled up.</p>
 
-<div class="motive"><b>Why this analysis</b>A single number per factor hides its shape. A factor might matter only at the extremes, or saturate halfway, or move behaviour and survival in opposite directions. We plot bush dwell and survival together because the informative cases are exactly where the two diverge &mdash; a factor that changes how the agent behaves without changing how long it lives is telling us something different from one that changes both.</div>
+<div class="motive"><b>Why this analysis</b>A single number per factor hides its shape. A factor might matter only at the extremes, or saturate halfway, or move behaviour and survival in opposite directions. We plot bush hiding and survival together because the informative cases are exactly where the two diverge &mdash; a factor that changes how the agent behaves without changing how long it lives is telling us something different from one that changes both.</div>
 <figure class="panel">
   <div class="fignum">Figure 3 &mdash; dose&ndash;response, twelve factors</div>
   <div id="curves"></div>
   <div class="key">
-    <span><i class="sw" style="background:var(--cover)"></i>bush dwell</span>
+    <span><i class="sw" style="background:var(--cover)"></i>bush hiding</span>
     <span><i class="sw" style="background:var(--warm)"></i>steps survived</span>
   </div>
   <figcaption>Each panel dials one world feature from its lowest setting to its highest. Note how
@@ -372,7 +372,7 @@ confirms our hiding measure means what its name says.</figcaption>
     <span><i class="sw" style="background:var(--muted)"></i>every injury</span>
     <span><i class="sw" style="background:var(--cover)"></i>isolated injuries only</span>
   </div>
-  <figcaption>Bush dwell falls away in the steps before the hit &mdash; being out of cover is <em>how</em> it
+  <figcaption>Bush hiding falls away in the steps before the hit &mdash; being out of cover is <em>how</em> it
   got hit &mdash; reaches exactly zero at the moment of impact, then recovers. Measured against the baseline ten steps <em>before</em>, the rise
   afterwards is about <strong>+1 point</strong> counting every injury, or <strong>+4.6</strong>
   looking only at injuries with no follow-up damage. That second figure flatters itself: filtering
@@ -481,11 +481,11 @@ different animals hunting. Looking at those episodes on their own terms:</p>
   <div><b>+3.25</b><small>the SMALLER of the two</small></div>
   <div><b>+1.29</b><small>the gap between them</small></div>
 </div>
-<figcaption>Change in bush dwell per 1 SD, in the 332,310 two-predator episodes. Both
+<figcaption>Change in bush hiding per 1 SD, in the 332,310 two-predator episodes. Both
 predators matter, not just the more dangerous one, and the gap between them matters on its own
 &mdash; so the agent is responding to the total threat rather than tracking the worst individual.
 Note also that every effect roughly doubles in this higher-threat regime: <code>start_nutrition</code>
-moves bush dwell by +7.95 here against +3.59 in one-predator episodes, and
+moves bush hiding by +7.95 here against +3.59 in one-predator episodes, and
 <code>spawn_dist_to_bush</code> by &minus;7.48 against &minus;3.96.</figcaption>
 </div>
 
@@ -502,7 +502,7 @@ spent eating.</p>
   &mdash; a starving agent hides far more in every band. Read naively that says hunger drives
   hiding. It runs the other way.</figcaption>
 
-<div class="method"><b>How this was computed</b><dl><dt>rows</dt><dd>the same elapsed-step bands as Figure 10</dd><dt>columns</dt><dd><code>nutrition</code> at that step: &lt; 25, 25&ndash;50, 50&ndash;75, &ge; 75</dd><dt>cell</dt><dd>bush steps &divide; all steps in the cell</dd><dt>correction</dt><dd>an earlier draft read this figure's first row as showing randomised hunger has no immediate effect. It does not show that — the columns bin contemporaneous nutrition, not the randomised draw. Binned correctly by the assigned start value, bush dwell runs 16.4% to 21.4%, the opposite direction to the observational gradient</dd></dl></div>
+<div class="method"><b>How this was computed</b><dl><dt>rows</dt><dd>the same elapsed-step bands as Figure 10</dd><dt>columns</dt><dd><code>nutrition</code> at that step: &lt; 25, 25&ndash;50, 50&ndash;75, &ge; 75</dd><dt>cell</dt><dd>bush steps &divide; all steps in the cell</dd><dt>correction</dt><dd>an earlier draft read this figure's first row as showing randomised hunger has no immediate effect. It does not show that — the columns bin contemporaneous nutrition, not the randomised draw. Binned correctly by the assigned start value, bush hiding runs 16.4% to 21.4%, the opposite direction to the observational gradient</dd></dl></div>
 </figure>
 
 <div class="panel">
@@ -534,9 +534,9 @@ difference between them is the agent, never the world.</p>
 <figure class="panel">
   <div class="fignum">Figure 13 &mdash; the ten agents</div>
   <div id="runs"></div>
-  <figcaption>Each dot is one trained agent. They spread over about three points of bush dwell and
+  <figcaption>Each dot is one trained agent. They spread over about three points of bush hiding and
   ten steps of survival. For scale, the <em>world</em> moves those same quantities far further: going
-  from no predator to two moves bush dwell from 7.9% to 56.6% and survival from 416 steps to 51
+  from no predator to two moves bush hiding from 7.9% to 56.6% and survival from 416 steps to 51
   (Figure 3). Survival does fall as the recovery accel rate rises, but see the caution
   below.</figcaption>
 
@@ -625,7 +625,7 @@ pairs on each side, that could still be coincidence, but it is the pattern to wa
   <em>which world produces which behaviour</em> and reliably does almost nothing on average. This is
   the same shape the ten agents in section 7 produced.</figcaption>
 
-<div class="method"><b>How this was computed</b><dl><dt>decomposition</dt><dd>identical to Figure 14 but with two agents instead of ten</dd><dt>reading</dt><dd>the modulator's own share never exceeds 0.27% in any pair, while its interaction with the world runs 25&ndash;32% for bush dwell and 8&ndash;12% for survival</dd></dl></div>
+<div class="method"><b>How this was computed</b><dl><dt>decomposition</dt><dd>identical to Figure 14 but with two agents instead of ten</dd><dt>reading</dt><dd>the modulator's own share never exceeds 0.27% in any pair, while its interaction with the world runs 25&ndash;32% for bush hiding and 8&ndash;12% for survival</dd></dl></div>
 </figure>
 
 <h2>9 &nbsp;The measure built for the modulator</h2>
@@ -701,7 +701,7 @@ measure against these numbers will say whether it moved.</figcaption>
 <dl class="dl">
 <dt>what drives it<br>into cover</dt><dd><strong>Almost entirely things outside it.</strong> Predator
 count and <code>detection_range</code> dominate every other factor by an order of magnitude
-(&plusmn;16.0 and +12.5 percentage points of bush dwell per typical swing). Everything about the
+(&plusmn;16.0 and +12.5 percentage points of bush hiding per typical swing). Everything about the
 agent's own body sits below 3. Its only distal sense is smell, predator and rabbit odours overlap in
 57% of their mass, and it pays for that ambiguity: a rabbit that happens to smell predator-like
 costs it 18 survival steps, about 9%. That is the price of an unresolvable signal, not a mistake
@@ -710,7 +710,7 @@ costs it 18 survival steps, about 9%. That is the price of an unresolvable signa
 <dt>what its<br>nociception<br>explains</dt><dd><strong>Less than the raw numbers suggest, and not
 what they suggest.</strong> The raw wound-dwell gradient survives controlling for elapsed time but
 mostly reflects predator proximity. The randomised handle &mdash; a wound the world assigns before
-the agent acts &mdash; moves bush dwell by about &minus;1 percentage point. What does move
+the agent acts &mdash; moves bush hiding by about &minus;1 percentage point. What does move
 behaviour is the <em>origin</em> of the signal: at matched nociception, an agent that was actually
 struck dwells 40.9% against 22.6% for one that merely woke up wounded. The signal is being read as
 evidence about the world rather than acted on for its own sake &mdash; though a recurrent policy
@@ -766,7 +766,7 @@ the checkpoint, the config fingerprint, the seed base and the collection code ve
 </div>
 
 <h3>The outcome</h3>
-<p><strong>Bush dwell</strong> is bush steps divided by action steps, per episode. Two deliberate
+<p><strong>Bush hiding</strong> is bush steps divided by action steps, per episode. Two deliberate
 choices: the spawn row is excluded from both numerator and denominator, because the agent did not
 choose where it woke; and where bins are aggregated it is always a ratio of sums rather than a mean
 of per-episode ratios, so a 400-step episode counts more than a 20-step one.</p>
@@ -781,7 +781,7 @@ carried as a covariate.</dd>
 &chi;&sup2; over residual degrees of freedom, which lands between 13 and 25. Without that correction
 every interval would be roughly four times too narrow.</dd>
 <dt>reported effect</dt><dd>Coefficient &times; the factor's standard deviation &times;
-p&#772;(1&minus;p&#772;) &times; 100 — the percentage-point change in bush dwell for a
+p&#772;(1&minus;p&#772;) &times; 100 — the percentage-point change in bush hiding for a
 one-standard-deviation move, evaluated at the observed mean. This is a linearisation and is accurate
 for the small effects tabulated; it is <em>not</em> applied to the large endogenous exposure terms,
 where the model-implied change is far bigger than the linear approximation suggests.</dd>
@@ -908,7 +908,7 @@ const RANK=[["predator count",16.03],["detection range",12.55],
  const s=svg(W,H);
  xlab(s,W/2,16,"each panel: one world feature dialled from its LOWEST to its HIGHEST setting");
  s.appendChild(el("rect",{x:46,y:24,width:3,height:11,fill:V("--cover")}));
- s.appendChild(txt(54,33,"LEFT axis + green line: bush dwell","axt",null,V("--cover")));
+ s.appendChild(txt(54,33,"LEFT axis + green line: bush hiding","axt",null,V("--cover")));
  s.appendChild(el("rect",{x:340,y:24,width:3,height:11,fill:V("--warm")}));
  s.appendChild(txt(348,33,"RIGHT axis + amber line: steps survived","axt",null,V("--warm")));
  s.appendChild(txt(46,44,"each panel is scaled to its own range \u2014 compare SHAPES, not heights, between panels","axu"));
@@ -958,7 +958,7 @@ const RANK=[["predator count",16.03],["detection range",12.55],
   s.appendChild(el("line",{x1:ox,y1:yb,x2:ox+pw,y2:yb,stroke:V("--grid"),"stroke-width":.6}));
   s.appendChild(txt(ox,yb+13,"barely","ax")); s.appendChild(txt(ox+pw,yb+13,"strongly","ax","end"));
   xlab(s,ox+pw/2,yb+30,"how predator-like the smell is");}
- panel(pad,"dwell","Y: bush dwell",[10,40],v=>v.toFixed(0)+"%");
+ panel(pad,"dwell","Y: bush hiding",[10,40],v=>v.toFixed(0)+"%");
  panel(pad+pw+gap,"surv","Y: steps survived",[80,200],v=>v.toFixed(0));
  put("dd",s);})();
 
@@ -990,7 +990,7 @@ const RANK=[["predator count",16.03],["detection range",12.55],
   s.appendChild(txt(L+xw*Math.max(d[1],d[2])/70+50,y+17,"+"+(d[2]-d[1]).toFixed(1),"ax"));});
  for(const g of[0,20,40,60]){const gx=L+xw*g/70;
   s.appendChild(txt(gx,H-32,g+"%","ax","middle"));}
- xlab(s,L+xw/2,H-14,"bush dwell");
+ xlab(s,L+xw/2,H-14,"bush hiding");
  ylab(s,14,(H-40)/2,"what was nearby");
  put("aim",s);})();
 
@@ -1003,7 +1003,7 @@ const RANK=[["predator count",16.03],["detection range",12.55],
   s.appendChild(txt(L-8,y+15,d[0],"lbl","end"));
   s.appendChild(txt(L+xw*d[1]/100+7,y+15,d[1].toFixed(1)+"%","ax"));});
  for(const g of[0,25,50,75,100]){s.appendChild(txt(L+xw*g/100,H-32,g+"%","ax","middle"));}
- xlab(s,L+xw/2,H-14,"bush dwell");
+ xlab(s,L+xw/2,H-14,"bush hiding");
  ylab(s,14,(H-40)/2,"what was nearby");
  put("prox",s);})();
 
@@ -1030,7 +1030,7 @@ const RANK=[["predator count",16.03],["detection range",12.55],
  [[-10,"−10"],[-5,"−5"],[0,"0"],[5,"+5"],[10,"+10"],[15,"+15"],[20,"+20"],[24,"+25"]].forEach(d=>
    s.appendChild(txt(X(d[0]),H-mb+15,d[1],"ax","middle")));
  xlab(s,ml+pw/2,H-30,"steps before (−) and after (+) the moment of damage");
- ylab(s,16,mt+ph/2,"bush dwell");
+ ylab(s,16,mt+ph/2,"bush hiding");
  s.appendChild(txt(ml,mt-12,"dashed horizontal lines = the level ten steps before the hit","axu"));
  put("peri",s);})();
 </script>
@@ -1058,14 +1058,14 @@ const TB=D.timectrl.tb, band=[];
 for(let i=0;i<TB.length-1;i++)band.push("steps "+TB[i]+"–"+TB[i+1]);
 heat("hminj",D.timectrl.inj,band,["no wound","slight","moderate","severe"],
   "how far into the episode","how badly wounded the agent is",55,
-  "each cell shows the bush dwell");
+  "each cell shows the bush hiding");
 heat("hmnut",D.timectrl.nut,band,["starving","low","medium","well fed"],
   "how far into the episode","how well fed the agent is",75,
-  "each cell shows the bush dwell");
+  "each cell shows the bush hiding");
 heat("hits",D.hits.hide,["feels nothing","a little","some","a lot","severe","extreme"],
   ["0 strikes","1","2","3–4","5+"],
   "nociception level","how many times it has actually been struck this episode",45,
-  "each cell shows the bush dwell, counting only moments with no predator nearby");
+  "each cell shows the bush hiding, counting only moments with no predator nearby");
 
 /* F11 near-lethal */
 (function(){const v=D.lethal.hide,labs=["none","light","moderate","bad","severe","near fatal"];
@@ -1101,7 +1101,7 @@ heat("hits",D.hits.hide,["feels nothing","a little","some","a lot","severe","ext
     opacity:.25+.75*t}));
   s.appendChild(txt(X(A[k].survival),Y(A[k].overall)-11,k,"ax","middle"));});
  xlab(s,ml+pw/2,H-32,"steps survived  →");
- ylab(s,16,mt+ph/2,"bush dwell");
+ ylab(s,16,mt+ph/2,"bush hiding");
  s.appendChild(txt(ml,H-12,"paler dot = smaller recovery accel rate · darker dot = larger","axu"));
  put("runs",s);})();
 
@@ -1138,7 +1138,7 @@ heat("hits",D.hits.hide,["feels nothing","a little","some","a lot","severe","ext
   s.appendChild(txt(ml+pw+5,Y(v[5]),k,"ax","start"));});
  labs.forEach((l,j)=>s.appendChild(txt(X(j),H-mb+15,l,"ax","middle")));
  xlab(s,ml+pw/2,H-32,"nociception level  →");
- ylab(s,16,mt+ph/2,"bush dwell");
+ ylab(s,16,mt+ph/2,"bush hiding");
  s.appendChild(txt(ml,H-12,"one line per trained agent (ten in total)","axu"));
  put("armpain",s);})();
 

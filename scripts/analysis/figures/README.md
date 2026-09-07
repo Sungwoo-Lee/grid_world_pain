@@ -29,7 +29,7 @@ each run's own saved config, so the scripts work on any collected run.
 | script | figure | question it answers |
 |---|---|---|
 | `verify_environment_parity.py` | 1 | does today's environment reproduce the one this agent trained in? |
-| `fig02_factor_ranking.py` | 2 | which randomised world factors move bush dwell, ranked on a common scale |
+| `fig02_factor_ranking.py` | 2 | which randomised world factors move bush hiding, ranked on a common scale |
 | `fig03_dose_response.py` | 3 | the shape of each factor's effect, on dwell and on survival together |
 | `fig04_olfactory_ladders.py` | 4 | what happens as a predator's, and a rabbit's, odour becomes more predator-like |
 | `fig05_consequence_chain.py` | 5 | does the odour response cost food, and life? |
@@ -50,7 +50,7 @@ each run's own saved config, so the scripts work on any collected run.
 
 ## Conventions every script follows
 
-- **The outcome is bush dwell**: bush steps over episode steps. The `t=0` row is the initial state,
+- **The outcome is bush hiding**: bush steps over episode steps. The `t=0` row is the initial state,
   not a step, and is excluded from both.
 - **Anything the agent conditioned on is read from the previous row**, because the action producing
   row `t` was chosen on the row `t-1` observation.

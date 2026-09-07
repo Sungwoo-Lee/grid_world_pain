@@ -6,11 +6,11 @@ the trade-off on one pair of axes: how much each arm hides, what that does to ho
 where it lands on survival.
 
 WHY IT MATTERS FOR THE LADDER. If hiding were simply good, the best arms would be the ones that hide
-most. They are not. The relationship between bush dwell and survival across the fourteen arms is the
+most. They are not. The relationship between bush hiding and survival across the fourteen arms is the
 single clearest statement of what the senses are actually for: not to make the agent hide more, but
 to let it hide at the RIGHT moments and forage the rest of the time.
 
-HOW IT IS COMPUTED. One point per arm, from that arm's 1,000,000 episodes. Bush dwell is bush steps
+HOW IT IS COMPUTED. One point per arm, from that arm's 1,000,000 episodes. Bush hiding is bush steps
 over steps. Eating rate is `ate_food` events per step. Survival is mean episode length. All three
 pool over the same episodes, and every arm saw the same 1,000,000 worlds.
 """
@@ -44,7 +44,7 @@ for j, (yv, yl, ttl) in enumerate([
     ax[j].set_ylim(yv.min() - yp, yv.max() + yp)
     PL.label_points(ax[j], dwell, yv, arms, col, min_gap=0.064)
     r = np.corrcoef(dwell, yv)[0, 1]
-    ax[j].set_xlabel("bush dwell  (% of an episode's steps spent in a bush)")
+    ax[j].set_xlabel("bush hiding  (% of an episode's steps spent in a bush)")
     ax[j].set_ylabel(yl)
     ax[j].set_title(f"{ttl}\n(across the 14 arms: r = {r:+.2f}, dashed line is the fit)",
                     fontsize=9.3, loc="left", pad=8)
@@ -53,13 +53,13 @@ _steps = sum(int(np.load(f"{L.OUT_ROOT}/{a}_episodes.npz")["n_steps"].sum()) for
 L.record_samples("lad15_price_of_hiding", [
     dict(what="episodes behind the 14 points", used=POP["episodes"], total=POP["episodes"],
          note="each of the 14 points pools one arm's whole population into three numbers"),
-    dict(what="step rows behind bush dwell and eating rate", used=_steps, total=POP["steps"], note=""),
+    dict(what="step rows behind bush hiding and eating rate", used=_steps, total=POP["steps"], note=""),
     dict(what="points entering the correlation", used=len(arms), total=POP["arms"],
          note="the r values are computed across 14 ARM-LEVEL points, not across episodes - this "
               "is the smallest n on the page and the reason Section 8 qualifies the correlation")])
 
 PL.assert_labels_fit(fig, ax)
 PL.finish(fig, f"{L.FIG_ROOT}/lad15_price_of_hiding.png")
-print(f"{'arm':22}{'bush dwell':>12}{'survival':>11}{'eat/100 steps':>15}")
+print(f"{'arm':22}{'bush hiding':>12}{'survival':>11}{'eat/100 steps':>15}")
 for a, d, s, e in zip(arms, dwell, surv, eat):
     print(f"{a:22}{d:>11.1f}%{s:>11.1f}{e:>15.2f}")

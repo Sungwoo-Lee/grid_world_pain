@@ -13,7 +13,7 @@ that internal channel changes behaviour, and whether the answer depends on what 
 sense of the outside world.
 
 HOW IT IS COMPUTED. Episodes are split into four equal quarters of starting wound (0-25, 25-50,
-50-75, 75-100). Bush dwell is pooled over the first 25 steps of each episode only - the wound
+50-75, 75-100). Bush hiding is pooled over the first 25 steps of each episode only - the wound
 recovers over time, so a whole-episode average would dilute the assigned dose with whatever the
 agent's own behaviour produced later. The t=0 row is excluded.
 """
@@ -36,7 +36,7 @@ ax[0].set_xlim(-0.25, 3.7)
 ax[0].set_xticks(x); ax[0].set_xticklabels(L.INJ_NAMES)
 ax[0].set_xlabel("wound the agent was handed at the start of the episode\n"
                  "(injury level, 0-100, assigned at random by the environment)")
-ax[0].set_ylabel("bush dwell over the episode's first 25 steps\n(% of those steps spent in a bush)")
+ax[0].set_ylabel("bush hiding over the episode's first 25 steps\n(% of those steps spent in a bush)")
 ax[0].set_title("Response to a wound the agent did not earn", fontsize=9.5, loc="left", pad=8)
 ax[0].legend(handles=h, loc="lower right", fontsize=7.8)
 
@@ -47,7 +47,7 @@ ax[1].axvline(0, color=PL.INK, lw=1)
 ax[1].set_yticks(y); ax[1].set_yticklabels(PL.arm_ylabels(arms), fontsize=8)
 ax[1].set_ylabel("sensor-ladder arm  (poorest senses at the bottom)")
 ax[1].set_xlabel("wound sensitivity  -  a DIFFERENCE, in percentage points\n"
-                 "bush dwell in the heaviest wound quarter MINUS the lightest")
+                 "bush hiding in the heaviest wound quarter MINUS the lightest")
 ax[1].grid(axis="y", visible=False)
 for i, q in enumerate(v):
     ax[1].text(q + np.sign(q) * 0.06, y[i], f"{q:+.2f}", va="center",

@@ -10,7 +10,7 @@ Measures (see "Measures & definitions" in the study anchor doc):
   Bush use:
     bush_use_rate       % of EPISODES the agent ever enters the bush ("entered bush")
     bush_entry_step     steps until first entry onto the bush cell ('steps to reach bush')
-    bush_dwell          % of the episode's STEPS spent on the bush cell ("time in bush")
+    bush_hiding          % of the episode's STEPS spent on the bush cell ("time in bush")
   Distance to animal:
     fid                 animal-agent distance at the agent's first move (flight-initiation distance)
     time_near_animal    % of steps the animal is within 1 cell ("time near animal")
@@ -46,7 +46,7 @@ from src.utils.eval_recording import load_episode
 MEASURES = [
     ("bush_use_rate",    "entered bush\n(% of episodes)", "Bush use", 0, True),
     ("bush_entry_step",  "steps to\nreach bush",          "Bush use", 0, False),
-    ("bush_dwell",       "time in bush\n(%)",             "Bush use", 0, True),
+    ("bush_hiding",       "time in bush\n(%)",             "Bush use", 0, True),
     ("fid",              "flight-initiation\ndistance (FID)", "Distance to animal", 1, False),
     ("time_near_animal", "time near\nanimal (%)",         "Distance to animal", 0, True),
     ("closest_approach", "closest\napproach",             "Distance to animal", 2, False),
@@ -100,7 +100,7 @@ def episode_measures(ep):
         fid = float(ad[dep]) if dep is not None else np.nan
     return {"bush_use_rate": 1.0 if entry is not None else 0.0,
             "bush_entry_step": float(entry) if entry is not None else np.nan,
-            "bush_dwell": float(np.mean(in_bush)),
+            "bush_hiding": float(np.mean(in_bush)),
             "fid": fid, "time_near_animal": near, "closest_approach": closest,
             "time_moving": time_moving, "spatial_spread": spatial_spread,
             "pursuit_duration": pursuit, "injury_change": inj, "survival_steps": float(T)}

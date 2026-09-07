@@ -48,7 +48,7 @@ for j, (key, ttl) in enumerate([("pd", "Nearest PREDATOR - a real threat"),
     ax[j].set_xticks(x); ax[j].set_xticklabels(L.DIST_NAMES)
     ax[j].set_xlim(0.7, L.DIST_MAX + 1.6)
     PL.stagger_end_labels(ax[j], ends)
-ax[0].set_ylabel("bush dwell  (% of those steps spent in a bush)")
+ax[0].set_ylabel("bush hiding  (% of those steps spent in a bush)")
 h = [plt.Line2D([], [], color=PL.GROUP_YES, lw=2.2, label=L.GROUP_LABEL[True] + "  (9 arms)"),
      plt.Line2D([], [], color=PL.GROUP_NO, lw=2.2, label=L.GROUP_LABEL[False] + "  (5 arms)"),
      plt.Line2D([], [], color=PL.MUTED, lw=2.4, marker="o", ms=4,

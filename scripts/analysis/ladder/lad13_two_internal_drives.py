@@ -15,11 +15,11 @@ is what makes them comparable to each other AND to Figure 8.
 
 The two panels DO share a y-range. An earlier draft gave each its own, which made the wound
 panel's slopes look as steep as the hunger panel's - the exact opposite of the finding. On one
-scale the comparison is read directly: hunger moves bush dwell several times as far as the wound
+scale the comparison is read directly: hunger moves bush hiding several times as far as the wound
 does, in every arm.
 
 HOW IT IS COMPUTED. Episodes are split into four equal quarters of the assigned value (0-25, 25-50,
-50-75, 75-100). Within each quarter, bush dwell is (bush steps) / (steps) pooled over the first 25
+50-75, 75-100). Within each quarter, bush hiding is (bush steps) / (steps) pooled over the first 25
 steps of every episode in it, with the t=0 row excluded from both.
 """
 import sys, os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -47,7 +47,7 @@ for j, (dat, ttl, xl) in enumerate([
     ax[j].set_xlim(-0.25, 3.75)
     ax[j].set_xticks(x); ax[j].set_xticklabels(L.INJ_NAMES)
     ax[j].set_xlabel(xl)
-    ax[j].set_ylabel("bush dwell over the episode's first 25 steps\n(% of those steps spent in a bush)")
+    ax[j].set_ylabel("bush hiding over the episode's first 25 steps\n(% of those steps spent in a bush)")
     ax[j].set_title(ttl, fontsize=9.5, loc="left", pad=8)
 ax[1].legend(handles=h, loc="lower right", fontsize=7.8)
 POP = L.population()

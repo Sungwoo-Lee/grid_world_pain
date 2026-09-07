@@ -14,6 +14,15 @@ last_updated: 2026-09-03
 did not publish it, read that URL first and pass it as `url` &mdash; publishing without it makes a
 second, separate artifact instead of a new version of this one.
 
+
+> **A word changed, the quantity did not.** This study used to call the measure **bush dwell**; it is
+> now **bush hiding** — same quantity, same numbers, clearer name, changed 2026-09-07 across the
+> project. **The figures still show the old word, and so do the data-accounting lines beneath them**,
+> because both were produced by a run predating the rename and re-running fifteen figures to change
+> one word buys nothing. A y-axis reading "bush dwell" beside a caption reading "bush hiding" is the
+> same measure, not a stale number.
+
+
 ## Question
 
 An agent lives in a 10&times;10 grid world. It walks one square at a time, in any of eight
@@ -83,7 +92,7 @@ Each is tagged with how much weight it can bear, for the reason given in the cav
    *(pattern across 12 of 14 arms; the effect is small, window-dependent, and its control channel is
    contaminated &mdash; the weakest finding here)*
 7. **Hunger outweighs the wound &mdash; by 1.6&times; to 4.5&times; depending on the arm &mdash; and
-   hiding is a cost, not a good.** Across the fourteen arms, more bush dwell goes with shorter life
+   hiding is a cost, not a good.** Across the fourteen arms, more bush hiding goes with shorter life
    and less eating. *(pattern across arms; see the caveat in Section 8 about n = 14. Part of that
    ratio is sensor dynamics rather than drive strength: hunger reaches the agent instantly through
    satiation, while injury arrives through a twelve-step delay, so a 25-step window flatters hunger.)*
@@ -130,9 +139,9 @@ An independent adversarial review of this analysis, including findings not yet a
 |---|---|
 | **arm** | one of the fourteen trained agents, together with the sensory configuration it was trained under |
 | **ladder** | the set of fourteen, arranged so that most sit one single setting away from another |
-| **bush dwell** | the share of an episode's steps the agent spent standing inside a bush. A bush hides it from predators and contains no food |
+| **bush hiding** | the share of an episode's steps the agent spent standing inside a bush. A bush hides it from predators and contains no food |
 | **percentage point** (pp) | the arithmetic difference between two percentages. Going from 14% to 18% is +4 pp, not +29% |
-| **a rate vs a difference** | a *rate* ("bush dwell, % of steps") is a share of something and can never be negative. A *difference* ("+4 pp") is one rate minus another and obviously can be. Several figures here plot differences, and each such axis says so; a negative value there means the agent hid **less** in one condition than the other, never that a percentage went below zero |
+| **a rate vs a difference** | a *rate* ("bush hiding, % of steps") is a share of something and can never be negative. A *difference* ("+4 pp") is one rate minus another and obviously can be. Several figures here plot differences, and each such axis says so; a negative value there means the agent hid **less** in one condition than the other, never that a percentage went below zero |
 | **injury level** | the wound in the agent's body, 0-100. The agent has **no sensor for it** |
 | **perceived nociception** | the one number the agent actually receives about its own injury: the last twelve injury levels convolved with an alpha kernel, the current step weighted zero, the buffer zeroed at reset. It lags the injury by several steps and is exactly zero for the first two steps of every episode |
 | **appearance channel** | one of the numbers in the vector describing how a thing looks. With eight channels, food, rock, predator and rabbit each occupy a different one, so the agent can tell them apart. With one channel, everything it sees adds to the same number, so it registers *that* something is there and not *what* |
@@ -146,7 +155,7 @@ An independent adversarial review of this analysis, including findings not yet a
 | **nociceptor** | the agent's internal injury channel. It holds the last twelve injury *levels* (not damage events), zeroed at reset, and reports a weighted blend of them that emphasises the recent past and fades the older entries &mdash; a smoothed running trace of how hurt the body is |
 | **quasi-binomial regression** | a model for a proportion &mdash; here, what fraction of an episode's steps were spent in a bush &mdash; that does not assume every step is an independent coin flip. Steps within one episode are obviously not independent, and this model allows for that |
 | **overdispersion** | how much more variable the data are than the independent-coin-flip model would predict. It runs 13&ndash;27 here, meaning the data are over a dozen times more variable than that idealised model allows. Standard errors are multiplied by its square root; without that correction every p-value in this document would be far too small |
-| **effect per standard deviation** | how much bush dwell moves when a feature moves by one standard deviation of its own spread across episodes &mdash; *not* by one unit. It lets features measured in different units be compared on one scale |
+| **effect per standard deviation** | how much bush hiding moves when a feature moves by one standard deviation of its own spread across episodes &mdash; *not* by one unit. It lets features measured in different units be compared on one scale |
 | **seed** | the number fixing the random initial weights and every random choice during training. All fourteen arms share one |
 
 **Arm names.** The letter is the family and the suffix is the setting. `A` baseline, `B` olfaction,
@@ -195,7 +204,7 @@ Not every analysis uses all 1,000,000. Stating this once, so no figure has to ca
 
 | analysis | episodes | why |
 |---|---|---|
-| survival, bush dwell, how it ends (Figures 1&ndash;3, 15) | 1,000,000 | everything |
+| survival, bush hiding, how it ends (Figures 1&ndash;3, 15) | 1,000,000 | everything |
 | nearest-predator distance (Figures 4, 5, 10) | ~665,000 | a third of episodes contain no predator |
 | nearest-rabbit distance (Figures 4, 5, 10) | ~665,000 | a third contain no rabbit |
 | rabbit odour (Figures 11, 12) | ~665,000 | needs a rabbit to have an odour |
@@ -206,27 +215,27 @@ Not every analysis uses all 1,000,000. Stating this once, so no figure has to ca
 
 ## 1. What each sense buys
 
-![Survival and bush dwell for all fourteen arms](figures/lad01_ladder_overview.png)
+![Survival and bush hiding for all fourteen arms](figures/lad01_ladder_overview.png)
 
-**Figure 1.** Left: mean survival. Right: bush dwell. Both pooled over each arm's 1,000,000 episodes.
+**Figure 1.** Left: mean survival. Right: bush hiding. Both pooled over each arm's 1,000,000 episodes.
 
-**Axes.** Both panels: y = the fourteen sensor-ladder arms, poorest senses at the bottom. x, left = mean survival in steps per episode; x, right = bush dwell as a percentage of an episode's steps. Both x-axes start at zero.
+**Axes.** Both panels: y = the fourteen sensor-ladder arms, poorest senses at the bottom. x, left = mean survival in steps per episode; x, right = bush hiding as a percentage of an episode's steps. Both x-axes start at zero.
 
 **Motivation.** The most basic question about a sense is whether having it helps. If it does, the
 agents that have it should live longer.
 
-**Method.** Survival is the mean episode length. Bush dwell is (bush steps) &divide; (steps), pooled
+**Method.** Survival is the mean episode length. Bush hiding is (bush steps) &divide; (steps), pooled
 over every episode of the arm. The `t=0` row is the world as handed to the agent, not a step it
 took, so it is excluded from both the numerator and the denominator.
 
 **Reading.** Survival runs from 166 steps to 264 &mdash; the best arm lives about 1.6 times as long
-as the worst, produced entirely by sensory settings. Bush dwell moves far less, 14.0% to 20.2%. The
+as the worst, produced entirely by sensory settings. Bush hiding moves far less, 14.0% to 20.2%. The
 two are *anti*-correlated: the agents that hide most are the ones that die soonest. That is the
 first hint that hiding is not the thing the senses buy.
 
 **Table 2.** outcome per arm
 
-| arm | mean survival (steps) | bush dwell (%) | killed (%) | starved (%) | reached the limit (%) | food per 100 steps |
+| arm | mean survival (steps) | bush hiding (%) | killed (%) | starved (%) | reached the limit (%) | food per 100 steps |
 |---|---|---|---|---|---|---|
 | `A_baseline` | 166.0 | 15.9 | 45.9 | 30.6 | 23.5 | 21.32 |
 | `B_olf_only` | 211.3 | 20.2 | 47.3 | 24.4 | 28.3 | 20.84 |
@@ -249,7 +258,7 @@ first hint that hiding is not the thing the senses buy.
 
 **Figure 2.** Each row is one arm minus its reference arm &mdash; a change of exactly one setting.
 
-**Axes.** Both panels: y = the twelve single-setting changes, each labelled with the arm it compares and the reference it is compared against. x, left = change in mean survival in steps; x, right = change in bush dwell in percentage points. Both x-axes are differences and are centred on zero, so a bar left of the line means the change made that quantity smaller.
+**Axes.** Both panels: y = the twelve single-setting changes, each labelled with the arm it compares and the reference it is compared against. x, left = change in mean survival in steps; x, right = change in bush hiding in percentage points. Both x-axes are differences and are centred on zero, so a bar left of the line means the change made that quantity smaller.
 
 **Motivation.** Figure 1's ranking confounds everything: the sharp-sighted agent differs from the
 near-blind one in several settings at once. The ladder was built so that most arms sit one setting
@@ -286,7 +295,7 @@ the above.
 
 **Table 3.** single-variable sensor changes
 
-| change | arm | compared with | survival (steps) | bush dwell (pp) |
+| change | arm | compared with | survival (steps) | bush hiding (pp) |
 |---|---|---|---|---|
 | olfactory grid range 1 - a 5-cell smell diamond | `B_olf_only` | `A_baseline` | +45.3 | +4.4 |
 | visual range 1 (5 cells) instead of 2 (13 cells) | `R1_range1` | `V5_sharp` | -8.0 | +1.9 |
@@ -359,13 +368,13 @@ And the ladder is non-monotonic in exactly the way a reach-versus-precision trad
 survival runs 240.9 &rarr; 250.3 &rarr; 258.8 &rarr; **264.2** &rarr; 238.9 as the blur scale goes
 4.0 &rarr; 2.0 &rarr; 1.0 &rarr; 0.5 &rarr; off. There is an optimum in the middle, at 0.5.
 
-![Bush dwell against distance to the nearest animal](figures/lad04_threat_distance_curve.png)
+![Bush hiding against distance to the nearest animal](figures/lad04_threat_distance_curve.png)
 
-**Figure 4.** Bush dwell against how far the nearest predator (left) or rabbit (right) was when the
+**Figure 4.** Bush hiding against how far the nearest predator (left) or rabbit (right) was when the
 agent chose its move. Colour is the grouping of Section 4; the four arms the text discusses are
 drawn thick and named.
 
-**Axes.** Both panels: x = distance from the agent to the nearest animal at the moment it chose its move, in chebyshev steps, from 1 (adjacent) to 8 or more. y = bush dwell as a percentage of those steps. Both panels share one y-scale. The y-axis does not start at zero; it is cropped to the range the curves occupy.
+**Axes.** Both panels: x = distance from the agent to the nearest animal at the moment it chose its move, in chebyshev steps, from 1 (adjacent) to 8 or more. y = bush hiding as a percentage of those steps. Both panels share one y-scale. The y-axis does not start at zero; it is cropped to the range the curves occupy.
 
 **Motivation.** Hiding is only defensive if the threat triggers it. A flat curve would mean the
 agent hides on a schedule; a curve that rises as the animal approaches means it hides in response to
@@ -379,7 +388,7 @@ all episodes have none, and including them would silently make "there is no pred
 group.
 
 **Reading.** Every arm hides far more with a predator close than with one far away. The rise is not
-perfectly monotone at the very closest bin: in `B_olf_only`, `A_baseline` and four others, bush dwell
+perfectly monotone at the very closest bin: in `B_olf_only`, `A_baseline` and four others, bush hiding
 is *higher* at distance 2 than at distance 1. That dip is expected rather than puzzling &mdash; at
 distance 1 the agent is often already caught in the open with a predator adjacent, which is a
 different situation from spotting one approaching. The rabbit curves separate into two families,
@@ -395,7 +404,7 @@ which is the subject of the next section.
 whose length is that arm's discrimination. Right: the rabbit response alone, coloured by whether the
 arm's sight can resolve identity.
 
-**Axes.** Both panels: y = the fourteen arms, poorest senses at the bottom. x = a DIFFERENCE in percentage points — bush dwell when the animal is 1-2 cells away minus bush dwell when it is 6 or more cells away. Left panel shows that difference for a predator and for a rabbit; right panel shows the rabbit one alone. Below zero means the agent hides LESS when the animal is near.
+**Axes.** Both panels: y = the fourteen arms, poorest senses at the bottom. x = a DIFFERENCE in percentage points — bush hiding when the animal is 1-2 cells away minus bush hiding when it is 6 or more cells away. Left panel shows that difference for a predator and for a rabbit; right panel shows the rabbit one alone. Below zero means the agent hides LESS when the animal is near.
 
 **Motivation.** A rabbit cannot hurt the agent. Hiding when one comes near costs foraging time and
 returns nothing. So the rabbit response is a clean measure of wasted defence &mdash; and asking which
@@ -479,15 +488,15 @@ overlap** &mdash; the largest value among the nine never reaches the smallest am
 **Figure 6.** Every feature of the world that is randomised before the agent acts, against every arm.
 Red means the agent hides more; blue, less.
 
-**Axes.** y = the nine features of the world that are randomised before the agent acts. x = the fourteen arms, poorest senses on the left. The colour of each cell, and the number printed in it, is the effect on bush dwell in percentage points of moving that feature by one standard deviation — red for more hiding, blue for less.
+**Axes.** y = the nine features of the world that are randomised before the agent acts. x = the fourteen arms, poorest senses on the left. The colour of each cell, and the number printed in it, is the effect on bush hiding in percentage points of moving that feature by one standard deviation — red for more hiding, blue for less.
 
 **Motivation.** Figures 1&ndash;5 each isolate one thing. This one steps back and asks which world
-features move bush dwell at all, in every arm at once.
+features move bush hiding at all, in every arm at once.
 
-**Method.** A quasi-binomial regression per arm on the episode-level bush-dwell rate, with all nine
+**Method.** A quasi-binomial regression per arm on the episode-level bush-hiding rate, with all nine
 exogenous features entered together so each is adjusted for the others. Standard errors are scaled
 by the Pearson overdispersion. The number plotted is the effect of moving the feature by one
-standard deviation of its own spread, in percentage points of bush dwell &mdash; **not** the effect
+standard deviation of its own spread, in percentage points of bush hiding &mdash; **not** the effect
 of one more predator or one more rabbit. (One standard deviation of the rabbit count is 0.82
 rabbits, so a per-rabbit effect would be about 22% larger than the number shown.) Only features
 drawn at reset are included; consequences of the agent's own behaviour belong to a different
@@ -504,25 +513,25 @@ afford to be selective.
 
 > **Two rows in this figure look like they contradict the rest of the report, and here is why they
 > do not.** `wound it woke up with` reads &minus;0.5 to +0.2 &mdash; essentially nothing &mdash;
-> while Section 5 reports the wound moving bush dwell by up to +13 points. `how well fed it woke up`
+> while Section 5 reports the wound moving bush hiding by up to +13 points. `how well fed it woke up`
 > reads +0.6 to +1.7, against Section 6's much larger numbers. Both regressions here are fitted on
-> the **whole-episode** bush-dwell rate, and both of those internal states are *transient*: the wound
+> the **whole-episode** bush-hiding rate, and both of those internal states are *transient*: the wound
 > is 90% healed by step 28. Averaging over an episode of 250 steps dilutes a 30-step effect almost to
 > nothing. Section 5 shows the full time course, and Section 7 shows exactly how much the choice of
 > window changes the answer.
 
 ![The odour false alarm, adjusted](figures/lad07_odour_regression.png)
 
-**Figure 7.** The effect of a predator's and a rabbit's odour strength on bush dwell, with the rest
+**Figure 7.** The effect of a predator's and a rabbit's odour strength on bush hiding, with the rest
 of the world held fixed.
 
-**Axes.** y = the fourteen arms, poorest senses at the bottom. x = the effect on bush dwell, in percentage points, of a one-standard-deviation stronger smell, with everything else in the regression held fixed. Centred on zero; right of the line means the agent hides more when that animal smells stronger.
+**Axes.** y = the fourteen arms, poorest senses at the bottom. x = the effect on bush hiding, in percentage points, of a one-standard-deviation stronger smell, with everything else in the regression held fixed. Centred on zero; right of the line means the agent hides more when that animal smells stronger.
 
 **Motivation.** Figure 5 uses proximity. This uses smell, which is the genuinely ambiguous cue, and
 puts it inside a regression so the result cannot be explained by strong-smelling worlds differing in
 some other way.
 
-**Method.** Quasi-binomial regression on the episode-level bush-dwell rate, restricted to the
+**Method.** Quasi-binomial regression on the episode-level bush-hiding rate, restricted to the
 &asymp;111,200 episodes per arm with exactly one predator and one rabbit, so that "the predator's
 smell" and "the rabbit's smell" are each a single well-defined number rather than an average over
 several animals. Adjusted for the number of bushes, rocks, food patches and ambush predators, the
@@ -568,14 +577,14 @@ itself wrote &mdash; perceptual noise is disabled in this configuration, so the 
 the policy's input &mdash; and the worst disagreement over 1.36 million rows was **2.2 &times;
 10⁻⁷**, which is float32 rounding.
 
-![Bush dwell against the randomised starting wound](figures/lad08_injury_dose_response.png)
+![Bush hiding against the randomised starting wound](figures/lad08_injury_dose_response.png)
 
-**Figure 8.** Bush dwell over each episode's first 25 steps, against the injury level the environment
+**Figure 8.** Bush hiding over each episode's first 25 steps, against the injury level the environment
 handed the agent at `t=0`.
 
-**Axes.** Left: x = the injury level the environment handed the agent at t=0, in four equal quarters of the 0-100 range; y = bush dwell over the episode's first 25 steps, as a percentage of those steps. Right: y = the fourteen arms; x = the difference between that arm's heaviest and lightest quarter, in percentage points. The left panel's y-axis does not start at zero; it is cropped to the range the curves occupy.
+**Axes.** Left: x = the injury level the environment handed the agent at t=0, in four equal quarters of the 0-100 range; y = bush hiding over the episode's first 25 steps, as a percentage of those steps. Right: y = the fourteen arms; x = the difference between that arm's heaviest and lightest quarter, in percentage points. The left panel's y-axis does not start at zero; it is cropped to the range the curves occupy.
 
-**Method.** Episodes are split into four equal quarters of the starting wound. Bush dwell is pooled
+**Method.** Episodes are split into four equal quarters of the starting wound. Bush hiding is pooled
 over the **first 25 steps only**. Figure 9 explains why 25, and Figure 14 shows what happens if you
 choose otherwise.
 
@@ -589,10 +598,10 @@ with neither directional smell nor useful sight.
 
 **Figure 9.** A: the injury level and the perceived signal, for the agents that woke in the lightest
 and heaviest quarters. B: the three quantities as fractions of their own peak, so their timing can be
-compared. C: bush dwell against how hurt the agent is feeling *right now*. D: the food the caution
+compared. C: bush hiding against how hurt the agent is feeling *right now*. D: the food the caution
 cost. Faint lines are individual arms; bold lines are the two groups.
 
-**Axes.** Panels A, B and D: x = step number within the episode, 0 to 100. y in A = injury level and perceived signal, both on the same 0-100 scale; y in B = each curve as a fraction of its own maximum, so only shape and timing are comparable, not size; y in D = the nutrition difference between the heaviest and lightest starting-wound quarters, on the 0-100 nutrition scale. Panel C: x = the perceived nociception the agent is receiving right now, in four equal quarters of the 0-100 range; y = bush dwell as a percentage of those steps. None of the four y-axes starts at zero; each is cropped to its own data.
+**Axes.** Panels A, B and D: x = step number within the episode, 0 to 100. y in A = injury level and perceived signal, both on the same 0-100 scale; y in B = each curve as a fraction of its own maximum, so only shape and timing are comparable, not size; y in D = the nutrition difference between the heaviest and lightest starting-wound quarters, on the 0-100 nutrition scale. Panel C: x = the perceived nociception the agent is receiving right now, in four equal quarters of the 0-100 range; y = bush hiding as a percentage of those steps. None of the four y-axes starts at zero; each is cropped to its own data.
 
 **Motivation.** Figure 8 measures over 25 steps. Why 25? Widen the window and the effect shrinks: in
 the reference agent it runs +4.0 percentage points at 25 steps, +0.7 at 50, and &minus;0.4 over the
@@ -601,7 +610,7 @@ a fair thing to suspect. The answer is that the window is not tracking the wound
 tracking how long the agent can *feel* the wound.
 
 **Method.** A step-by-step sweep records, for each arm and each quarter of the assigned starting
-wound, the injury still carried, the reconstructed perceived signal, bush dwell, and nutrition at
+wound, the injury still carried, the reconstructed perceived signal, bush hiding, and nutrition at
 every step to 120. Panels A, B and D are keyed to the **randomised** starting wound and are therefore
 causal &mdash; the perceived signal is a deterministic function of that assigned wound, so keying to
 one or the other does not change what is being manipulated, only what is being described. Panel C is
@@ -629,7 +638,7 @@ It is the one arm with neither directional smell nor useful sight.
 
 **The size of the effect was also understated.** Binning by the assigned wound averages over the
 whole ramp-up window in which the agent feels almost nothing, which is why Figure 8's numbers are
-small. Binned by what the agent is actually feeling (panel C), bush dwell runs from **12.6&ndash;17.9%
+small. Binned by what the agent is actually feeling (panel C), bush hiding runs from **12.6&ndash;17.9%
 at the lowest quarter of felt nociception to 31.7&ndash;49.5% at the highest** &mdash; a spread three
 to five times larger than anything in Figure 8. That panel is associational, so it is not a
 substitute for the causal contrast; but it is the right scale for the perceptual effect.
@@ -676,7 +685,7 @@ differently-selected survivors.
 **Figure 10.** Panels A and B: response to a nearby rabbit and to a nearby predator, at the lightest
 and heaviest starting wound, **on one shared scale**. Panel C: the two shifts.
 
-**Axes.** All three panels: y = the fourteen arms, poorest senses at the bottom. x in A and B = a DIFFERENCE in percentage points, bush dwell with the animal 1-2 cells away minus 6 or more cells away, drawn once for the lightest and once for the heaviest starting wound, and A and B share one scale. x in C = the difference between those two, in percentage points.
+**Axes.** All three panels: y = the fourteen arms, poorest senses at the bottom. x in A and B = a DIFFERENCE in percentage points, bush hiding with the animal 1-2 cells away minus 6 or more cells away, drawn once for the lightest and once for the heaviest starting wound, and A and B share one scale. x in C = the difference between those two, in percentage points.
 
 **Motivation.** Figure 8 shows a wounded agent hides more. That, on its own, is ordinary caution. The
 claim that would earn the word *hypervigilance* is stronger and more specific: that being wounded
@@ -701,7 +710,7 @@ is: small.
 **Figure 11.** Left: how strongly each arm responds to a strong rabbit smell, having begun the
 episode nearly unhurt or badly wounded. Right: the difference, with the predator smell as a control.
 
-**Axes.** Both panels: y = the fourteen arms, poorest senses at the bottom. x, left = a DIFFERENCE in percentage points, bush dwell in the strongest-smelling quarter of episodes minus the weakest, drawn once for episodes begun unhurt and once for begun badly wounded. x, right = the difference between those two.
+**Axes.** Both panels: y = the fourteen arms, poorest senses at the bottom. x, left = a DIFFERENCE in percentage points, bush hiding in the strongest-smelling quarter of episodes minus the weakest, drawn once for episodes begun unhurt and once for begun badly wounded. x, right = the difference between those two.
 
 **Motivation.** Proximity is not the ambiguous cue. For an agent that can see, a nearby animal is a
 *resolved* cue &mdash; it can look and tell what the animal is. Smell is the ambiguous one, and an
@@ -709,7 +718,7 @@ animal's odour is redrawn at random every episode. If a wound shifts the agent's
 the channel where it should show.
 
 **Method.** Episodes are split into quartiles of the odour intensity drawn for their rabbits. The
-*slope* is bush dwell in the strongest-smelling quarter minus the weakest, over the first 25 steps,
+*slope* is bush hiding in the strongest-smelling quarter minus the weakest, over the first 25 steps,
 computed once over episodes that began nearly unhurt and once over those that began badly wounded.
 The bar is the difference. Episodes containing no rabbit are excluded.
 
@@ -754,13 +763,13 @@ are *not* occlusion arms, so "largest in the occlusion arms" holds for the absol
 for the gap. This is the least secure finding in the report and the one most in need of the
 seed replication.
 
-![Bush dwell against the randomised odour draw](figures/lad12_odour_false_alarm.png)
+![Bush hiding against the randomised odour draw](figures/lad12_odour_false_alarm.png)
 
-**Figure 12.** The underlying curves: bush dwell against how strongly this episode's rabbits (left)
+**Figure 12.** The underlying curves: bush hiding against how strongly this episode's rabbits (left)
 and predators (right) happened to smell. Bold lines pool the counts within each group; faint lines
 are the fourteen individual arms.
 
-**Axes.** Both panels: x = how strongly that episode's animals happened to smell, in four quartiles of the randomised odour draw, weakest on the left. y = bush dwell over the episode's first 25 steps, as a percentage of those steps. Both panels share one y-scale. The y-axis does not start at zero; it is cropped to the range the curves occupy.
+**Axes.** Both panels: x = how strongly that episode's animals happened to smell, in four quartiles of the randomised odour draw, weakest on the left. y = bush hiding over the episode's first 25 steps, as a percentage of those steps. Both panels share one y-scale. The y-axis does not start at zero; it is cropped to the range the curves occupy.
 
 **Reading.** The rabbit panel rises for both groups and much more steeply for the five that cannot
 resolve identity. The predator panel dips at the loudest quartile, and that dip is real rather than
@@ -773,7 +782,7 @@ means a loud rabbit is genuinely harder to rule out, so part of the "false" alar
 
 **Table 6.** what a randomised starting wound does
 
-| arm | bush dwell, first 25 steps (pp per full wound range) | shift in rabbit proximity (pp) | shift in predator proximity (pp) | wound amplifies rabbit odour (pp) | wound amplifies predator odour (pp) |
+| arm | bush hiding, first 25 steps (pp per full wound range) | shift in rabbit proximity (pp) | shift in predator proximity (pp) | wound amplifies rabbit odour (pp) | wound amplifies predator odour (pp) |
 |---|---|---|---|---|---|
 | `A_baseline` | -2.34 | +0.01 | +3.52 | -0.73 | -0.70 |
 | `B_olf_only` | +3.38 | +0.06 | -0.33 | +0.67 | -0.32 |
@@ -794,12 +803,12 @@ means a loud rabbit is genuinely harder to rule out, so part of the "false" alar
 
 ## 6. The wound competes with hunger, and loses
 
-![Bush dwell against starting hunger and starting wound](figures/lad13_two_internal_drives.png)
+![Bush hiding against starting hunger and starting wound](figures/lad13_two_internal_drives.png)
 
-**Figure 13.** Bush dwell over the first 25 steps against the two internal states the environment
+**Figure 13.** Bush hiding over the first 25 steps against the two internal states the environment
 assigns at random, on a shared y-scale.
 
-**Axes.** Both panels: x = the internal state the environment assigned at t=0, in four equal quarters of the 0-100 range — nutrition on the left (so the left end is an agent that woke starving) and injury on the right. y = bush dwell over the episode's first 25 steps, as a percentage of those steps. Both panels share one y-scale so their slopes can be compared directly. The shared y-axis does not start at zero; it is cropped to the range the curves occupy.
+**Axes.** Both panels: x = the internal state the environment assigned at t=0, in four equal quarters of the 0-100 range — nutrition on the left (so the left end is an agent that woke starving) and injury on the right. y = bush hiding over the episode's first 25 steps, as a percentage of those steps. Both panels share one y-scale so their slopes can be compared directly. The shared y-axis does not start at zero; it is cropped to the range the curves occupy.
 
 **Motivation.** The agent carries two internal states that pull in opposite directions. A wound
 argues for staying in cover; an empty stomach argues for leaving it, because a bush contains no food.
@@ -811,14 +820,14 @@ first 25 steps, for the reason Section 5 gives. **Note the direction of the hung
 well fed. The slope is positive, meaning a **well-fed** agent hides more &mdash; equivalently, a
 hungry one hides less, because it has to go and eat.
 
-**Reading.** Nutrition moves bush dwell by +6.5 to +19.2 percentage points across its range; the
+**Reading.** Nutrition moves bush hiding by +6.5 to +19.2 percentage points across its range; the
 wound moves it by &minus;2.3 to +6.7. The ratio runs from 1.6&times; to 4.5&times; depending on the
 arm. The metabolic drive is the larger of the two in every arm, and any account of this agent's
 hiding that leaves it out is describing a small part of the behaviour.
 
 **Table 9.** the two internal drives, first 25 steps
 
-| arm | hunger: change in bush dwell (pp, signed) | wound: change in bush dwell (pp, signed) | ratio |
+| arm | hunger: change in bush hiding (pp, signed) | wound: change in bush hiding (pp, signed) | ratio |
 |---|---|---|---|
 | `A_baseline` | +9.16 | -2.34 | wound effect is negative |
 | `B_olf_only` | +15.12 | +3.38 | 4.5x |
@@ -845,14 +854,14 @@ hiding that leaves it out is describing a small part of the behaviour.
 over the first 25 steps. B: the assigned wound over the whole episode. C: the carried wound over the
 whole episode.
 
-**Axes.** All three panels: x = an injury level in four equal quarters of the 0-100 range — the wound assigned at t=0 in panels A and B, the wound the agent was carrying when it decided in panel C. y = bush dwell as a percentage of steps. All three share one y-scale, which is the point of the figure. The shared y-axis does not start at zero; it is cropped to the range the curves occupy.
+**Axes.** All three panels: x = an injury level in four equal quarters of the 0-100 range — the wound assigned at t=0 in panels A and B, the wound the agent was carrying when it decided in panel C. y = bush hiding as a percentage of steps. All three share one y-scale, which is the point of the figure. The shared y-axis does not start at zero; it is cropped to the range the curves occupy.
 
 **Motivation.** "Does injury make the agent hide?" has three plausible-looking answers in this data
 and two of them are wrong. They are shown together because the two mistakes have *different* causes
 that are easy to conflate, and because a reader who reproduced either one deserves to know why it
 differs.
 
-**Method.** All three use identical bins and the identical outcome, bush dwell with the `t=0` row
+**Method.** All three use identical bins and the identical outcome, bush hiding with the `t=0` row
 excluded. They differ only in which injury number a step is filed under, and over which steps the
 average is taken. All three panels share one y-axis, so the sizes are directly comparable.
 
@@ -916,16 +925,16 @@ size of the mistake available to anyone who takes the convenient measurement.
 
 ## 8. What hiding costs
 
-![Bush dwell against survival and against eating](figures/lad15_price_of_hiding.png)
+![Bush hiding against survival and against eating](figures/lad15_price_of_hiding.png)
 
 **Figure 15.** One point per arm, over that arm's 1,000,000 episodes.
 
-**Axes.** Both panels: x = bush dwell as a percentage of an episode's steps, one point per arm. y, left = mean survival in steps per episode; y, right = eating rate in food items per 100 steps. Neither axis starts at zero; both are cropped to the range the fourteen points occupy.
+**Axes.** Both panels: x = bush hiding as a percentage of an episode's steps, one point per arm. y, left = mean survival in steps per episode; y, right = eating rate in food items per 100 steps. Neither axis starts at zero; both are cropped to the range the fourteen points occupy.
 
 **Motivation.** If hiding were simply good, the arms that hide most would be the ones that survive
 longest. Testing that directly is the cleanest way to say what the senses are actually for.
 
-**Method.** Bush dwell is bush steps over steps; eating rate is `ate_food` events per 100 steps;
+**Method.** Bush hiding is bush steps over steps; eating rate is `ate_food` events per 100 steps;
 survival is mean episode length. The dashed line is a least-squares fit across the fourteen
 **arm-level** points, and `r` is the correlation across those fourteen points &mdash; not across
 1,000,000 episodes.
@@ -971,7 +980,7 @@ across all fourteen stores. Between-arm differences are therefore free of world 
 2. **Predictors come from the previous row.** The action that produced row `t` was chosen while the
    agent was looking at row `t&minus;1`, so anything the agent conditioned on is read off `t&minus;1`.
 
-**Regressions.** Quasi-binomial on the episode-level bush-dwell rate, with standard errors scaled by
+**Regressions.** Quasi-binomial on the episode-level bush-hiding rate, with standard errors scaled by
 the Pearson overdispersion. Effects are reported per standard deviation of the regressor.
 
 **Three corrections made during this analysis**, recorded because each would have put a wrong number
@@ -1024,13 +1033,13 @@ into circulation:
 
    **This applies to the dose-response itself, not only to the hypervigilance measure**
    (added 2026-09-03). Figure 14 panel B already shows it; stating it here because the limitations
-   list is what a hurried reader reads. Recomputed at three windows: the wound's effect on bush dwell
+   list is what a hurried reader reads. Recomputed at three windows: the wound's effect on bush hiding
    is positive in 13 of 14 arms over 25 steps, in 2 of 14 over 100 steps, and no larger than
    +0.003 percentage points in any arm over the whole episode. So "this agent hides more when
    injured" is a claim about a 25-step window and must always be quoted with it.
 3. **The 25-step "extra hiding" is extra RESTING that lands in cover, not travel to cover**
    (added 2026-09-03; this limitation qualifies finding 5). A wound raises the Rest-action rate by
-   +17.7 to +35.2 percentage points in 14 of 14 arms — roughly five times the size of the bush-dwell
+   +17.7 to +35.2 percentage points in 14 of 14 arms — roughly five times the size of the bush-hiding
    effect — and that extra resting happens overwhelmingly *in the open*. Decomposed, bush occupancy
    **while the agent is acting** falls with the wound in 14 of 14 arms, in both the predator-present
    and predator-absent conditions. Section 5's reading as "ordinary caution" is therefore too strong:

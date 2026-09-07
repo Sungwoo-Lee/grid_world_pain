@@ -5,7 +5,7 @@ QUESTION. Does being damaged change what the agent does, and on what timescale? 
 event is the standard way to see a response emerge and decay, and lets us compare the behavioural
 timing against the nociception kernel, which peaks three steps after an injury.
 
-MEASURE. Bush dwell from lag -10 to +25 around every damage event, within the same episode. Two
+MEASURE. Bush hiding from lag -10 to +25 around every damage event, within the same episode. Two
 series: ALL events, and ISOLATED events with no other damage in the window.
 
 BASELINE. Lag -10, NOT lag -1. Lag -1 is mechanically depressed because the agent must be out of
@@ -51,7 +51,7 @@ def main():
     allv = 100*d[:, 0]/np.maximum(n[:, 0], 1)
     isov = 100*d[:, 1]/np.maximum(n[:, 1], 1)
     ba, bi = allv[0], isov[0]
-    print("\n=== Figure 8: bush dwell around a damage event ===")
+    print("\n=== Figure 8: bush hiding around a damage event ===")
     print(f"baseline at lag -10:  all {ba:.1f}%   isolated {bi:.1f}%\n")
     print(f"{'lag':>5}{'all events':>13}{'isolated':>12}{'all vs base':>13}{'iso vs base':>13}")
     for li, lag in enumerate(LAGS):

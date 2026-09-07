@@ -31,7 +31,7 @@ TAKE-AWAY. Panel A is the number this report uses. B and C are shown so that the
 rather than asserted, and so that a future reader who reproduces one of them knows why it differs.
 
 HOW IT IS COMPUTED. All three use identical bins - four equal quarters of injury on 0-100 - and the
-identical outcome, bush dwell with the t=0 row excluded. They differ only in which injury number a
+identical outcome, bush hiding with the t=0 row excluded. They differ only in which injury number a
 step is filed under and over which steps the average is taken.
 """
 import sys, os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -72,7 +72,7 @@ for j, (dat, ttl, xl) in enumerate(panels):
     ax[j].set_xlim(-0.25, 3.9 if j == 2 else 3.3)
     ax[j].set_xticks(x); ax[j].set_xticklabels(L.INJ_NAMES)
     ax[j].set_xlabel(xl)
-    ax[j].set_ylabel("bush dwell  (% of those steps spent in a bush)")
+    ax[j].set_ylabel("bush hiding  (% of those steps spent in a bush)")
     ax[j].set_title(ttl, fontsize=9.3, loc="left", pad=8)
 ax[0].legend(handles=h, loc="upper left", fontsize=7.6)
 POP = L.population()

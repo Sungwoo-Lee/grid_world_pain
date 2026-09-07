@@ -29,7 +29,7 @@ six cells away produces the same reading as a weak-smelling one at about three c
 
 HOW IT IS COMPUTED. Within each arm, episodes are split by the odour intensity drawn for their
 rabbits (four quartiles; intensity is the sum of the two olfactory channels that separate predators
-from rabbits, with the channels derived from the run's own config). The slope is bush dwell in the
+from rabbits, with the channels derived from the run's own config). The slope is bush hiding in the
 strongest-smelling quarter minus the weakest, over the episode's first 25 steps. That slope is
 computed twice: once over episodes that began nearly unhurt (start wound 0-25) and once over those
 that began badly wounded (75-100). The bar is the difference. Episodes containing no rabbit are

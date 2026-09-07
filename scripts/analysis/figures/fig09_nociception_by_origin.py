@@ -6,7 +6,7 @@ something to react to in itself, or as evidence that a predator is nearby. Those
 indistinguishable — but the environment randomly assigns some agents a wound at reset, with nothing
 having attacked them. That gives the signal WITHOUT the evidence, and lets the two come apart.
 
-MEASURE. Bush dwell by (reconstructed nociception level x number of prior damage events this
+MEASURE. Bush hiding by (reconstructed nociception level x number of prior damage events this
 episode). Prior-hit count is a memory quantity that cannot be recovered from the current signal
 value, so if it predicts behaviour at matched signal, the signal alone does not determine the
 response.
@@ -73,7 +73,7 @@ def main():
         if not a.quiet and fi % 50 == 0:
             print(f"  shard {fi}/{len(files)} ({time.time()-t0:.0f}s)", flush=True)
     grid = (100*d/np.maximum(n, 1)).round(1)
-    print("\n=== Figure 9: bush dwell by nociception level (rows) x prior hits (cols) ===")
+    print("\n=== Figure 9: bush hiding by nociception level (rows) x prior hits (cols) ===")
     print(f"{'nociception':14}" + "".join(f"{c:>13}" for c in HLAB))
     for i in range(NP):
         print(f"{PLAB[i]:14}" + "".join(f"{grid[i,j]:>11.1f}% " for j in range(NH)))

@@ -398,7 +398,7 @@ def plot(spec, output_dir):
     plot_summary.XLABEL = os.environ["XLABEL"]
     plot_summary.XBND = os.environ["XBOUNDARY"]
 
-    measures = spec.get("plot_measures", ["bush_dwell", "spatial_spread", "survival_steps"])
+    measures = spec.get("plot_measures", ["bush_hiding", "spatial_spread", "survival_steps"])
     figs = []
     for run in spec["runs"]:
         label = run["label"]

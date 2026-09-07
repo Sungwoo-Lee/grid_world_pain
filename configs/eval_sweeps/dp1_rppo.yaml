@@ -16,7 +16,7 @@ conditions: all
 episodes: 30
 nodes: [102, 103, 104, 105, 106, 111, 112]
 x_axis: steps
-plot_measures: [bush_dwell, spatial_spread, survival_steps]
+plot_measures: [bush_hiding, spatial_spread, survival_steps]
 runs:
   - {label: b01_mc,         path: results/JAX_RecurrentPPO/20260726-053721_rppo_b01_mc_dp1_n107}
   - {label: b02_mc,         path: results/JAX_RecurrentPPO/20260726-053746_rppo_b02_mc_dp1_n107}

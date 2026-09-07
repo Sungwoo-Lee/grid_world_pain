@@ -21,7 +21,7 @@ in the weakest - about 2.1x as loud. The nose receives intensity divided by dist
 distance the loud one reads 2.1x higher, and equivalently reaches further: a strong-smelling rabbit
 six cells away produces the same reading as a weak-smelling one at about three cells.
 
-HOW IT IS COMPUTED. Quasi-binomial regression on the episode-level bush-dwell rate, restricted to
+HOW IT IS COMPUTED. Quasi-binomial regression on the episode-level bush-hiding rate, restricted to
 episodes with exactly one predator and one rabbit so that "the predator's smell" and "the rabbit's
 smell" are each a single well-defined number rather than an average over several animals. Standard
 errors are scaled by the Pearson overdispersion. Bars are the effect of a one-standard-deviation
@@ -53,7 +53,7 @@ ax.barh(y - h/2, R, height=h, color=PL.HARMLESS, edgecolor="none",
 ax.axvline(0, color=PL.INK, lw=1)
 ax.set_yticks(y); ax.set_yticklabels(PL.arm_ylabels(arms), fontsize=8)
 ax.set_ylabel("sensor-ladder arm  (poorest senses at the bottom)")
-ax.set_xlabel("effect on bush dwell of a one-standard-deviation stronger smell  "
+ax.set_xlabel("effect on bush hiding of a one-standard-deviation stronger smell  "
               "(percentage points)\nadjusted for bushes, food, cover distance, predator traits, "
               "and the agent's starting wound and hunger")
 ax.grid(axis="y", visible=False)

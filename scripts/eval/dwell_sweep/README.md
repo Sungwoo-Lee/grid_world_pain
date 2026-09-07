@@ -82,7 +82,7 @@ nodes: [106, 107, 108, 109]     # node IDs to fan work across (LPT-balanced by p
 npar: null                      # per-node parallelism; null -> tuned default per algo (see below)
 max_checkpoints: null           # optional cap on newest-N PENDING checkpoints per (run,cond); also a CLI flag
 x_axis: null                    # steps | episodes; null -> steps for rppo, episodes for dreamer
-plot_measures: [bush_dwell, spatial_spread, survival_steps]   # any of the 11 measure columns
+plot_measures: [bush_hiding, spatial_spread, survival_steps]   # `bush_hiding` was called `bush_dwell` before 2026-09-07   # any of the 11 measure columns
 runs:
   - label: v01_slowmove         # subdirectory name under output_dir; also the figure title
     path: "results/JAX_RecurrentPPO/*rppo_b04v01_slowmove*"   # exact path OR a glob that
@@ -163,7 +163,7 @@ results/eval/avoidance/<name>/
 │   ├── avoid_pred_inj00.csv       # step, step_M, + 11 measure columns
 │   ├── avoid_none_inj00.csv
 │   ├── ...
-│   ├── FIG_bush_dwell.png
+│   ├── FIG_bush_hiding.png
 │   └── FIG_spatial_spread.png
 └── _scratch/                       # transient; safe to delete after a run completes
     ├── _worklists/worklist_<node>.txt

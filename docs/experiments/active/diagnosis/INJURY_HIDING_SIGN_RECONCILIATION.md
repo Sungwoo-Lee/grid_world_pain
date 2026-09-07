@@ -148,7 +148,7 @@ episode contained a hunting predator at all. This used the current analysis code
 1 September correction that reads a predictor from the previous row. The pooled column reproduces the
 published table exactly, which is the check that the recomputation is faithful.
 
-**Change in bush dwell from the lightest to the heaviest quarter of the randomised starting wound,
+**Change in bush hiding from the lightest to the heaviest quarter of the randomised starting wound,
 in percentage points. Positive = hides more when wounded.**
 
 | arm | first 25 steps | first 100 steps | whole episode |
@@ -186,7 +186,7 @@ agent woke up with slightly reduces cover use.**
 smoothed internal signal the agent actually receives, as opposed to the wound in its body — both
 lines report a strong positive relationship, on different runs in different worlds:
 
-| study | bush dwell at the lowest felt-wound level | at the highest |
+| study | bush hiding at the lowest felt-wound level | at the highest |
 |---|---|---|
 | sensor ladder (14 arms) | 12.6–17.9% | 31.7–49.5% |
 | bush-refuge factor analysis (no predator within two cells) | 11.4% | 31.0% |
@@ -224,10 +224,10 @@ through the Rest action, and healing is directly rewarded, so a wounded agent's 
 freeze and heal.
 
 **Finding 2 — the ladder's "extra hiding" is entirely resting-in-cover, and active use of cover
-falls.** Decomposing the change in bush dwell (percentage points, lightest to heaviest wound
+falls.** Decomposing the change in bush hiding (percentage points, lightest to heaviest wound
 quarter, first 25 steps):
 
-| condition | change in bush dwell | of which: resting in a bush | resting **out** in the open | in a bush while **acting** |
+| condition | change in bush hiding | of which: resting in a bush | resting **out** in the open | in a bush while **acting** |
 |---|---|---|---|---|
 | predator present, 14 arms | −2.96 … +9.50 | +0.59 … +14.76 | +10.6 … +20.2 | **−1.24 … −9.49, negative in 14/14** |
 | no predator, 14 arms | +0.82 … +7.31 | +1.89 … +8.75 | +18.8 … +31.9 | **−0.77 … −1.79, negative in 14/14** |
@@ -242,7 +242,7 @@ ladder agent is not travelling to cover. It is freezing where it stands, and the
 bushes scattered over a hundred squares, so a modest slice of that freezing lands on one.
 
 **The reconciliation.** Put the same behaviour into the bush-refuge probe. The agent starts three
-squares from the *only* bush in the scene. Freezing there means never reaching cover, so bush dwell
+squares from the *only* bush in the scene. Freezing there means never reaching cover, so bush hiding
 collapses — the original analysis measured exactly that: while wounded, the agent chooses Rest on 86%
 of steps and is in the bush on 1–3% of them. Meanwhile the unwounded comparison agent, with no food
 to forage for and nothing else to do, walks over and sits in the bush (11–28%). The gap is large and
@@ -307,7 +307,7 @@ matters more than sharpness, the agents that hide most die soonest — are untou
    14-of-14 and 10-of-10 unanimities are unanimity across *configurations*, not across independent
    training draws, and the ladder's own Limitation 1 applies in full.
 3. **§4's decomposition is descriptive, not causal for the split.** The starting wound is randomised,
-   so its total effect on resting and on bush dwell is causal. Splitting that effect into
+   so its total effect on resting and on bush hiding is causal. Splitting that effect into
    "resting-in-cover" and "in-cover-while-acting" conditions on the agent's own action, which is not
    randomised. The unanimity of the sign across 14 arms and both threat conditions is what the claim
    rests on, not the size of any one number.
@@ -352,8 +352,8 @@ recorded value.
 | | |
 |---|---|
 | **Metric** | `rest_action_rate` and `rest_in_cover_rate` — share of steps on which the agent chose Rest, and the share on which it chose Rest while standing in a bush. Both unitless fractions. |
-| **Why now** | The single largest wound-driven behavioural change in this data (+18 to +35 percentage points) is invisible in every summary this project currently produces, which is why two studies could publish opposite signs on a derived quantity without either noticing they were both watching the same freeze response. Bush dwell alone cannot distinguish "went to cover" from "stopped moving on a square that was cover". |
-| **Where it'd live** | Alongside the existing bush-dwell measure in the behaviour-measure toolkit, and as a standard column in the dwell-sweep probe aggregation. The raw ingredients (`rested`, `agent_in_bush`) are already recorded per step in the trajectory stores, so this is a reporting gap rather than a logging gap. |
+| **Why now** | The single largest wound-driven behavioural change in this data (+18 to +35 percentage points) is invisible in every summary this project currently produces, which is why two studies could publish opposite signs on a derived quantity without either noticing they were both watching the same freeze response. Bush hiding alone cannot distinguish "went to cover" from "stopped moving on a square that was cover". |
+| **Where it'd live** | Alongside the existing bush-hiding measure in the behaviour-measure toolkit, and as a standard column in the dwell-sweep probe aggregation. The raw ingredients (`rested`, `agent_in_bush`) are already recorded per step in the trajectory stores, so this is a reporting gap rather than a logging gap. |
 | **Cost** | Cheap. Two scalars per step, both already computed by the environment. |
 
 | | |

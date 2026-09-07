@@ -35,7 +35,7 @@ for k, (vals, xl, ttl) in enumerate([
         (d_surv, "change in mean survival  (steps, vs the reference arm)\n"
                   "left of zero = the change SHORTENED life",
          "Effect of the change on how long it lives"),
-        (d_dwell, "change in bush dwell  (percentage points, vs the reference arm)\n"
+        (d_dwell, "change in bush hiding  (percentage points, vs the reference arm)\n"
                   "left of zero = the change REDUCED hiding",
          "Effect of the change on how much it hides")]):
     # one neutral colour: red/blue here would read as "bad/good" in the survival panel

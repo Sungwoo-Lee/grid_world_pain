@@ -22,7 +22,7 @@ episodes: 30
 nodes: [106, 107, 108, 109]
 npar: 5
 x_axis: episodes
-plot_measures: [bush_dwell, spatial_spread, survival_steps]
+plot_measures: [bush_hiding, spatial_spread, survival_steps]
 runs:
   - label: rr1p0
     path: results/JAX_DreamerSRL/20260717-025141_dsrl_b04_M_rr1p0

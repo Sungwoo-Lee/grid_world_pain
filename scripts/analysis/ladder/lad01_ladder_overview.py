@@ -2,15 +2,15 @@
 
 QUESTION. Fourteen agents were trained on the same world with the same seed and differ only in
 what they can sense. If a sense matters, the agents that have it should live longer. This figure
-puts survival and bush dwell side by side for all fourteen, in ladder order.
+puts survival and bush hiding side by side for all fourteen, in ladder order.
 
-WHY BOTH PANELS. Survival is the project's performance measure. Bush dwell - the share of an
+WHY BOTH PANELS. Survival is the project's performance measure. Bush hiding - the share of an
 episode's steps spent standing in a bush - is the behaviour we are trying to explain. Showing
 them together is the whole point: an agent can raise one by sacrificing the other, because a bush
 is safe but has no food in it.
 
 HOW IT IS COMPUTED. Survival is the mean episode length over 1,000,000 evaluation episodes.
-Bush dwell is (bush steps) / (steps), pooled over every episode of the arm; the t=0 row is the
+Bush hiding is (bush steps) / (steps), pooled over every episode of the arm; the t=0 row is the
 world as handed to the agent, not a step it took, so it is in neither the numerator nor the
 denominator.
 """
@@ -35,7 +35,7 @@ ax[0].set_xlim(0, max(surv) * 1.12)
 for i, v in enumerate(surv):
     ax[0].text(v + 4, i, f"{v:.0f}", va="center", fontsize=8, color=PL.INK)
 
-PL.hbar_axis(ax[1], arms, dwell, col, "bush dwell  (% of an episode's steps spent in a bush)",
+PL.hbar_axis(ax[1], arms, dwell, col, "bush hiding  (% of an episode's steps spent in a bush)",
              "How much it hides")
 ax[1].set_ylabel("")
 ax[1].set_xlim(0, max(dwell) * 1.15)
@@ -58,11 +58,11 @@ n_steps = sum(int(np.load(f"{L.OUT_ROOT}/{a}_episodes.npz")["n_steps"].sum()) fo
 L.record_samples("lad01_ladder_overview", [
     dict(what="episodes, for mean survival", used=POP["episodes"], total=POP["episodes"],
          note="every episode of every arm"),
-    dict(what="step rows, for bush dwell", used=n_steps, total=POP["steps"],
+    dict(what="step rows, for bush hiding", used=n_steps, total=POP["steps"],
          note="every step; the t=0 row of each episode is excluded by construction")])
 
 PL.assert_labels_fit(fig, ax)
 PL.finish(fig, f"{L.FIG_ROOT}/lad01_ladder_overview.png")
-print(f"\n{'arm':22}{'survival':>10}{'bush dwell':>13}")
+print(f"\n{'arm':22}{'survival':>10}{'bush hiding':>13}")
 for a, s, d in zip(arms, surv, dwell):
     print(f"{a:22}{s:>10.1f}{d:>12.1f}%")

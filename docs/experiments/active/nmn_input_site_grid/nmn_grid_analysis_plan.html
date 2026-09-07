@@ -177,17 +177,17 @@ should change how it reads a predator, not merely change what it does.</p>
 
 <div class="callout key">
 <h4>The one thing that changes what you asked for</h4>
-<p>You asked for an internal-state-dependent <strong>bush dwell</strong> comparison. Bush dwell is
+<p>You asked for an internal-state-dependent <strong>bush hiding</strong> comparison. Bush hiding is
 the measure this project has used for a year, and a recent analysis showed it is largely a
 <strong>by-product</strong> rather than a decision.</p>
 <p>A wounded agent mostly <strong>freezes to heal</strong>. Its Rest rate rises by 17.7 to 35.2
-percentage points &mdash; about five times the size of the bush-dwell effect &mdash; and that resting
+percentage points &mdash; about five times the size of the bush-hiding effect &mdash; and that resting
 happens mostly in the open. Whether freezing registers as &ldquo;hides more&rdquo; depends only on
 whether the agent happened to be standing on a bush when it stopped. Across fourteen agents,
 &ldquo;hides more when injured&rdquo; was positive in <strong>13 of 14</strong> over the first 25
 steps, <strong>2 of 14</strong> over the first 100, and <strong>1 of 14</strong> over the whole
 episode. The sign is a property of the window and of where cover happens to be, not of a decision.</p>
-<p>So bush dwell stays in the battery &mdash; it is the historical measure and dropping it would
+<p>So bush hiding stays in the battery &mdash; it is the historical measure and dropping it would
 break comparability with every earlier study &mdash; but it is <strong>demoted</strong>. It cannot
 carry the headline, and a modulator that changes it has not yet been shown to have changed anything
 the agent decided.</p>
@@ -226,8 +226,8 @@ directly; it reports a weighted average of the last twelve steps of damage, whic
 wakes up badly hurt feels <em>nothing at all for two steps</em> and does not feel the full wound
 until step twelve. Several findings in this project turn on that delay.</p></details>
 
-<details><summary><b>Bush dwell</b> <span class="gloss">&mdash; the fraction of steps spent standing in cover</span></summary>
-<p>The world contains bushes that conceal the agent from predators. Bush dwell is simply the share of
+<details><summary><b>Bush hiding</b> <span class="gloss">&mdash; the fraction of steps spent standing in cover</span></summary>
+<p>The world contains bushes that conceal the agent from predators. Bush hiding is simply the share of
 an episode's steps the agent spent standing in one. It has been this project's main behavioural
 measure for about a year, which is why it appears here at all &mdash; and why the finding that it is
 mostly a by-product of freezing, rather than a decision to hide, mattered enough to change this
@@ -469,11 +469,11 @@ a hypothesis but may not settle one.</p>
       <td class="tier t-b">B</td>
       <td><b>Rest rate</b> by starting injury</td>
       <td>How much more does the agent stop moving when it wakes wounded?</td>
-      <td><b>Decomposition.</b> This is the effect that dwarfs bush dwell &mdash; five times its size. Any dwell result must be read against it or it will be misattributed.</td>
+      <td><b>Decomposition.</b> This is the effect that dwarfs bush hiding &mdash; five times its size. Any dwell result must be read against it or it will be misattributed.</td>
     </tr>
     <tr>
       <td class="tier t-b">B</td>
-      <td><b>Bush dwell</b>, decomposed into rest-in-cover and act-in-cover</td>
+      <td><b>Bush hiding</b>, decomposed into rest-in-cover and act-in-cover</td>
       <td>The historical measure, split into the part that is freezing and the part that is moving.</td>
       <td><b>Comparability.</b> Kept because every earlier study reports it; decomposed because undecomposed it conflates two different things.</td>
     </tr>
@@ -544,7 +544,7 @@ the one factor none of the earlier studies could.</p>
     <tr>
       <td><b>The injury&ndash;hiding reconciliation</b></td>
       <td>That the wounded agent freezes to heal; that Rest rises 17.7&ndash;35.2 pp in 14 of 14 arms; that cover-use <em>while acting</em> falls with injury in 14 of 14; that the sign of &ldquo;hides more&rdquo; is a property of the window.</td>
-      <td><b>The reason bush dwell is demoted</b>, tier B's decomposition, and the rule that any location-based measure inherits the artefact.</td>
+      <td><b>The reason bush hiding is demoted</b>, tier B's decomposition, and the rule that any location-based measure inherits the artefact.</td>
     </tr>
     <tr>
       <td><b>The hiding-drivers factor analysis</b></td>
@@ -628,7 +628,7 @@ first and survival second.</li>
 This is the thesis test and it is reported whichever way it comes out.</li>
 <li><b>Which site, if any.</b> Ranked, with every difference smaller than the seed-noise floor
 explicitly marked as indistinguishable rather than ordered.</li>
-<li><b>The decomposition.</b> Rest rate and the two halves of bush dwell, so a headline movement can
+<li><b>The decomposition.</b> Rest rate and the two halves of bush hiding, so a headline movement can
 be attributed to a decision or to freezing.</li>
 <li><b>The modulator's own behaviour.</b> Tier C, used only to explain a null &mdash; never to
 rescue one.</li>
@@ -649,7 +649,7 @@ checkpoint step each number was computed at; the empirical pairing check; the Re
 guard result for every store; and, for any comparison smaller than the seed-noise floor, the words
 <em>indistinguishable at one seed</em> rather than a rank.</p>
 <p>Nothing in the plan above may be revised once a number from this grid has been looked at. If
-something here turns out to be wrong &mdash; as the bush-dwell measure did in the study before this
+something here turns out to be wrong &mdash; as the bush-hiding measure did in the study before this
 one &mdash; the revision gets its own dated note saying what changed and why, and the original stays
 visible.</p>
 </div>
@@ -658,7 +658,7 @@ visible.</p>
 <div class="col foot">
 <p>Plan only; nothing here has been run. Design and pre-registration:
 <code>docs/experiments/active/nmn_input_site_grid/NMN_INPUT_SITE_GRID.md</code>. The measurement
-tool: <code>scripts/analysis/context_dependence.py</code>. The finding that demoted bush dwell:
+tool: <code>scripts/analysis/context_dependence.py</code>. The finding that demoted bush hiding:
 <code>docs/experiments/active/diagnosis/INJURY_HIDING_SIGN_RECONCILIATION.md</code>. Run status read
 from the results tree at 14:34 on 2026-09-07.</p>
 </div>

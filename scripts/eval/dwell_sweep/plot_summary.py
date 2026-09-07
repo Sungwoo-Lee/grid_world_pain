@@ -5,7 +5,7 @@ Promoted as-is from tmp/plot_metrics_summary.py (part of the dwell-history pipel
 see README.md). `fig_for` is also imported directly by run_sweep.py's plotting step.
 
 CLI usage: plot_summary.py <run_dir> <run_label> [measure1 measure2 ...]
-Default measures: bush_dwell spatial_spread. Any of the 11 measure columns works.
+Default measures: bush_hiding spatial_spread. Any of the 11 measure columns works.
 Env knobs (unchanged from the tmp original): XDIV, XLABEL, XBOUNDARY.
 """
 import sys, glob, os, csv
@@ -20,7 +20,7 @@ NICE={"none":"No animal","pred":"Predator","rabbit":"Rabbit · chase",
 ORDER=["none","pred","rabbit","rabbit_olfzero","rabbitwander","rabbitwander_predsmell"]
 # measure -> (nice ylabel, is_percent, subtitle)
 MINFO={
- "bush_dwell":("time in bush (%)",True,"% of the 100-step episode spent sitting on the bush"),
+ "bush_hiding":("time in bush (%)",True,"% of the 100-step episode spent sitting on the bush"),
  "bush_use_rate":("entered bush (%)",True,"fraction of episodes the agent ever stepped on the bush"),
  "spatial_spread":("spatial spread (R_g)",False,"radius of gyration of the path, grid cells (low=parked, high=roaming)"),
  "survival_steps":("survival (steps)",False,"steps survived, capped at 100"),
@@ -59,8 +59,8 @@ def fig_for(level_dir, level_label, m):
     fig,ax=plt.subplots(n,1,figsize=(13,1.05*n+1.1),sharex=True)
     if n==1: ax=[ax]
     band={k:i for i,k in enumerate(ORDER)}
-    raw_c="#5a9367" if m in("bush_dwell","bush_use_rate") else "#c98a5e"
-    trend_c="#14532d" if m in("bush_dwell","bush_use_rate") else "#7c3a12"
+    raw_c="#5a9367" if m in("bush_hiding","bush_use_rate") else "#c98a5e"
+    trend_c="#14532d" if m in("bush_hiding","bush_use_rate") else "#7c3a12"
     for i,c in enumerate(conds):
         xs,y=data[c]; y=y*scale; A=ax[i]
         if band.get(cond_key(c),0)%2==0: A.set_facecolor("#f5f6f7")
@@ -83,7 +83,7 @@ def fig_for(level_dir, level_label, m):
     return out
 if __name__=="__main__":
     level_dir, level_label = sys.argv[1], sys.argv[2]
-    measures = sys.argv[3:] or ["bush_dwell","spatial_spread"]
+    measures = sys.argv[3:] or ["bush_hiding","spatial_spread"]
     for m in measures:
         o=fig_for(level_dir, level_label, m)
         print(f"  {level_label} {m} -> {o}")

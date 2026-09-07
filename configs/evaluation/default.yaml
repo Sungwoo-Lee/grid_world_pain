@@ -13,7 +13,10 @@ testing:
 experiment:
   conditions: all                  # "all" = the 12 core avoidance probes; or a comma-separated list of stems (e.g. "avoid_pred_inj00,avoid_none_inj00")
   episodes: 30                      # episodes evaluated per condition
-  log_measures: [bush_dwell, survival_steps]   # which of the 11 measures to surface LIVE on WandB (all 11 are ALWAYS written to CSV regardless). Valid names: bush_use_rate, bush_entry_step, bush_dwell, fid, time_near_animal, closest_approach, time_moving, spatial_spread, pursuit_duration, injury_change, survival_steps
+  # RENAMED 2026-09-07: this measure was called `bush_dwell` until today. Same quantity,
+  # clearer name. CSVs written before that date carry the old column header; nothing
+  # converts them, so a tool reading both vintages must accept either.
+  log_measures: [bush_hiding, survival_steps]   # which of the 11 measures to surface LIVE on WandB (all 11 are ALWAYS written to CSV regardless). Valid names: bush_use_rate, bush_entry_step, bush_hiding, fid, time_near_animal, closest_approach, time_moving, spatial_spread, pursuit_duration, injury_change, survival_steps
   log_conditions: all              # which conditions to surface on WandB: "all" or a comma-list of stems (all 12 always in CSV)
   during_training:
     enabled: false                 # opt-in: auto-run this experiment during training (rPPO only for now)

@@ -26,7 +26,7 @@ for a in arms:
       f"{s['visual_value_mode']} | {', '.join(bs) if bs else 'nothing'} |")
 
 w("\n### TABLE 2 - outcome per arm\n")
-w("| arm | mean survival (steps) | bush dwell (%) | killed (%) | starved (%) | "
+w("| arm | mean survival (steps) | bush hiding (%) | killed (%) | starved (%) | "
   "reached the limit (%) | food per 100 steps |")
 w("|---|---|---|---|---|---|---|")
 for a in arms:
@@ -38,7 +38,7 @@ for a in arms:
 
 w("\n### TABLE 3 - single-variable sensor changes\n")
 pairs = sorted(L.ARM_REFERENCE.items(), key=lambda p: arms.index(p[0]))
-w("| change | arm | compared with | survival (steps) | bush dwell (pp) |")
+w("| change | arm | compared with | survival (steps) | bush hiding (pp) |")
 w("|---|---|---|---|---|")
 for a, r in pairs:
     w(f"| {L.ARM_LABEL[a][1]} | `{a}` | `{r}` | "
@@ -90,7 +90,7 @@ for nm, f in MEAS.items():
     w(f"| {nm} | {my:+.2f} | {mn:+.2f} | {mn-my:+.2f} | `{who}` |")
 
 w("\n### TABLE 6 - what a randomised starting wound does\n")
-w("| arm | bush dwell, first 25 steps (pp per full wound range) | "
+w("| arm | bush hiding, first 25 steps (pp per full wound range) | "
   "shift in rabbit proximity (pp) | shift in predator proximity (pp) | "
   "wound amplifies rabbit odour (pp) | wound amplifies predator odour (pp) |")
 w("|---|---|---|---|---|---|")
@@ -108,7 +108,7 @@ for a in arms:
       f"{sl(a,'rab',3)-sl(a,'rab',0):+.2f} | {sl(a,'pred',3)-sl(a,'pred',0):+.2f} |")
 
 w("\n### TABLE 9 - the two internal drives, first 25 steps\n")
-w("| arm | hunger: change in bush dwell (pp, signed) | wound: change in bush dwell (pp, signed) | ratio |")
+w("| arm | hunger: change in bush hiding (pp, signed) | wound: change in bush hiding (pp, signed) | ratio |")
 w("|---|---|---|---|")
 for a in arms:
     z = np.load(f"{L.OUT_ROOT}/{a}_episodes.npz")

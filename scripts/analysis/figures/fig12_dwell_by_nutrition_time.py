@@ -1,11 +1,11 @@
 #!/usr/bin/env python
-"""FIGURE 12 — bush dwell by hunger and by elapsed time.
+"""FIGURE 12 — bush hiding by hunger and by elapsed time.
 
 QUESTION. The raw hunger-dwell association is enormous. Before interpreting it, check whether it
 survives holding elapsed time constant — nutrition depletes steadily, so it partly encodes "late in
 the episode".
 
-MEASURE. Bush dwell in each (elapsed-step band x injury band) cell.
+MEASURE. Bush hiding in each (elapsed-step band x injury band) cell.
 
 CONDITIONING. Action steps only. No proximity condition — this figure is about the time confound,
 not about isolating the wound from threat.
@@ -44,7 +44,7 @@ def main():
         if not a.quiet and fi % 50 == 0:
             print(f"  shard {fi}/{len(files)} ({time.time()-t0:.0f}s)", flush=True)
     grid = (100*d/np.maximum(n, 1)).round(1)
-    print("\n=== Figure 12: bush dwell by elapsed time (rows) and hunger (columns) ===")
+    print("\n=== Figure 12: bush hiding by elapsed time (rows) and hunger (columns) ===")
     print(f"{'steps into episode':22}" + "".join(f"{c:>14}" for c in ILAB))
     for i in range(NT):
         print(f"{str(TB[i])+'-'+str(TB[i+1]):22}" +

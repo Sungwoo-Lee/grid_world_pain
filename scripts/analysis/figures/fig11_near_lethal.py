@@ -1,10 +1,10 @@
 #!/usr/bin/env python
-"""FIGURE 11 — bush dwell as the wound nears fatal.
+"""FIGURE 11 — bush hiding as the wound nears fatal.
 
 QUESTION. Protective behaviour rises with injury over most of the range. Does it keep rising as
 death approaches, or give way?
 
-MEASURE. Bush dwell by injury_level band, up to the lethal ceiling.
+MEASURE. Bush hiding by injury_level band, up to the lethal ceiling.
 
 CONDITIONING. Steps with no predator within Chebyshev 2, so the pattern is not just proximity.
 
@@ -50,8 +50,8 @@ def main():
             print(f"  shard {fi}/{len(files)} ({time.time()-t0:.0f}s)", flush=True)
     rows = [dict(band=LABELS[i], steps=float(n[i]),
                  bush_dwell=float(100*d[i]/max(n[i],1))) for i in range(nb)]
-    print("\n=== Figure 11: bush dwell as the wound approaches the lethal ceiling ===")
-    print(f"{'injury band':26}{'steps':>15}{'bush dwell':>13}")
+    print("\n=== Figure 11: bush hiding as the wound approaches the lethal ceiling ===")
+    print(f"{'injury band':26}{'steps':>15}{'bush hiding':>13}")
     for r in rows:
         print(f"{r['band']:26}{r['steps']:>15,.0f}{r['bush_dwell']:>12.1f}%")
     save("fig11_near_lethal", {"figure": 11, "run": a.run, "edges": EDGES,

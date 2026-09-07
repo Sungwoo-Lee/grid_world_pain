@@ -23,7 +23,7 @@ def fit(X,keep,title):
     disp=m.pearson_chi2/m.df_resid; se=m.bse*np.sqrt(disp); z=m.params/se
     p=2*stats.norm.sf(np.abs(z)); pbar=Y[k].sum()/L[k].sum(); s=pbar*(1-pbar)*100
     sd=np.r_[1.0,X[k].std().to_numpy()]
-    print(f"\n=== {title} ===\nn = {k.sum():,}   mean bush dwell = {100*pbar:.2f}%")
+    print(f"\n=== {title} ===\nn = {k.sum():,}   mean bush hiding = {100*pbar:.2f}%")
     print(f"{'factor':30}{'Δpp/SD':>10}{'Δpp/unit':>11}{'z':>9}{'p':>11}")
     for nm,c,sdv,zz,pp in zip(Xc.columns,m.params,sd,z,p):
         if nm=="const": continue

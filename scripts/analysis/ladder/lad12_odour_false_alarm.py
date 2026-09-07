@@ -2,7 +2,7 @@
 
 QUESTION. Each animal's odour is drawn fresh for every episode, independently of everything else.
 That makes odour strength a second randomised handle - a clean one, because the agent cannot
-choose what a rabbit smells like. If bush dwell rises with the RABBIT odour draw, the agent is
+choose what a rabbit smells like. If bush hiding rises with the RABBIT odour draw, the agent is
 responding to a cue that carries no danger at all. This figure asks whether it does, whether that
 depends on what the arm can see, and whether waking up wounded makes it worse.
 
@@ -31,7 +31,7 @@ Intensity is the SUM of the two odour channels while what marks an animal as a p
 DIFFERENCE, so an episode whose predators smell very loudly has both channels near their ceiling
 and the difference is squeezed toward zero. Measured on this run: mean predator-ness is 0.12 in the
 loudest quartile against 0.18-0.22 in the other three. The loudest predators are the least
-distinguishable ones, and the agent responds to them less. Bush dwell is pooled over each episode's first 25 steps. Solid lines are episodes
+distinguishable ones, and the agent responds to them less. Bush hiding is pooled over each episode's first 25 steps. Solid lines are episodes
 that began nearly unhurt (start wound 0-25), dashed lines those that began badly wounded (75-100);
 the gap between a pair is how much the wound amplified the response to a harmless smell.
 """
@@ -45,7 +45,7 @@ QN = ["weakest\nquarter", "2nd", "3rd", "strongest\nquarter"]
 GRP = {a: L.resolves_identity(D[a]["sensory"]) for a in arms}
 
 def curve(a, kind, ib):
-    """One arm's bush-dwell curve across the four odour quartiles, at one starting-wound level."""
+    """One arm's bush-hiding curve across the four odour quartiles, at one starting-wound level."""
     o = D[a]["odour"]
     b = np.asarray(o[f"{kind}_bush"], float)[:, ib]
     t_ = np.asarray(o[f"{kind}_tot"], float)[:, ib]
@@ -84,7 +84,7 @@ for j, (kind, ttl, xl) in enumerate([
     ax[j].set_xticks(x); ax[j].set_xticklabels(QN, fontsize=8.4)
     ax[j].set_xlabel(xl)
     ax[j].set_title(ttl, fontsize=9.8, loc="left", pad=8)
-ax[0].set_ylabel("bush dwell over the episode's first 25 steps\n(% of those steps spent in a bush)")
+ax[0].set_ylabel("bush hiding over the episode's first 25 steps\n(% of those steps spent in a bush)")
 h = [plt.Line2D([], [], color=PL.GROUP_YES, lw=2.6, label=L.GROUP_LABEL[True] + "  (9 arms)"),
      plt.Line2D([], [], color=PL.GROUP_NO, lw=2.6, label=L.GROUP_LABEL[False] + "  (5 arms)"),
      plt.Line2D([], [], color=PL.MUTED, lw=2.4, marker="o", ms=4.6,

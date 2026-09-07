@@ -168,7 +168,7 @@ bypassed, a provision can — a callback is free to index raw arrays. The guaran
 > and fail the gate; porting it bug-for-bug would pass the gate while making the guarantee false.
 > Rather than carry that into the refactor, **the bug was fixed at source on 2026-09-01**, before any
 > porting. Measured impact, after rebuilding all fourteen arms: the published panel-C range moves
-> from 12.6–17.8% bush dwell in the lowest quarter of felt nociception and 31.3–49.6% in the highest,
+> from 12.6–17.8% bush hiding in the lowest quarter of felt nociception and 31.3–49.6% in the highest,
 > to 12.6–17.9% and 31.7–49.5%. The largest single change is 0.4 percentage points. It is small
 > because the felt signal is a twelve-step convolution and adjacent rows barely differ — but the
 > convention was wrong, and the smallness was not knowable before measuring.
@@ -511,7 +511,7 @@ Exit conditions are the two Criticals; both are plan edits.
 implementing session. Both round-2 Criticals are genuinely closed: the previous-row fix
 (`c20ff5db`) dissolves the concrete instance of the guarantee-vs-gate contradiction, and the
 time-course goldens on disk were verified to carry the post-fix numbers (lowest/highest felt-pain
-quarter bush dwell 12.6–17.9% / 31.7–49.5%). The asserts-vs-provisions split confines the
+quarter bush hiding 12.6–17.9% / 31.7–49.5%). The asserts-vs-provisions split confines the
 contradiction class: an assert either passes or fires on data and cannot move a number, so only the
 two remaining *provision* cells can — and both are already known (time-course t=0 is by design;
 `hiding_drivers.py:214` per-step injury bins are contemporaneous). The population contract's
