@@ -1,3 +1,13 @@
+# PASS 1 OF 2. This spec collects 300,000 episodes; the study's registered evaluation population
+# is 1,000,000 per run (design §3.3, amended 2026-09-07). The remaining 700,000 are collected by the
+# matching `*_pass2.yaml` spec at seed_base 1,300,000.
+#
+# The number below is NOT raised to 1,000,000, deliberately. This file records what was actually
+# collected into `results/trajectories_nmnsite/`, and a spec that claims to reproduce a population it
+# never produced is worse than no spec. `n_episodes` is a guarded manifest field, so the store it
+# wrote cannot be reopened and extended anyway -- editing this number would make the file
+# unreproducible AND still not change a single episode on disk.
+
 # NMN input-site grid — trajectory collection for the FIVE UNMODULATED BASELINES.
 #
 # Driver: scripts/eval/traj_collect/run_collection.py

@@ -36,6 +36,11 @@ develop_link: docs/develop/active/neuromodulation/MODULATION_SITE_REFACTOR.md
 > the measurement's own result about the control agent is recorded as a finding (§4.2), and the
 > post-training evaluation population now has committed spec files instead of a scratch script
 > (§3.3). §C records the full list.
+> **Amended a third time**: 2026-09-07, and this one is **after** the runs finished and after
+> pass 1 of the evaluation collection was on disk. The evaluation population is raised from
+> 300,000 episodes per run to **1,000,000**, delivered as two seed-contiguous passes. No
+> prediction, threshold or band moves — see the amendment in §3.3 for why a precision
+> parameter is not a threshold, and for the guard that forced two passes rather than one.
 > **Open for the user**: §11 — a smaller, replicated alternative to this grid, recommended by the
 > reviewer, recorded for the user to rule on. This design proceeds as approved in the meantime.
 > **Estimator-swapped twin (added 2026-09-07)**: [[NMN_INPUT_SITE_GRID_GAENORM]] — a second
@@ -865,11 +870,43 @@ complains about.
 | Spec | Covers | State |
 |---|---|---|
 | `configs/trajectory_collection/nmn_site_grid_baselines.yaml` | The five unmodulated `MC` runs that supply the control band (§4.2). | **Regenerated from the five stores already on disk.** Re-running it reproduces the population, not the original invocation. |
-| `configs/trajectory_collection/nmn_site_grid_arms.yaml` | All 16 grid arms. | **Written; not runnable yet.** Every run path is a placeholder, because the run directory names do not exist until launch. The labels are final and match the Cell column of the manifest above. |
+| `configs/trajectory_collection/nmn_site_grid_arms.yaml` | All 16 grid arms, pass 1. | **Run 2026-09-07.** The run-path placeholders were filled from the results tree once all sixteen runs finished at ~10,000,000 episodes. |
+| `configs/trajectory_collection/nmn_site_grid_arms_pass2.yaml` | All 16 grid arms, pass 2. | **Added 2026-09-07** — the top-up to a million. |
+| `configs/trajectory_collection/nmn_site_grid_baselines_pass2.yaml` | The five baselines, pass 2. | **Added 2026-09-07** — same top-up, so the control is not left behind. |
 
-Both specs pin the same population parameters: **300,000 episodes**, **`seed_base` 1,000,000**,
-`obs_precision: float32`, final checkpoint, deterministic (argmax) policy, one collector process per
-node.
+All four specs pin the same population parameters: **`seed_base` 1,000,000**, `obs_precision:
+float32`, final checkpoint, deterministic (argmax) policy, one collector process per node.
+
+#### Amendment, 2026-09-07 — the evaluation population is 1,000,000 episodes per run, not 300,000
+
+**This changes a registered number after data exists, so it is recorded rather than edited in.** The
+original registration was 300,000 episodes per run, chosen to match the five unmodulated baselines,
+which had themselves been collected at 300,000. The user's expectation is a million per run and it
+is now a million.
+
+**Why this is not a threshold change.** Nothing in §2.5, §4 or §5 moves. The evaluation population is
+a *measurement precision* parameter: more episodes narrow the error on every measure without altering
+what counts as a positive result, which direction any prediction points, or any band a cell must
+clear. Enlarging it cannot turn a null into a hit by choice, because the thresholds it is scored
+against are unchanged and were fixed before any run launched. Had a *threshold* been widened after
+seeing a number, that would be a different act entirely and would invalidate the pre-registration.
+
+**Why two passes rather than one collection at a million.** `n_episodes` is a guarded field of a
+store's manifest: a store built for 300,000 cannot be reopened and extended — the collector
+hard-fails by design rather than silently mixing populations. Pass 1 was already on disk and complete
+for fourteen of sixteen arms when the change was requested, so re-collecting would have discarded
+finished work for no scientific gain. The sensor-ladder study hit this exact wall and resolved it the
+same way; the analysis layer reads both roots together.
+
+**Seed contiguity is what makes this safe.** Pass 1 covers 1,000,000&ndash;1,299,999; pass 2 covers
+1,300,000&ndash;1,999,999. No gap, no overlap, the same range for every run in the study, so the
+paired design survives the split. A `seed_base` typo here would produce an unpaired comparison that
+still looked entirely legitimate — which is why the two-pass arrangement is written down here rather
+than left in the spec files alone.
+
+**Both sides are topped up.** Collecting a million for the arms while leaving the control at 300,000
+would leave every arm-vs-control contrast resting on 300,000 paired episodes, so the extra would buy
+precision everywhere except where the study's headline comparison actually lives.
 
 **The one value that must not drift is `seed_base: 1000000`.** It is what makes every arm-to-arm and
 arm-to-baseline behavioural comparison **paired** — episode *i* presents the same world to every
