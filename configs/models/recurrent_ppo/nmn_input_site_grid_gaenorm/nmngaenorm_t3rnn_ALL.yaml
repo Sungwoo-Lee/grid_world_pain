@@ -1,0 +1,78 @@
+# GENERATED FILE -- DO NOT EDIT BY HAND.
+# Regenerate with:
+#   python configs/models/recurrent_ppo/nmn_input_site_grid/generate_site_grid_arms.py
+# Drift check (writes nothing):  ... generate_site_grid_arms.py --check
+#
+# NMN input x site grid, GAE_NORM twin -- t3rnn
+# Study: docs/experiments/active/nmn_input_site_grid/NMN_INPUT_SITE_GRID_GAENORM.md
+#
+# THE ESTIMATOR-SWAPPED TWIN. This file has a one-for-one counterpart in
+# configs/models/recurrent_ppo/nmn_input_site_grid/ that is identical to it in every
+# key except one: `return_mode`, which is "MC" there and "GAE_NORM" here. That is
+# the recipe the trainer uses to turn a rollout into the two numbers PPO learns from
+# -- the critic's target, and the advantage. GAE_NORM rather than plain GAE, because
+# GAE would ALSO change the scale convention and the two grids would then differ in
+# two things at once. The one-key claim is checked mechanically, not asserted:
+#   ... generate_site_grid_arms.py --verify   (step [5], the twin diff)
+#
+# WHERE the modulator writes: cell 3 -- the memory cell's emitted output (never its carried state).
+# WHAT the modulator reads:   slice ALL -- everything the agent senses (27 of the 27 observation numbers).
+#
+# Everything else is identical across all sixteen arms of the grid and is inherited
+# from configs/models/recurrent_ppo/recurrent_ppo_cmp_gaenorm.yaml (see the generator).
+# The modulator uses ONE mechanism at every site -- FiLM, i.e. multiply each neuron
+# by a learned gain and add a learned offset -- so that WHERE it acts is varied
+# without also varying HOW it acts. `rnn_mechanism: activation` keeps the task GRU
+# the same plain cell the unmodulated control uses; the legacy gate-bias operator
+# would swap the cell and reintroduce a known initialisation confound.
+# Temperature modulation is OFF in every arm: it is a fifth, differently-shaped
+# channel (it divides the action scores) and leaving it on would confound all five
+# write targets with it.
+#
+# Seed is config-owned (configs/train/default.yaml: 42); no --seed is passed at launch.
+
+agent:
+  algorithm: RecurrentPPO
+  lr_actor: 0.0005
+  lr_critic: 0.0005
+  gamma: 0.95
+  K_epochs: 4
+  eps_clip: 0.1
+  sequence_length: 128
+  frame_stack: 1
+  fc_layers: [128, 128]
+  actor_fc_layers: [128, 128]
+  critic_fc_layers: [128, 128]
+  hidden_size: 128
+  entropy_coef: 0.01
+  gae_lambda: 0.95
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  use_layer_norm: true
+  rnn_type: GRU
+  activation: relu
+  return_mode: GAE_NORM
+  encoding_mode: hierarchical
+  hierarchical_params:
+    default_mlp: [128, 128]
+    unimodal_overrides:
+      visual: [128, 128]
+      olfaction: [128, 128]
+    multimodal_hub: [128, 128]
+  modulation:
+    type: FiLM
+    mod_hidden_size: 16
+    grouping_size: 1
+    percept_bias_init: 3.0
+    percept_add_bias_init: 0.0
+    memory_bias_init: 0.0
+    memory_clip: [-2.0, 2.0]
+    input_sensors: "all"
+    sites:
+      encoder: false
+      rnn: true
+      actor: false
+      critic: false
+    rnn_mechanism: activation
+    temperature:
+      enabled: false
