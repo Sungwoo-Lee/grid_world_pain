@@ -38,6 +38,13 @@ develop_link: docs/develop/active/neuromodulation/MODULATION_SITE_REFACTOR.md
 > (§3.3). §C records the full list.
 > **Open for the user**: §11 — a smaller, replicated alternative to this grid, recommended by the
 > reviewer, recorded for the user to rule on. This design proceeds as approved in the meantime.
+> **Estimator-swapped twin (added 2026-09-07)**: [[NMN_INPUT_SITE_GRID_GAENORM]] — a second
+> copy of this same sixteen-cell grid in which one setting is changed and nothing else: the
+> recipe the trainer uses to turn a rollout into the two numbers PPO learns from, `return_mode`,
+> is `GAE_NORM` there and `MC` here. The two grids' thirty-two configuration files have been
+> diffed key-by-key and each pair differs in exactly that one key. That document owns the
+> cross-grid analysis and the rules for what a difference between the grids does and does not
+> license; it does not restate the science, the confounds or the hypotheses, which live here.
 > **Related**: [[MODULATION_SITE_REFACTOR]] (the implementation this design consumes) ·
 > [[return_mode_cmp_10M]] (source of the noise floor and of the return-mode choice) ·
 > [[INJURY_HIDING_SIGN_RECONCILIATION]] (source of the behavioural-measurement rules) ·
@@ -805,6 +812,24 @@ Re-run at any time (CPU only; it never competes with training for a GPU):
   match the Cell column of the manifest; only the timestamps are missing. Fill them after launch,
   from the manifest's Log path column.
 
+#### The estimator-swapped twin of this grid (added 2026-09-07)
+
+A second sixteen-cell grid now exists, identical to this one in every configuration key except
+`agent.return_mode` (`GAE_NORM` instead of `MC`), and it is designed in
+[[NMN_INPUT_SITE_GRID_GAENORM]]. Three things about it that matter to a reader of *this*
+document:
+
+- **This grid's sixteen files were not touched.** The generator was extended to take the grid as
+  a parameter rather than forked, and its `--check --grid mc` drift check passes byte-for-byte
+  against the files these sixteen runs are training from.
+- **The two grids are a matched pair, verified mechanically.** Every one of the twin's sixteen
+  configs was flattened and compared key-by-key against its counterpart here; all sixteen differ
+  in exactly `agent.return_mode`.
+- **Cross-grid agreement is not confirmation.** Both grids run at seed 42, so a matched pair of
+  cells starts from bit-identical initial weights — agreement across the pair removes the
+  learning-signal confound and removes nothing about the seed. The five-seed confirmation gate
+  of §4.4 applies unchanged. The full rule set is §2.3 of the twin's document.
+
 ### 3.2 Launch command
 
 One invocation per run, through `run_command.py` onto the assigned node. Shown for Run 11
@@ -948,7 +973,7 @@ against a reference band of −1.8 to −0.8 percentage points taken from the fo
 Three things are wrong with that, and all three were caught before launch:
 
 1. **The band measures a different quantity.** It is the "in a bush *while acting*" column of a
-   decomposition of total bush dwell over **all** steps (rest-in-bush plus act-in-bush equals dwell).
+   decomposition of total bush hiding over **all** steps (rest-in-bush plus act-in-bush equals dwell).
    It falls with injury partly **mechanically**, because acting itself falls by 18-32 percentage
    points. The measure proposed here was a fraction **of acting steps** — a different denominator,
    with an unknown baseline sign. The "flip toward zero or positive" threshold was therefore being
