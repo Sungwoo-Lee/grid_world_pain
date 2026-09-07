@@ -1,0 +1,465 @@
+<title>Does the Modulator Listen Inward?</title>
+<style>
+:root{
+  color-scheme:light dark;
+  --paper:#f8f7f5; --card:#ffffff; --ink:#1b1b1d; --ink-2:#3d3c3a; --muted:#6f6d69;
+  --rule:#e3e0db; --rule-2:#efedea;
+  /* These three ENCODE the experiment's three input slices. They are data colours: nothing that is
+     not one of those three slices may use them -- not a status badge, not a tier label, not an
+     accent border, not the eyebrow. A page whose chrome borrows its data palette contradicts its
+     own legend, and this one nearly shipped with the word FINISHED drawn in the "everything"
+     green inside a "world-only" blue cell. */
+  --intero:#8a4b8f; --intero-soft:#f2eaf3;
+  --extero:#2f6f9f; --extero-soft:#e7eff5;
+  --both:#2d6a4f; --both-soft:#e7efea;
+  --warn:#b3322b; --warn-soft:#f7e9e8;
+  --pending:#8a6d1f; --pending-soft:#f6f0dd;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --paper:#141416; --card:#1b1b1e; --ink:#e9e6e1; --ink-2:#c8c4bd; --muted:#918d86;
+    --rule:#2d2d32; --rule-2:#232327;
+    --intero:#c78fcc; --intero-soft:#241a26;
+    --extero:#79b2d8; --extero-soft:#17232b;
+    --both:#6fbf95; --both-soft:#18291f;
+    --warn:#e0736a; --warn-soft:#2b1d1c;
+    --pending:#d9b64e; --pending-soft:#292417;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --paper:#141416; --card:#1b1b1e; --ink:#e9e6e1; --ink-2:#c8c4bd; --muted:#918d86;
+  --rule:#2d2d32; --rule-2:#232327;
+  --intero:#c78fcc; --intero-soft:#241a26;
+  --extero:#79b2d8; --extero-soft:#17232b;
+  --both:#6fbf95; --both-soft:#18291f;
+  --warn:#e0736a; --warn-soft:#2b1d1c;
+  --pending:#d9b64e; --pending-soft:#292417;
+}
+:root[data-theme="light"]{
+  color-scheme:light;
+  --paper:#f8f7f5; --card:#ffffff; --ink:#1b1b1d; --ink-2:#3d3c3a; --muted:#6f6d69;
+  --rule:#e3e0db; --rule-2:#efedea;
+  --intero:#8a4b8f; --intero-soft:#f2eaf3;
+  --extero:#2f6f9f; --extero-soft:#e7eff5;
+  --both:#2d6a4f; --both-soft:#e7efea;
+  --warn:#b3322b; --warn-soft:#f7e9e8;
+  --pending:#8a6d1f; --pending-soft:#f6f0dd;
+}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:16.5px;
+  line-height:1.62;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1080px;margin:0 auto;padding:0 26px 110px}
+.col{max-width:730px;margin-left:auto;margin-right:auto}
+header{padding:70px 0 34px;border-bottom:1px solid var(--rule);margin-bottom:44px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);margin:0 0 18px}
+h1{font-family:var(--serif);font-weight:600;font-size:clamp(34px,5.4vw,52px);line-height:1.05;
+  letter-spacing:-.02em;margin:0 0 20px;text-wrap:balance}
+.standfirst{font-family:var(--serif);font-size:clamp(18px,2.2vw,21px);line-height:1.48;
+  color:var(--ink-2);margin:0;text-wrap:pretty}
+h2{font-family:var(--serif);font-weight:600;font-size:clamp(25px,3.2vw,31px);line-height:1.16;
+  letter-spacing:-.014em;margin:70px 0 10px;text-wrap:balance}
+h3{font-family:var(--serif);font-weight:600;font-size:20px;margin:36px 0 6px;letter-spacing:-.01em}
+h4{font-family:var(--mono);font-size:11px;letter-spacing:.11em;text-transform:uppercase;
+  margin:0 0 10px;color:var(--muted)}
+p{margin:0 0 17px}
+a{color:var(--ink-2)}
+code{font-family:var(--mono);font-size:.85em;background:var(--rule-2);padding:1px 3px;
+  border-radius:4px;overflow-wrap:anywhere}
+sup{font-size:.72em;line-height:0;vertical-align:baseline;position:relative;top:-.5em}
+ul,ol{margin:0 0 17px;padding-left:21px}
+li{margin-bottom:9px}
+figure{margin:34px 0}
+figure .dia{overflow-x:auto}
+/* Legibility floor derived per diagram: rendered label = floor x fontSize / viewBoxWidth.
+   viewBox is 1000 wide and the smallest label is 10 units, so 950px gives 9.5px. An earlier
+   comment here said 10.5 units and 900px, which computes to 9.45px of apparent headroom against
+   an actual 9.00px -- the derivation has to name the real smallest label or it cannot be checked. */
+figure svg{display:block;width:100%;min-width:950px;height:auto;color:var(--ink)}
+figcaption{margin-top:14px;font-size:14.5px;color:var(--muted);line-height:1.55;
+  max-width:730px;margin-left:auto;margin-right:auto}
+figcaption b{color:var(--ink);font-weight:640}
+.callout{border:1px solid var(--rule);border-left:3px solid var(--pending);background:var(--card);
+  border-radius:4px;padding:20px 24px;margin:30px 0}
+.callout.key{border-left-color:var(--warn);background:var(--warn-soft)}
+.callout.note{border-left-color:var(--muted);background:var(--rule-2)}
+.callout p{font-size:15.5px;line-height:1.57;margin:0 0 12px}
+.callout p:last-child{margin-bottom:0}
+pre{background:var(--card);border:1px solid var(--rule);border-radius:4px;padding:16px 18px;
+  overflow-x:auto;font-family:var(--mono);font-size:12.5px;line-height:1.62;margin:22px auto;
+  max-width:730px}
+/* No desktop breakout here: this page's longest code line is about 70 characters and fits the
+   prose column with room. Widening it would draw the eye to a mostly empty box. */
+pre code{background:none;padding:0;font-size:inherit}
+.scroll{overflow-x:auto;margin:0 0 17px}
+/* NOT width:max-content. That is the right rule for a table of numbers, where letting it size to
+   its content and scroll beats squeezing digits; it is exactly wrong for four columns of prose,
+   where max-content means "as wide as the longest sentence" and the container then hides three
+   quarters of the table at EVERY width, silently, behind an overlay scrollbar. */
+table{border-collapse:collapse;width:100%;min-width:560px;font-size:13.5px;
+  font-variant-numeric:tabular-nums}
+td.tier{white-space:nowrap}
+.tcap{padding:0 0 10px;font-size:13.5px;color:var(--muted);margin:0}
+th,td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--rule-2);vertical-align:top}
+thead th{font-weight:600;font-size:12px;color:var(--muted);border-bottom:1px solid var(--rule)}
+td.num,th.num{text-align:right}
+.tier{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.06em}
+.t-a{color:var(--warn)} .t-b{color:var(--ink)} .t-c{color:var(--ink)} .t-d{color:var(--muted)}
+.pending{border:1px dashed var(--rule);border-radius:4px;padding:22px 24px;margin:26px 0;
+  background:var(--pending-soft)}
+.pending h4{color:var(--pending)}
+.pending p{font-size:15px;margin:0 0 11px}
+.pending p:last-child{margin-bottom:0}
+.foot{margin-top:70px;padding-top:22px;border-top:1px solid var(--rule);font-size:13.5px;
+  color:var(--muted)}
+.lede{font-size:17.5px;line-height:1.55}
+</style>
+
+<div class="wrap">
+<header class="col">
+  <p class="eyebrow">Interoceptive AI &middot; analysis plan &middot; 2026-09-07</p>
+  <h1>Does the Modulator Listen Inward?</h1>
+  <p class="standfirst">Sixteen agents are training right now, differing in what a small second
+  network is allowed to read and which parts of the policy it is allowed to re-tune. This is the
+  plan for reading them &mdash; what will be measured, why those measures and not the obvious one,
+  and what would have to be true for the answer to be believed. The results section at the end is
+  deliberately empty.</p>
+</header>
+
+<section class="col">
+<h2>The question, and the measure that cannot answer it</h2>
+<p class="lede">The agent carries a second, small network &mdash; the <strong>neuromodulator</strong>
+&mdash; that reads its senses and continuously re-tunes the main policy, the way a brain chemical
+such as acetylcholine re-tunes cortex. The claim the project is built on is not that a modulated
+agent behaves <em>differently</em>. It is sharper than that: that a modulated agent's response to the
+outside world should <strong>vary more with its internal state</strong> &mdash; that being hurt
+should change how it reads a predator, not merely change what it does.</p>
+<p>That is an interaction, not a main effect, and it is what everything below is built to measure.</p>
+
+<div class="callout key">
+<h4>The one thing that changes what you asked for</h4>
+<p>You asked for an internal-state-dependent <strong>bush dwell</strong> comparison. Bush dwell is
+the measure this project has used for a year, and a recent analysis showed it is largely a
+<strong>by-product</strong> rather than a decision.</p>
+<p>A wounded agent mostly <strong>freezes to heal</strong>. Its Rest rate rises by 17.7 to 35.2
+percentage points &mdash; about five times the size of the bush-dwell effect &mdash; and that resting
+happens mostly in the open. Whether freezing registers as &ldquo;hides more&rdquo; depends only on
+whether the agent happened to be standing on a bush when it stopped. Across fourteen agents,
+&ldquo;hides more when injured&rdquo; was positive in <strong>13 of 14</strong> over the first 25
+steps, <strong>2 of 14</strong> over the first 100, and <strong>1 of 14</strong> over the whole
+episode. The sign is a property of the window and of where cover happens to be, not of a decision.</p>
+<p>So bush dwell stays in the battery &mdash; it is the historical measure and dropping it would
+break comparability with every earlier study &mdash; but it is <strong>demoted</strong>. It cannot
+carry the headline, and a modulator that changes it has not yet been shown to have changed anything
+the agent decided.</p>
+</div>
+
+<p>The escape is to score a <strong>movement decision</strong> instead of a location. An agent that
+freezes then contributes nothing in either direction: freezing removes the step from the denominator
+rather than loading it into the numerator. That measure already exists, is already pre-registered for
+this grid, and is described in the battery below as <strong>B0</strong>.</p>
+</section>
+
+<section class="col">
+<h2>What is training</h2>
+<p>Two things about the modulator have never been varied independently, because until this week the
+code did not allow it: <strong>what it reads</strong>, and <strong>which parts of the policy it
+re-tunes</strong>. A companion refactor made every re-tuning site use the same operation and made
+each site switchable, so &ldquo;where it acts&rdquo; is finally separable from &ldquo;how it
+acts&rdquo;. The grid crosses the two factors.</p>
+</section>
+
+<figure>
+<div class="dia"><svg viewBox="0 0 1000 452" role="img" aria-label="A grid of sixteen training runs. Rows are the four places the modulator may re-tune the policy plus an all-sites row; columns are the three things it may read: internal body channels only, external world channels only, or everything. A separate single cell is the unmodulated control.">
+  <text x="20" y="26" font-size="10.5" fill="var(--muted)" font-family="monospace">WHAT IT RE-TUNES  &darr;</text>
+  <text x="470" y="26" font-size="10.5" fill="var(--muted)" font-family="monospace">WHAT IT READS  &rarr;</text>
+
+  <text x="470" y="62" text-anchor="middle" font-size="11.5" fill="var(--intero)" font-weight="600">I &mdash; body only</text>
+  <text x="470" y="76" text-anchor="middle" font-size="10" fill="var(--muted)">injury, hunger, nociception</text>
+  <text x="650" y="62" text-anchor="middle" font-size="11.5" fill="var(--extero)" font-weight="600">X &mdash; world only</text>
+  <text x="650" y="76" text-anchor="middle" font-size="10" fill="var(--muted)">sight, smell, collision</text>
+  <text x="830" y="62" text-anchor="middle" font-size="11.5" fill="var(--both)" font-weight="600">ALL &mdash; everything</text>
+  <text x="830" y="76" text-anchor="middle" font-size="10" fill="var(--muted)">the current design</text>
+
+  <!-- control -->
+  <rect x="20" y="96" width="330" height="46" rx="4" fill="var(--card)" stroke="var(--rule)"/>
+  <text x="34" y="118" font-size="11.5" fill="var(--ink)" font-family="monospace">t1none &mdash; no modulator</text>
+  <text x="34" y="134" font-size="10" fill="var(--muted)">the control. Reads nothing, re-tunes nothing.</text>
+  <text x="338" y="126" text-anchor="end" font-size="10" fill="var(--ink)" font-weight="600">FINISHED</text>
+
+  <g font-family="monospace" font-size="11.5">
+    <text x="34" y="182" fill="var(--ink)">t2enc</text><text x="34" y="196" font-size="10" fill="var(--muted)">the sensory front-end</text>
+    <text x="34" y="240" fill="var(--ink)">t3rnn</text><text x="34" y="254" font-size="10" fill="var(--muted)">the memory cell</text>
+    <text x="34" y="298" fill="var(--ink)">t4act</text><text x="34" y="312" font-size="10" fill="var(--muted)">the action layers</text>
+    <text x="34" y="356" fill="var(--ink)">t5crt</text><text x="34" y="370" font-size="10" fill="var(--muted)">the value head</text>
+    <text x="34" y="414" fill="var(--ink)">t16quad</text><text x="34" y="428" font-size="10" fill="var(--muted)">all four at once</text>
+  </g>
+
+  <!-- 5 rows x 3 cols of cells -->
+  <g>
+    <rect x="390" y="162" width="160" height="40" rx="3" fill="var(--intero-soft)" stroke="var(--intero)"/>
+    <rect x="570" y="162" width="160" height="40" rx="3" fill="var(--extero-soft)" stroke="var(--extero)"/>
+    <rect x="750" y="162" width="160" height="40" rx="3" fill="var(--both-soft)" stroke="var(--both)"/>
+    <rect x="390" y="220" width="160" height="40" rx="3" fill="var(--intero-soft)" stroke="var(--intero)"/>
+    <rect x="570" y="220" width="160" height="40" rx="3" fill="var(--extero-soft)" stroke="var(--extero)"/>
+    <rect x="750" y="220" width="160" height="40" rx="3" fill="var(--both-soft)" stroke="var(--both)"/>
+    <rect x="390" y="278" width="160" height="40" rx="3" fill="var(--intero-soft)" stroke="var(--intero)"/>
+    <rect x="570" y="278" width="160" height="40" rx="3" fill="var(--extero-soft)" stroke="var(--extero)"/>
+    <rect x="750" y="278" width="160" height="40" rx="3" fill="var(--both-soft)" stroke="var(--both)"/>
+    <rect x="390" y="336" width="160" height="40" rx="3" fill="var(--intero-soft)" stroke="var(--intero)"/>
+    <rect x="570" y="336" width="160" height="40" rx="3" fill="var(--extero-soft)" stroke="var(--extero)"/>
+    <rect x="750" y="336" width="160" height="40" rx="3" fill="var(--both-soft)" stroke="var(--both)"/>
+    <rect x="390" y="394" width="160" height="40" rx="3" fill="var(--intero-soft)" stroke="var(--intero)"/>
+    <rect x="570" y="394" width="160" height="40" rx="3" fill="var(--extero-soft)" stroke="var(--extero)"/>
+    <rect x="750" y="394" width="160" height="40" rx="3" fill="var(--both-soft)" stroke="var(--both)"/>
+  </g>
+  <g font-size="10" fill="var(--pending)" text-anchor="middle" font-weight="600">
+    <text x="470" y="187">training</text><text x="650" y="187">training</text><text x="830" y="187">training</text>
+    <text x="470" y="245">training</text><text x="650" y="245">training</text><text x="830" y="245">training</text>
+    <text x="470" y="303">training</text><text x="650" y="303">training</text><text x="830" y="303">training</text>
+    <text x="470" y="361">training</text><text x="650" y="361">training</text><text x="830" y="361">training</text>
+    <text x="470" y="419">training</text>
+  </g>
+  <g font-size="10" fill="var(--ink)" text-anchor="middle" font-weight="600">
+    <text x="650" y="419">FINISHED</text><text x="830" y="419">FINISHED</text>
+  </g>
+</svg></div>
+<figcaption><b>Sixteen cells, one seed each.</b> Rows are the four places the modulator may re-tune
+the policy, plus a row where it re-tunes all of them; columns are the three things it may be allowed
+to read. The control at the top reads nothing and re-tunes nothing. As of 14:34 today, three cells
+have reached the ten-million-episode budget and thirteen are still training, between 8.2 and 9.8
+million. <b>Those status words are hand-typed and are a snapshot, not a live reading</b> &mdash;
+they were true at that minute and will be wrong within the hour; the results republish will state
+each cell's actual checkpoint step instead. <b>Colour carries one meaning only:</b> purple is the
+body-only slice, blue the world-only slice, green everything. Nothing else on this page may use
+those three &mdash; an earlier draft drew the word FINISHED in the &ldquo;everything&rdquo; green
+inside a &ldquo;world-only&rdquo; blue cell, which is the legend contradicting itself.</figcaption>
+</figure>
+
+<section class="col">
+<div class="callout note">
+<h4>Why the purple column is the point</h4>
+<p>If a modulator that reads <strong>only the body</strong> produces internal-state-dependent
+behaviour, the project's story holds: an interoceptive signal re-tunes perception. If a modulator
+that reads <strong>only the outside world</strong> does just as well, the story is in trouble
+&mdash; whatever the modulator is doing, it is not interoception, and the same benefit was available
+without ever looking inward. That single contrast is worth more than any ranking of sites.</p>
+</div>
+</section>
+
+<section class="col">
+<h2>The measure battery</h2>
+<p>Four tiers, and the tier matters as much as the measure. Tier A is pre-registered: its threshold
+was fixed before any run in this grid existed and may not be adjusted afterwards. Everything below it
+is either a decomposition that explains a tier-A result or an exploratory measure that may generate
+a hypothesis but may not settle one.</p>
+
+<p class="tcap">Every measure is computed per cell and compared against the unmodulated control.</p>
+<div class="scroll">
+<table>
+  <thead><tr><th>tier</th><th>measure</th><th>what it asks</th><th>why it is in this tier</th></tr></thead>
+  <tbody>
+    <tr>
+      <td class="tier t-a">A</td>
+      <td><b>B0</b> &mdash; bush-entry rate<br><span style="color:var(--muted)">and <b>&Delta;B0</b>, its change across starting-injury bins</span></td>
+      <td>Of the times the agent stood in the open and <em>chose to move</em>, how often did that step land it in cover &mdash; and does that fraction change with how badly it woke up hurt?</td>
+      <td><b>Pre-registered headline.</b> Scores a decision, not a location, so a freezing agent leaves the denominator instead of loading the numerator. Threshold fixed before launch.</td>
+    </tr>
+    <tr>
+      <td class="tier t-b">B</td>
+      <td><b>Rest rate</b> by starting injury</td>
+      <td>How much more does the agent stop moving when it wakes wounded?</td>
+      <td><b>Decomposition.</b> This is the effect that dwarfs bush dwell &mdash; five times its size. Any dwell result must be read against it or it will be misattributed.</td>
+    </tr>
+    <tr>
+      <td class="tier t-b">B</td>
+      <td><b>Bush dwell</b>, decomposed into rest-in-cover and act-in-cover</td>
+      <td>The historical measure, split into the part that is freezing and the part that is moving.</td>
+      <td><b>Comparability.</b> Kept because every earlier study reports it; decomposed because undecomposed it conflates two different things.</td>
+    </tr>
+    <tr>
+      <td class="tier t-b">B</td>
+      <td><b>Survival steps</b></td>
+      <td>Does the modulator help the agent live longer?</td>
+      <td><b>Necessary, not sufficient.</b> A modulator can raise survival by statically re-weighting channels without ever conditioning on internal state, so this cannot carry the claim alone.</td>
+    </tr>
+    <tr>
+      <td class="tier t-c">C</td>
+      <td><b>Modulator internals</b> &mdash; gain and offset spread, temperature, per-site statistics</td>
+      <td>Is the modulator actually doing anything, and is it doing it differently in different cells?</td>
+      <td><b>Mechanism.</b> Distinguishes &ldquo;no effect because the idea is wrong&rdquo; from &ldquo;no effect because this site never learned to move&rdquo;. A dead modulator and a useless one look identical behaviourally.</td>
+    </tr>
+    <tr>
+      <td class="tier t-d">D</td>
+      <td><b>Threat-response interaction</b> &mdash; response to a near predator, split by injury</td>
+      <td>Does being hurt change how the agent answers a threat?</td>
+      <td><b>Exploratory, and known to be confounded.</b> A frozen agent cannot answer a predator by moving, so the effect shrinks with injury whether or not any decision changed. Reported, never used to settle anything.</td>
+    </tr>
+    <tr>
+      <td class="tier t-d">D</td>
+      <td><b>Rabbit false-alarm shift</b></td>
+      <td>Does injury make a harmless animal read as dangerous?</td>
+      <td><b>Exploratory.</b> This is the sharpest available form of the hypervigilance claim, but the earlier study found the effect lives on the odour channel rather than the proximity channel, so it needs its own care.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<h3>What B0 actually is</h3>
+<p>Written out because the store's row convention has bitten this project before &mdash; row
+<code>t</code> holds the world <em>at</em> <code>t</code> together with the action that
+<em>arrived at</em> <code>t</code>, so an entry event straddles two rows:</p>
+<pre><code>denominator:  agent_in_bush[t]   == False        # standing in the open
+              action[t+1]        in {0,1,2,3}    # and chose to MOVE (not Rest, not Eat)
+
+numerator:    agent_in_bush[t+1] == True         # the move landed in cover
+
+binned by:    the injury the environment dealt at t = 0, before the agent acted
+              -- the only internal-state variable that is causally identified</code></pre>
+<p>Binning on the <em>randomised starting</em> injury rather than the injury the agent happens to be
+carrying is what makes the comparison causal rather than associational. An agent's carried injury is
+partly a consequence of its own behaviour; the wound it was dealt at reset is not.</p>
+</section>
+
+<section class="col">
+<h2>Where each measure comes from</h2>
+<p>You asked which previous analysis was for this. Every measure above is inherited &mdash; none of
+it is new, and that is deliberate. The value here is the combination, applied to a design that varies
+the one factor none of the earlier studies could.</p>
+
+<p class="tcap">Each prior analysis, and what it contributes</p>
+<div class="scroll">
+<table>
+  <thead><tr><th>prior analysis</th><th>what it established</th><th>what it contributes here</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>The sensor ladder</b><br><span style="color:var(--muted)">fourteen agents, one million episodes each</span></td>
+      <td>What each sense buys; that behaviour tracks the <em>felt</em> wound rather than the physical one, peaking at step 12 rather than step 0; that the wound-response window is about 25 steps.</td>
+      <td><b>The reference band and the window.</b> Its fourteen agents all have the modulator <em>off</em>, which makes them the only existing measurement of the pure-nociception agent this grid is compared against.</td>
+    </tr>
+    <tr>
+      <td><b>The injury&ndash;hiding reconciliation</b></td>
+      <td>That the wounded agent freezes to heal; that Rest rises 17.7&ndash;35.2 pp in 14 of 14 arms; that cover-use <em>while acting</em> falls with injury in 14 of 14; that the sign of &ldquo;hides more&rdquo; is a property of the window.</td>
+      <td><b>The reason bush dwell is demoted</b>, tier B's decomposition, and the rule that any location-based measure inherits the artefact.</td>
+    </tr>
+    <tr>
+      <td><b>The hiding-drivers factor analysis</b></td>
+      <td>Which features of the world drive hiding, with everything else held fixed; the quasi-binomial machinery for doing that at episode level.</td>
+      <td><b>The method for tier D</b>, and the warning that its own injury bins are contemporaneous rather than previous-row &mdash; a known divergence, registered, not silently inherited.</td>
+    </tr>
+    <tr>
+      <td><b>The return-mode comparison</b></td>
+      <td>The seed-to-seed noise floor: five runs of one identical configuration finished anywhere between 35.5 and 136.7 survival steps.</td>
+      <td><b>The reason a single seed cannot eliminate anything</b> &mdash; see the limits below. This is the most consequential inheritance on the page.</td>
+    </tr>
+    <tr>
+      <td><b>The analysis-pipeline refactor</b></td>
+      <td>One guarded scan for every study, with the seven checks that the three earlier hand-rolled loops disagreed about.</td>
+      <td><b>The tooling.</b> These measures will be computed through the shared scan, so the guards that three published bugs slipped past are on by default rather than remembered.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</section>
+
+<section class="col">
+<h2>What would make this wrong</h2>
+<p>Stated before any number exists, because a limit disclosed after a result reads as an excuse.</p>
+
+<div class="callout key">
+<h4>One seed per cell &mdash; the limit that governs everything else</h4>
+<p>Sixteen cells at one seed each gives a number for every combination and a confidence interval for
+none. The immediately preceding study ran <strong>five seeds of one identical configuration</strong>
+and they finished between <strong>35.5 and 136.7 survival steps</strong>. A gap of that size between
+two cells of this grid could be the modulator or could be the seed, and nothing in the data
+distinguishes them.</p>
+<p>The consequence is asymmetric, and it is the part worth internalising: a cell that <em>wins</em>
+is protected, because the design requires it to be re-run at five seeds before anyone may call it an
+effect. A cell that <em>loses</em> is not protected. A site that would work fine, handed one unlucky
+seed, gets recorded as &ldquo;does not help&rdquo; and dropped &mdash; and nobody re-runs a negative.
+<strong>This analysis will therefore report no eliminations.</strong> A cell that fails to clear a
+threshold will be reported as untested, not as refuted.</p>
+</div>
+
+<h3>Four narrower threats, each with what is actually done about it</h3>
+<ul>
+<li><b>Thirteen of sixteen runs are still training.</b> Comparing a cell stopped at 8.2 million
+episodes against one that reached 10 million confounds the modulator with the budget. Nothing is
+computed until every cell has reached the same checkpoint, and the checkpoint step used is reported
+per cell rather than assumed equal.</li>
+<li><b>The store's identity hash is not a same-world check.</b> It hashes the whole resolved config
+including the seed and the run tag, so it differs across runs whose environment is
+<em>identical</em>. A reader who treats it as a pairing check will wrongly conclude the comparison
+is invalid. Pairing is established empirically instead &mdash; by confirming the animal draws,
+observation draws, starting injury and spawn cell are bit-identical across shared episode seeds.</li>
+<li><b>One action index cannot be verified from the store.</b> B0's denominator excludes both Rest
+and Eat. Rest has a witness column and is checked on every store; Eat does not, and is taken from the
+source. If the action ordering ever changed, Rest would fail loudly and Eat would fail
+<em>silently</em>. Stated because it is not fixable from the data, only bounded.</li>
+<li><b>A dead modulator and a useless one look identical.</b> This is what tier C is for. Without the
+modulator's own internal statistics, &ldquo;this site does not help&rdquo; cannot be separated from
+&ldquo;this site never learned to do anything at all&rdquo;, and the second is a training result
+rather than a scientific one.</li>
+</ul>
+
+<div class="callout">
+<h4>An open question that is yours, not mine</h4>
+<p>The experiment's own reviewer proposed spending the same sixteen slots differently: five write
+sites at three seeds each, then the two survivors crossed with the input slices at three seeds. That
+buys replication on every comparison &mdash; eliminations become trustworthy &mdash; at the cost of
+deferring the interoception question, the one the project's thesis rests on, by roughly fifteen
+hours. The grid as launched answers the thesis question immediately and cannot eliminate anything.
+Both are defensible; the choice is a research call rather than a technical one, and it is recorded
+in the design document as still open.</p>
+</div>
+</section>
+
+<section class="col">
+<h2>What gets reported, and in what order</h2>
+<p>Fixed now so that the reporting order cannot be chosen after seeing which cut looks best.</p>
+<ol>
+<li><b>Does the modulator do anything at all?</b> Every cell against the unmodulated control, on B0
+first and survival second.</li>
+<li><b>Body-only against world-only.</b> The purple column against the blue one, pooled across sites.
+This is the thesis test and it is reported whichever way it comes out.</li>
+<li><b>Which site, if any.</b> Ranked, with every difference smaller than the seed-noise floor
+explicitly marked as indistinguishable rather than ordered.</li>
+<li><b>The decomposition.</b> Rest rate and the two halves of bush dwell, so a headline movement can
+be attributed to a decision or to freezing.</li>
+<li><b>The modulator's own behaviour.</b> Tier C, used only to explain a null &mdash; never to
+rescue one.</li>
+<li><b>Exploratory.</b> Tier D, labelled as such, generating hypotheses for a replicated follow-up.</li>
+</ol>
+</section>
+
+<section class="col">
+<h2>Results</h2>
+<div class="pending">
+<h4>Empty on purpose &mdash; no run has been read</h4>
+<p>Thirteen of the sixteen cells are still training as this page is written, and the plan above fixes
+what will be measured <em>before</em> the numbers exist. That ordering is the only thing that makes a
+pre-registered threshold worth anything, so this section stays empty until every cell has reached the
+same checkpoint.</p>
+<p>When it is filled, it will carry: the six reports above in that order; a per-cell table with the
+checkpoint step each number was computed at; the empirical pairing check; the Rest-versus-movement
+guard result for every store; and, for any comparison smaller than the seed-noise floor, the words
+<em>indistinguishable at one seed</em> rather than a rank.</p>
+<p>Nothing in the plan above may be revised once a number from this grid has been looked at. If
+something here turns out to be wrong &mdash; as the bush-dwell measure did in the study before this
+one &mdash; the revision gets its own dated note saying what changed and why, and the original stays
+visible.</p>
+</div>
+</section>
+
+<div class="col foot">
+<p>Plan only; nothing here has been run. Design and pre-registration:
+<code>docs/experiments/active/nmn_input_site_grid/NMN_INPUT_SITE_GRID.md</code>. The measurement
+tool: <code>scripts/analysis/context_dependence.py</code>. The finding that demoted bush dwell:
+<code>docs/experiments/active/diagnosis/INJURY_HIDING_SIGN_RECONCILIATION.md</code>. Run status read
+from the results tree at 14:34 on 2026-09-07.</p>
+</div>
+</div>

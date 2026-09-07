@@ -513,6 +513,44 @@ and require every gap to equal the line-height. Filter out sub-pixel rect bounda
 version of this check reports 1-2 px "pitches" that are rect edges rather than lines, and those
 false positives will hide the real 4 px one.
 
+### F24 amendment — `width:max-content` fixes a numeric table and breaks a prose one
+
+**Saw:** two four-column tables of prose hid **2,082 px and 1,950 px** of themselves at 1440 px, on a
+page with room to spare. The rightmost column of each — the one carrying the argument — was absent at
+every viewport width, silently, behind an overlay scrollbar.
+
+**Cause:** `table{width:max-content;min-width:100%}`, copied verbatim from a page whose tables were
+four columns of single digits. There it is correct: let the table size to its content and scroll
+rather than squeeze numbers. On columns of prose, `max-content` means *as wide as the longest
+sentence*, so the table grows to two or three thousand pixels and the scroll container dutifully
+hides most of it.
+
+**Why it is worth its own entry:** the two cases look identical in the stylesheet, and the fix for
+one is the defect in the other. A rule carried between pages without re-asking what its columns
+contain is how a fix becomes a bug.
+
+**Rule:** numeric tables may use `width:max-content`; tables containing a prose column use
+`width:100%` with a `min-width` around the point where the columns stop being readable (560 px works
+for four columns). Verify by measuring `scrollWidth - clientWidth` on the scroll container at the
+widest viewport — it must be **0**. The layout checker exempts scroll containers by design, so it
+reports clean either way and cannot catch this.
+
+### F11 amendment — page chrome must not borrow the data palette
+
+**Saw:** a page whose legend read "colour carries one meaning only: purple is the body-only slice,
+blue the world-only slice, green everything" drew the word **FINISHED** in that green — including
+inside a blue *world-only* cell. The same three tokens were also styling tier badges, a callout
+accent and the header eyebrow.
+
+**Cause:** F11 as written is about plotting code, so a page that keeps its *figure* colours honest
+can still contradict its own legend through chrome. The tokens were reused because they were the
+nice colours already on the page.
+
+**Rule:** a token that encodes a data category is a data colour. Nothing that is not a member of that
+category may use it — not a status badge, not a tier label, not an accent border, not the eyebrow.
+Give chrome its own tokens. Check by grepping every `var(--<data-token>)` outside the figure that
+defines it; on a correct page the only hits are the encoded elements themselves.
+
 ## Related
 
 - [`artifact_generation_guide`](artifact_generation_guide.md) — the wider guide: content, claims,
