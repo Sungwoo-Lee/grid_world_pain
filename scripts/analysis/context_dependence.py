@@ -408,7 +408,13 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--run"); ap.add_argument("--checkpoint", default=None)
-    ap.add_argument("--store-root", default="results/trajectories")
+    ap.add_argument("--store-root", nargs="+", default=["results/trajectories"],
+                    help="one or more store roots. A run's evaluation population may be "
+                         "split across several, because `n_episodes` is a guarded manifest "
+                         "field: a store collected for N episodes cannot be reopened and "
+                         "extended, so a top-up goes to a fresh root with a continuing seed "
+                         "base. find_stores() already treats the union as ONE population; "
+                         "only this flag was single-valued.")
     ap.add_argument("--state", default="felt_pain", choices=["injury", "nutrition", "felt_pain"])
     ap.add_argument("--measures", default="all", choices=["all", "occupancy", "entry"],
                     help="'entry' = B0/B1/B3 only (one pass); 'occupancy' = the older "
