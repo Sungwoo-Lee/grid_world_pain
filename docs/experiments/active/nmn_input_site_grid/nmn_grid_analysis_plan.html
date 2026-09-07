@@ -82,6 +82,11 @@ figure .dia{overflow-x:auto}
 .dia-hint{display:none;font-family:var(--mono);font-size:11px;letter-spacing:.04em;
   color:var(--muted);margin:0 0 7px}
 @media (max-width:1010px){ .dia-hint{display:block} }
+/* Same reasoning as the diagram: a seven-column numeric table cannot fit a phone, and an overlay
+   scrollbar is not a cue. Shown only where the table actually overflows. */
+.tbl-hint{display:none;font-family:var(--mono);font-size:11px;letter-spacing:.04em;
+  color:var(--muted);margin:0 0 6px}
+@media (max-width:820px){ .tbl-hint{display:block} }
 /* Legibility floor derived per diagram: rendered label = floor x fontSize / viewBoxWidth.
    viewBox is 1000 wide and the smallest label is 10 units, so 950px gives 9.5px. An earlier
    comment here said 10.5 units and 900px, which computes to 9.45px of apparent headroom against
@@ -110,11 +115,17 @@ pre code{background:none;padding:0;font-size:inherit}
 table{border-collapse:collapse;width:100%;min-width:560px;font-size:13.5px;
   font-variant-numeric:tabular-nums}
 td.tier{white-space:nowrap}
-/* The first column of each table is a short label; without a floor it gets squeezed to 140-160px
+/* PROSE tables: the first column is a short label and without a floor it is squeezed to 140-160px
    and wraps to five lines while the prose columns beside it have room to spare. */
-table.battery td:first-child, table.battery th:first-child{width:64px}
-table.battery td:nth-child(2), table.battery th:nth-child(2){min-width:200px}
+table.measures td:first-child, table.measures th:first-child{width:64px}
+table.measures td:nth-child(2), table.measures th:nth-child(2){min-width:200px}
 table.prov td:first-child, table.prov th:first-child{min-width:185px}
+/* NUMERIC tables want the opposite. The rules above were originally on `.battery` and applied to
+   these too, which put a 200px floor under a column of ~45px numbers -- a 230px dead band in every
+   row -- while squeezing the label column to 104px so the longest label wrapped to two lines. A
+   column rule belongs to the table's CONTENT, not to its name. */
+table.results td:first-child, table.results th:first-child{white-space:nowrap}
+table.results td, table.results th{padding-left:10px;padding-right:10px}
 .tcap{padding:0 0 10px;font-size:13.5px;color:var(--muted);margin:0}
 th,td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--rule-2);vertical-align:top}
 thead th{font-weight:600;font-size:12px;color:var(--muted);border-bottom:1px solid var(--rule)}
@@ -156,13 +167,13 @@ details pre{margin:12px 0;max-width:none;padding:16px 14px}
 
 <div class="wrap">
 <header class="col">
-  <p class="eyebrow">Interoceptive AI &middot; analysis plan &middot; 2026-09-07</p>
+  <p class="eyebrow">Interoceptive AI &middot; pre-registered plan and results &middot; 2026-09-07</p>
   <h1>Does the Modulator Listen Inward?</h1>
-  <p class="standfirst">Sixteen agents are training right now, differing in what a small second
-  network is allowed to read and which parts of the policy it is allowed to re-tune. This is the
-  plan for reading them &mdash; what will be measured, why those measures and not the obvious one,
-  and what would have to be true for the answer to be believed. The results section at the end is
-  deliberately empty.</p>
+  <p class="standfirst">Sixteen agents, differing in what a small second network is allowed to read
+  and which parts of the policy it is allowed to re-tune. This page is the plan for reading them
+  &mdash; what was measured, why those measures and not the obvious one, and what would have to be
+  true for the answer to be believed &mdash; followed by the answer, which is that none of the
+  sixteen behaved differently from an agent with no second network at all.</p>
 </header>
 
 <section class="col">
@@ -385,7 +396,7 @@ acts&rdquo;. The grid crosses the two factors.</p>
   <rect x="20" y="96" width="250" height="46" rx="4" fill="var(--card)" stroke="var(--rule)"/>
   <text x="34" y="118" font-size="11.5" fill="var(--ink)" font-family="monospace">t1none &mdash; no modulator</text>
   <text x="34" y="134" font-size="10" fill="var(--muted)">the control. Reads nothing, re-tunes nothing.</text>
-  <text x="258" y="126" text-anchor="end" font-size="10" fill="var(--ink)" font-weight="600">FINISHED</text>
+  <text x="258" y="126" text-anchor="end" font-size="10" fill="var(--ink)" font-weight="600">10.0M</text>
 
   <g font-family="monospace" font-size="11.5">
     <text x="34" y="182" fill="var(--ink)">t2enc</text><text x="34" y="196" font-size="10" fill="var(--muted)">the sensory front-end</text>
@@ -413,12 +424,12 @@ acts&rdquo;. The grid crosses the two factors.</p>
     <rect x="515" y="394" width="215" height="40" rx="3" fill="var(--extero-soft)" stroke="var(--extero)"/>
     <rect x="740" y="394" width="215" height="40" rx="3" fill="var(--both-soft)" stroke="var(--both)"/>
   </g>
-  <g font-size="10" fill="var(--pending)" text-anchor="middle" font-weight="600">
-    <text x="398" y="187">training</text><text x="623" y="187">training</text><text x="848" y="187">training</text>
-    <text x="398" y="245">training</text><text x="623" y="245">training</text><text x="848" y="245">training</text>
-    <text x="398" y="303">training</text><text x="623" y="303">training</text><text x="848" y="303">training</text>
-    <text x="398" y="361">training</text><text x="623" y="361">training</text><text x="848" y="361">training</text>
-    <text x="398" y="419">training</text>
+  <g font-size="10" fill="var(--ink)" text-anchor="middle" font-weight="600">
+    <text x="398" y="187">10.0M</text><text x="623" y="187">10.0M</text><text x="848" y="187">10.0M</text>
+    <text x="398" y="245">10.0M</text><text x="623" y="245">10.0M</text><text x="848" y="245">10.0M</text>
+    <text x="398" y="303">10.0M</text><text x="623" y="303">10.0M</text><text x="848" y="303">10.0M</text>
+    <text x="398" y="361">10.0M</text><text x="623" y="361">10.0M</text><text x="848" y="361">10.0M</text>
+    <text x="398" y="419">10.0M</text>
   </g>
   <g font-size="10" fill="var(--ink)" text-anchor="middle" font-weight="600">
     <text x="623" y="419">FINISHED</text><text x="848" y="419">FINISHED</text>
@@ -428,9 +439,10 @@ acts&rdquo;. The grid crosses the two factors.</p>
 the policy, plus a row where it re-tunes all of them; columns are the three things it may be allowed
 to read. The control at the top reads nothing and re-tunes nothing. As of 14:34 today, three cells
 have reached the ten-million-episode budget and thirteen are still training, between 8.2 and 9.8
-million. <b>Those status words are hand-typed and are a snapshot, not a live reading</b> &mdash;
-they were true at that minute and will be wrong within the hour; the results republish will state
-each cell's actual checkpoint step instead. <b>Colour carries one meaning only:</b> purple is the
+million. <b>All sixteen finished.</b> Each cell shows the episode budget it reached; every one
+landed within 105 episodes of ten million, and each was then evaluated on a further one million
+episodes. An earlier version of this page showed thirteen of them still training, which was true
+when the plan was written and wrong by the time the results below existed. <b>Colour carries one meaning only:</b> purple is the
 body-only slice, blue the world-only slice, green everything. Nothing else on this page may use
 those three &mdash; an earlier draft drew the word FINISHED in the &ldquo;everything&rdquo; green
 inside a &ldquo;world-only&rdquo; blue cell, which is the legend contradicting itself.</figcaption>
@@ -456,7 +468,7 @@ a hypothesis but may not settle one.</p>
 
 <p class="tcap">Every measure is computed per cell and compared against the unmodulated control.</p>
 <div class="scroll">
-<table class="battery">
+<table class="measures">
   <thead><tr><th>tier</th><th>measure</th><th>what it asks</th><th>why it is in this tier</th></tr></thead>
   <tbody>
     <tr>
@@ -587,10 +599,10 @@ threshold will be reported as untested, not as refuted.</p>
 
 <h3>Four narrower threats, each with what is actually done about it</h3>
 <ul>
-<li><b>Thirteen of sixteen runs are still training.</b> Comparing a cell stopped at 8.2 million
-episodes against one that reached 10 million confounds the modulator with the budget. Nothing is
-computed until every cell has reached the same checkpoint, and the checkpoint step used is reported
-per cell rather than assumed equal.</li>
+<li><b>Every cell must reach the same checkpoint before anything is computed.</b> Comparing a cell
+stopped at 8.2 million episodes against one that reached 10 million would confound the modulator with
+the budget. <em>Satisfied:</em> all sixteen finished within 105 episodes of ten million, and no
+measure was computed until they had.</li>
 <li><b>The store's identity hash is not a same-world check.</b> It hashes the whole resolved config
 including the seed and the run tag, so it differs across runs whose environment is
 <em>identical</em>. A reader who treats it as a pairing check will wrongly conclude the comparison
@@ -665,8 +677,9 @@ than tests &mdash; but it does not manufacture findings.</p>
 deviations</strong> of the unmodulated control mean, and the control cell itself sits at +1.1.</p>
 
 <p class="tcap">&Delta;B0 &mdash; change in the bush-entry decision between the lowest and highest quarter of randomised starting injury. Control: mean &minus;0.187 pp, sd 0.268, from five seeds.</p>
+<p class="tbl-hint">&larr; the table scrolls sideways &mdash; six numeric columns follow the cell name</p>
 <div class="scroll">
-<table class="battery">
+<table class="results">
   <thead><tr><th>cell</th><th class="num">&Delta;B0 (pp)</th><th class="num">z</th><th class="num">&Delta;rest (pp)</th><th class="num">z</th><th class="num">survival</th><th class="num">z</th></tr></thead>
   <tbody>
     <tr><td><b>t1none</b> &mdash; the control</td><td class="num">+0.099</td><td class="num">+1.1</td><td class="num">52.0</td><td class="num">+1.5</td><td class="num">168.3</td><td class="num">+1.1</td></tr>
@@ -681,24 +694,33 @@ deviations</strong> of the unmodulated control mean, and the control cell itself
     <tr><td>t4act_ALL</td><td class="num">&minus;0.061</td><td class="num">+0.5</td><td class="num">20.1</td><td class="num">&minus;0.6</td><td class="num">165.6</td><td class="num">&minus;0.4</td></tr>
     <tr><td>t5crt_I</td><td class="num">&minus;0.008</td><td class="num">+0.7</td><td class="num">23.5</td><td class="num">&minus;0.4</td><td class="num">166.9</td><td class="num">+0.3</td></tr>
     <tr><td>t5crt_X</td><td class="num">&minus;0.023</td><td class="num">+0.6</td><td class="num">22.4</td><td class="num">&minus;0.5</td><td class="num">167.9</td><td class="num">+0.9</td></tr>
-    <tr><td>t5crt_ALL</td><td class="num">&minus;0.068</td><td class="num">+0.4</td><td class="num">29.3</td><td class="num">&minus;0.0</td><td class="num">170.6</td><td class="num">+2.3</td></tr>
+    <tr><td>t5crt_ALL</td><td class="num">&minus;0.068</td><td class="num">+0.4</td><td class="num">29.3</td><td class="num">0.0</td><td class="num">170.6</td><td class="num">+2.3</td></tr>
     <tr><td>t16quad_I</td><td class="num">&minus;0.178</td><td class="num">+0.0</td><td class="num">19.6</td><td class="num">&minus;0.7</td><td class="num">167.5</td><td class="num">+0.6</td></tr>
     <tr><td>t16quad_X</td><td class="num">+0.063</td><td class="num">+0.9</td><td class="num">23.0</td><td class="num">&minus;0.5</td><td class="num">171.5</td><td class="num">+2.8</td></tr>
     <tr><td>t16quad_ALL</td><td class="num">&minus;0.073</td><td class="num">+0.4</td><td class="num">26.5</td><td class="num">&minus;0.2</td><td class="num">169.8</td><td class="num">+1.9</td></tr>
   </tbody>
 </table>
 </div>
-<p><b>Axes.</b> Rows are the sixteen cells. &Delta;B0 is in percentage points of bush-entry rate,
-positive meaning a more wounded agent steps into cover more often. &Delta;rest is in percentage
-points of steps spent resting, same direction. Survival is mean steps per episode. Each z is
-(cell &minus; control mean) &divide; control standard deviation, where the control is the five
-unmodulated seeds; z is unitless.</p>
+<p><b>Axes.</b> Rows are the sixteen cells. <b>x</b>-columns: &Delta;B0 in percentage points of
+bush-entry rate, positive meaning a more wounded agent steps into cover more often; &Delta;rest in
+percentage points of steps spent resting, same direction; survival in mean steps per episode. Each
+<b>z</b> is (cell &minus; control mean) &divide; control standard deviation, where the control is the
+five unmodulated seeds &mdash; z is unitless, and 0 means indistinguishable from the control's
+average.</p>
+<p class="tcap"><b>Data behind this table.</b> 16 runs of 1,000,000 episodes = 16,000,000 episodes,
+of 21,000,000 collected across the study (76%; the other five are the control runs summarised in the
+band). Those episodes hold 3,537,855,984 step rows in total, of which <b>129,246,901 (3.7%)</b> enter
+&Delta;B0's denominator &mdash; the rows where the agent was standing in the open, in the first 25
+steps, and chose to move. The other 96.3% are excluded by the measure's definition, not by
+filtering: resting, eating, already-in-cover and later-than-25-step rows cannot answer the question
+&ldquo;when it moved, where did it go?&rdquo;.</p>
 
 <h3>2 &middot; Body-only against world-only &mdash; the thesis test</h3>
 <p>This is the comparison the project's story rests on, and it is reported whichever way it comes
 out. It comes out flat.</p>
+<p class="tbl-hint">&larr; the table scrolls sideways &mdash; six numeric columns follow the cell name</p>
 <div class="scroll">
-<table class="battery">
+<table class="results">
   <thead><tr><th>modulator reads</th><th class="num">&Delta;B0 (pp)</th><th class="num">&Delta;rest (pp)</th><th class="num">prox trend</th><th class="num">survival</th></tr></thead>
   <tbody>
     <tr><td><b>I</b> &mdash; body only</td><td class="num">+0.010</td><td class="num">+26.8</td><td class="num">+3.08</td><td class="num">166.5</td></tr>
@@ -708,8 +730,16 @@ out. It comes out flat.</p>
   </tbody>
 </table>
 </div>
-<p><b>Axes.</b> Rows pool the five sites within each input slice. Columns as above; the last row is
-the five-seed control for reference.</p>
+<p><b>Axes.</b> Rows pool the five sites within each input slice; the last row is the five-seed
+unmodulated control. <b>x</b>-columns: &Delta;B0 in percentage points of bush-entry rate;
+&Delta;rest in percentage points of steps spent resting; <b>prox trend</b> in percentage points of
+threat response per injury bin &mdash; how much more strongly the agent answers a nearby predator for
+each step up the starting-injury scale, positive meaning a more wounded agent responds more;
+survival in mean steps per episode.</p>
+<p class="tcap"><b>Data behind this table.</b> 15 runs pooled into 3 rows (5 sites &times; 3 slices),
+plus the 5-run control &mdash; 20 of the 21 runs, 95%. The sixteenth grid cell,
+<code>t1none</code>, is excluded here because it has no modulator and therefore no input slice; it
+appears in table 1 and in the control comparison instead.</p>
 <p><strong>On the headline measure, body-only and world-only differ by 0.020 percentage points
 &mdash; 0.08 of one control standard deviation.</strong> A modulator restricted to the agent's own
 body produces the same bush-entry behaviour as one restricted to the outside world, and both produce
@@ -782,7 +812,7 @@ asymmetry was written into the plan before any number existed, precisely so it c
 renegotiated now.</p>
 <p><strong>It does not license</strong> a claim about why. The modulators may have been inert, or
 active but behaviourally irrelevant; nothing measured here separates those.</p>
-<div class="note">
+<div class="callout note">
 <h4>What would make the next round decisive</h4>
 <p>The reviewer's staged alternative, recorded in the design as still open, buys replication on every
 comparison for the same number of GPU slots: five write sites at three seeds, then the two survivors

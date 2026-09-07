@@ -607,6 +607,30 @@ width supported, or the phone view opens on nothing. Fix by tightening the label
 viewBox; where the diagram genuinely cannot fit, **say so** — a one-line scroll cue shown under a
 media query, because an overlay scrollbar is not a cue.
 
+### F28 — a class that matches no rule renders as a bare block, silently
+
+**Saw:** a `<div class="note">` intended as a bordered callout rendered with no border, no
+background and no padding, beside seven correctly boxed callouts on the same page. Its mono
+uppercase heading, designed to sit inside a box, read as an orphan sub-label under the preceding
+paragraph.
+
+**Cause:** the component is defined as a **compound selector**, `.callout.note`, and the markup
+carried only the modifier. `class="note"` matches nothing, so the element inherits bare-`div`
+styling. CSS has no error for this: an unmatched selector is indistinguishable from a deliberate
+absence of styling.
+
+**Why neither review method catches it:** the markup looks right — `class="note"` is exactly what a
+reader expects for a note — and the stylesheet is right too; the defect lives in the mismatch
+between them. Nothing overflows, overlaps or clips, so the geometry checker is silent, and the block
+is still perfectly readable, so a screenshot scan can pass over it.
+
+**Rule:** a modifier class never travels alone. Write `class="callout note"`, or define the modifier
+as a standalone rule.
+
+**Verifying a fix:** append a bare `<div>`, read its computed style, then walk every `[class]`
+element and flag any whose border, padding and background are all identical to it. One pass, and it
+catches every instance on the page rather than the one somebody noticed.
+
 ## Related
 
 - [`artifact_generation_guide`](artifact_generation_guide.md) — the wider guide: content, claims,
