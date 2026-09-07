@@ -1,0 +1,52 @@
+# Pass 2 of 2 — the top-up that takes the sixteen grid arms from 300,000 episodes to 1,000,000.
+#
+# WHY TWO PASSES AND NOT ONE. `n_episodes` is a GUARDED field of a store's manifest, so a store
+# collected for 300,000 episodes cannot be reopened and extended — the collector hard-fails, by
+# design, rather than silently mixing populations. Pass 1 is already on disk, so the only way to
+# reach a million is a SECOND store covering the remaining seeds. This is exactly what the
+# sensor-ladder study did, and its two roots are read together by the analysis layer.
+#
+# SEED CONTIGUITY IS THE WHOLE POINT. Pass 1 covers 1,000,000..1,299,999. This pass starts at
+# 1,300,000 and covers 700,000 more, ending at 1,999,999 — no gap, no overlap, and the same range
+# for every run in the study, so the paired design survives. A seed_base typo here would silently
+# produce an unpaired comparison that still looks fine.
+#
+# BOTH SIDES GET IT. The arms and the five unmodulated baselines are both topped up. Collecting a
+# million for the arms while leaving the control at 300,000 would mean every arm-vs-control
+# contrast still rested on 300,000 episodes, and the extra would buy nothing where it matters most.
+
+name: nmn_site_grid_arms_pass2
+algo: rppo
+out_root: results/trajectories_nmnsite2   # a SECOND root; the analysis reads both
+                                         # No collision risk — store paths key on run_tag.
+episodes: 700000           # 300,000 (pass 1) + 700,000 = 1,000,000
+seed_base: 1300000         # continues pass 1's 1,000,000..1,299,999 with no gap or overlap
+checkpoints: [final]       # pass 1 of 2; the matched-budget pass is the known gap noted above
+nodes: [107, 108, 109, 110, 111, 112, 113]   # 101-106 and 114 hold the GAE twin
+obs_precision: float32     # must match the baselines, which are float32
+device: gpu
+npar: 1                    # explicit, not defaulted — see the OOM note above
+batch_size: 5000
+shard_episodes: 5000
+blocks_per_cell: 140       # 700,000 / 5,000
+                           # baselines did
+
+runs:
+  # LABELS ARE FINAL and match the Launch Manifest (design doc §3) cell names.
+  # PATHS ARE PLACEHOLDERS — replace <RUNDIR_*> with the real directory name of each run.
+  - {label: T1_none,      path: results/JAX_RecurrentPPO/20260907-045531_rppo_nmnsite_t1none_s42}
+  - {label: T2_enc_ALL,   path: results/JAX_RecurrentPPO/20260907-050220_rppo_nmnsite_t2enc_ALL_s42}
+  - {label: T2_enc_I,     path: results/JAX_RecurrentPPO/20260907-050221_rppo_nmnsite_t2enc_I_s42}
+  - {label: T2_enc_X,     path: results/JAX_RecurrentPPO/20260907-050222_rppo_nmnsite_t2enc_X_s42}
+  - {label: T3_rnn_ALL,   path: results/JAX_RecurrentPPO/20260907-050223_rppo_nmnsite_t3rnn_ALL_s42}
+  - {label: T3_rnn_I,     path: results/JAX_RecurrentPPO/20260907-050224_rppo_nmnsite_t3rnn_I_s42}
+  - {label: T3_rnn_X,     path: results/JAX_RecurrentPPO/20260907-050225_rppo_nmnsite_t3rnn_X_s42}
+  - {label: T4_act_ALL,   path: results/JAX_RecurrentPPO/20260907-050226_rppo_nmnsite_t4act_ALL_s42}
+  - {label: T4_act_I,     path: results/JAX_RecurrentPPO/20260907-050227_rppo_nmnsite_t4act_I_s42}
+  - {label: T4_act_X,     path: results/JAX_RecurrentPPO/20260907-050227_rppo_nmnsite_t4act_X_s42}
+  - {label: T5_crt_ALL,   path: results/JAX_RecurrentPPO/20260907-050229_rppo_nmnsite_t5crt_ALL_s42}
+  - {label: T5_crt_I,     path: results/JAX_RecurrentPPO/20260907-050230_rppo_nmnsite_t5crt_I_s42}
+  - {label: T5_crt_X,     path: results/JAX_RecurrentPPO/20260907-050231_rppo_nmnsite_t5crt_X_s42}
+  - {label: T16_quad_ALL, path: results/JAX_RecurrentPPO/20260907-050232_rppo_nmnsite_t16quad_ALL_s42}
+  - {label: T16_quad_I,   path: results/JAX_RecurrentPPO/20260907-050232_rppo_nmnsite_t16quad_I_s42}
+  - {label: T16_quad_X,   path: results/JAX_RecurrentPPO/20260907-050233_rppo_nmnsite_t16quad_X_s42}

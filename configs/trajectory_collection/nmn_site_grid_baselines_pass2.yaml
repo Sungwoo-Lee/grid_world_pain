@@ -1,0 +1,49 @@
+# Pass 2 of 2 — the top-up that takes the five unmodulated baselines from 300,000 episodes to 1,000,000.
+#
+# WHY TWO PASSES AND NOT ONE. `n_episodes` is a GUARDED field of a store's manifest, so a store
+# collected for 300,000 episodes cannot be reopened and extended — the collector hard-fails, by
+# design, rather than silently mixing populations. Pass 1 is already on disk, so the only way to
+# reach a million is a SECOND store covering the remaining seeds. This is exactly what the
+# sensor-ladder study did, and its two roots are read together by the analysis layer.
+#
+# SEED CONTIGUITY IS THE WHOLE POINT. Pass 1 covers 1,000,000..1,299,999. This pass starts at
+# 1,300,000 and covers 700,000 more, ending at 1,999,999 — no gap, no overlap, and the same range
+# for every run in the study, so the paired design survives. A seed_base typo here would silently
+# produce an unpaired comparison that still looks fine.
+#
+# BOTH SIDES GET IT. The arms and the five unmodulated baselines are both topped up. Collecting a
+# million for the arms while leaving the control at 300,000 would mean every arm-vs-control
+# contrast still rested on 300,000 episodes, and the extra would buy nothing where it matters most.
+
+name: nmn_site_grid_baselines_pass2
+algo: rppo
+out_root: results/trajectories_nmnsite2   # a SECOND root; the analysis reads both
+episodes: 700000           # 300,000 (pass 1) + 700,000 = 1,000,000
+seed_base: 1300000         # continues pass 1's 1,000,000..1,299,999 with no gap or overlap
+                           # value here or there silently degrades every arm-vs-baseline
+                           # comparison from PAIRED to UNPAIRED — both collections succeed,
+                           # no error, no warning.
+checkpoints: [final]       # Pre-launch, FINAL-CHECKPOINT ONLY. The design also wants a
+                           # nearest-to-matched-budget reading, which is NOT COMPUTABLE until
+                           # the grid runs establish a common environment-step budget: there
+                           # is nothing yet to match to. That second pass gets its own spec.
+nodes: [107, 108, 109, 110, 111, 112, 113]   # 101-106 and 114 hold the GAE twin
+obs_precision: float32     # matches the stores on disk; the measured saving from float16 on
+                           # this environment (12.8% store-wide) is below the study's
+                           # pre-registered 20% adoption threshold — see example.yaml
+device: gpu
+npar: 1                    # explicit, not defaulted — see the OOM note above
+batch_size: 5000
+shard_episodes: 5000
+blocks_per_cell: 140       # 700,000 / 5,000
+                           # is what the ad hoc script did (--blocks 0:60)
+
+runs:
+  # Comment gives each store's resolved final checkpoint step and its env_fp, so the stores on
+  # disk are checkable against this file. The step differs per run because each run's last
+  # checkpoint lands wherever its 10,000,000-episode budget ran out.
+  - {label: mc_s42, path: results/JAX_RecurrentPPO/20260904-173804_rppo_cmp10m_mc_s42}   # final = 10000044, env_fp a4cbd376c9
+  - {label: mc_s43, path: results/JAX_RecurrentPPO/20260904-173904_rppo_cmp10m_mc_s43}   # final = 10000060, env_fp 0c7260c592
+  - {label: mc_s44, path: results/JAX_RecurrentPPO/20260904-174005_rppo_cmp10m_mc_s44}   # final = 10000032, env_fp 2770336d22
+  - {label: mc_s45, path: results/JAX_RecurrentPPO/20260904-174106_rppo_cmp10m_mc_s45}   # final = 10000100, env_fp 9e8a6ca5e1
+  - {label: mc_s46, path: results/JAX_RecurrentPPO/20260904-174208_rppo_cmp10m_mc_s46}   # final = 10000005, env_fp eb11489e2c
