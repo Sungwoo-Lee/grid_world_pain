@@ -75,6 +75,13 @@ ul,ol{margin:0 0 17px;padding-left:21px}
 li{margin-bottom:9px}
 figure{margin:34px 0}
 figure .dia{overflow-x:auto}
+/* The diagram cannot fit a phone: its legibility floor is 950px and the first data column starts a
+   quarter of the way in, so a 390px screen opens on row labels and very little grid. Rather than
+   shrink it below readability, say plainly that it scrolls -- an overlay scrollbar gives no cue,
+   and a reader who does not know to swipe sees a diagram with no data in it. */
+.dia-hint{display:none;font-family:var(--mono);font-size:11px;letter-spacing:.04em;
+  color:var(--muted);margin:0 0 7px}
+@media (max-width:1010px){ .dia-hint{display:block} }
 /* Legibility floor derived per diagram: rendered label = floor x fontSize / viewBoxWidth.
    viewBox is 1000 wide and the smallest label is 10 units, so 950px gives 9.5px. An earlier
    comment here said 10.5 units and 900px, which computes to 9.45px of apparent headroom against
@@ -103,6 +110,11 @@ pre code{background:none;padding:0;font-size:inherit}
 table{border-collapse:collapse;width:100%;min-width:560px;font-size:13.5px;
   font-variant-numeric:tabular-nums}
 td.tier{white-space:nowrap}
+/* The first column of each table is a short label; without a floor it gets squeezed to 140-160px
+   and wraps to five lines while the prose columns beside it have room to spare. */
+table.battery td:first-child, table.battery th:first-child{width:64px}
+table.battery td:nth-child(2), table.battery th:nth-child(2){min-width:200px}
+table.prov td:first-child, table.prov th:first-child{min-width:185px}
 .tcap{padding:0 0 10px;font-size:13.5px;color:var(--muted);margin:0}
 th,td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--rule-2);vertical-align:top}
 thead th{font-weight:600;font-size:12px;color:var(--muted);border-bottom:1px solid var(--rule)}
@@ -117,6 +129,29 @@ td.num,th.num{text-align:right}
 .foot{margin-top:70px;padding-top:22px;border-top:1px solid var(--rule);font-size:13.5px;
   color:var(--muted)}
 .lede{font-size:17.5px;line-height:1.55}
+details{border:1px solid var(--rule);border-radius:4px;background:var(--card);
+  padding:0 18px;margin:0 0 10px}
+details[open]{padding-bottom:14px}
+/* NOT display:flex. A summary's children here are an element, a BARE TEXT RUN (", and why it is
+   not called pain") and a span -- and flex makes every bare run its own anonymous item, free to
+   wrap independently of the words around it. At desktop that tears each comma 10px from its word;
+   at phone width the runs become side-by-side columns, one word per line. This is the register's
+   founding defect wearing a different display value: position the marker, do not lay out the row. */
+summary{cursor:pointer;position:relative;display:block;padding:12px 0 12px 22px;
+  font-size:15px;line-height:1.5;list-style:none}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"+";position:absolute;left:0;top:12px;font-family:var(--mono);
+  font-size:13px;font-weight:700;color:var(--muted)}
+details[open] summary::before{content:"\2212"}
+summary b{font-weight:640}
+summary .gloss{color:var(--muted);font-weight:400}
+details p{font-size:15px;line-height:1.57;margin:0 0 11px}
+details p:last-child{margin-bottom:0}
+details pre{margin:12px 0;max-width:none;padding:16px 14px}
+/* margin-top/bottom, never the shorthand: this element also carries .col, whose auto side margins
+   are what centre it. The shorthand zeroes them and drops the entire section 175px out of column. */
+.terms{margin-top:26px;margin-bottom:26px}
+.terms h3{margin:30px 0 12px}
 </style>
 
 <div class="wrap">
@@ -164,6 +199,166 @@ rather than loading it into the numerator. That measure already exists, is alrea
 this grid, and is described in the battery below as <strong>B0</strong>.</p>
 </section>
 
+<section class="col terms">
+<h2>Words this page uses</h2>
+<p>Every term below appears later on. Open the ones you need; skip the rest. Nothing here is
+required reading if the vocabulary is already familiar.</p>
+
+<h3>The agent and its body</h3>
+
+<details><summary><b>Interoceptive</b> <span class="gloss">&mdash; sensing your own body from the inside</span></summary>
+<p>Interoception is the sense of your own internal condition: hunger, pain, how hard your heart is
+working. It is the counterpart of <em>exteroception</em>, which is sensing the outside world through
+eyes, ears and nose. This agent has both. Its interoceptive channels report how injured it is, how
+hungry it is, and a pain-like signal; its exteroceptive channels report what it can see, smell and
+bump into.</p>
+<p>The whole project is named for this distinction, and this experiment is the first that can switch
+one off and leave the other on.</p></details>
+
+<details><summary><b>Nociception</b>, and why it is not called pain <span class="gloss">&mdash; the raw damage signal</span></summary>
+<p>Nociception is the detection of tissue damage &mdash; the signal a nerve sends when something
+harmful happens. <em>Pain</em> is the experience that may or may not follow from it. Keeping the two
+apart is not pedantry here: pain is the thing this project is trying to explain, so calling the
+input &ldquo;pain&rdquo; would assume the conclusion. The agent has a nociceptor; whether anything
+pain-like emerges is the open question.</p>
+<p>The agent's nociceptor is also <strong>delayed and smoothed</strong>. It does not report the wound
+directly; it reports a weighted average of the last twelve steps of damage, which means an agent that
+wakes up badly hurt feels <em>nothing at all for two steps</em> and does not feel the full wound
+until step twelve. Several findings in this project turn on that delay.</p></details>
+
+<details><summary><b>Bush dwell</b> <span class="gloss">&mdash; the fraction of steps spent standing in cover</span></summary>
+<p>The world contains bushes that conceal the agent from predators. Bush dwell is simply the share of
+an episode's steps the agent spent standing in one. It has been this project's main behavioural
+measure for about a year, which is why it appears here at all &mdash; and why the finding that it is
+mostly a by-product of freezing, rather than a decision to hide, mattered enough to change this
+plan's headline measure.</p></details>
+
+<details><summary><b>Survival steps</b> <span class="gloss">&mdash; how long the agent stayed alive</span></summary>
+<p>Performance in this project is always measured in survival steps, never in accumulated reward.
+Reward is what the agent is trained on; survival is what we actually care about, and the two can come
+apart. An agent can learn to farm reward in ways that do not keep it alive longer.</p></details>
+
+<h3>The modulator</h3>
+
+<details><summary><b>Neuromodulator</b> (the &ldquo;NMN&rdquo;) <span class="gloss">&mdash; a small network that re-tunes the big one</span></summary>
+<p>The agent's decisions come from one main network. Alongside it sits a much smaller second network
+that reads the agent's senses and, at every step, adjusts how the main network processes what it
+sees. The biological analogy is a neuromodulator such as acetylcholine or noradrenaline: a chemical
+that does not carry the message itself but changes how the rest of the brain handles it.</p>
+<p>The point is not that a modulated agent does different things. It is that a modulated agent should
+respond to the <em>same outside cue differently depending on its internal state</em> &mdash; that
+being hurt should change how it reads a predator.</p></details>
+
+<details><summary><b>FiLM</b> <span class="gloss">&mdash; the specific way the re-tuning is done</span></summary>
+<p>Short for <em>Feature-wise Linear Modulation</em>. For every neuron in the layer being modulated,
+the modulator produces two numbers: a <strong>gain</strong> to multiply that neuron's output by, and
+an <strong>offset</strong> to add to it. That is the entire operation &mdash; multiply and add, per
+neuron.</p>
+<p>It matters here because until this week different modulation sites in this codebase used
+<em>different</em> operations, so &ldquo;where the modulator acts&rdquo; was tangled up with
+&ldquo;how it acts&rdquo;. A companion refactor made every site use FiLM, which is what finally
+allows the two to be varied separately.</p></details>
+
+<details><summary><b>Site</b>, and the five row labels <span class="gloss">&mdash; which part of the policy gets re-tuned</span></summary>
+<p>The main network is a pipeline: senses go in, get encoded, pass through a memory cell, and come
+out as an action choice and a value estimate. The modulator can be attached at any of those places,
+and the grid's rows are exactly that choice.</p>
+<p><code>t2enc</code> re-tunes the <strong>sensory front-end</strong>, where raw senses are first
+processed. <code>t3rnn</code> re-tunes the <strong>memory cell</strong>, which carries information
+across steps. <code>t4act</code> re-tunes the <strong>action layers</strong>, which choose what to
+do. <code>t5crt</code> re-tunes the <strong>value head</strong>, which estimates how good the
+situation is. <code>t16quad</code> re-tunes <strong>all four at once</strong>, and
+<code>t1none</code> is the control with no modulator at all.</p></details>
+
+<details><summary><b>I, X and ALL</b> <span class="gloss">&mdash; which senses the modulator is allowed to read</span></summary>
+<p><strong>I</strong> is interoceptive only: the modulator sees the body's own channels &mdash;
+injury, hunger, the nociceptive signal &mdash; and nothing of the outside world. <strong>X</strong> is
+exteroceptive only: sight, smell, collision, and nothing of the body. <strong>ALL</strong> is
+everything, which is what the modulator has always read until now.</p>
+<p>This is the axis the project's thesis rests on, which is why the results section leads with the
+I-versus-X comparison rather than with a ranking of sites.</p></details>
+
+<h3>How the measuring works</h3>
+
+<details><summary><b>Percentage points</b> (pp) <span class="gloss">&mdash; why not just &ldquo;percent&rdquo;</span></summary>
+<p>If a rate goes from 20% to 25%, that is a rise of <strong>five percentage points</strong>, but a
+rise of <em>twenty-five percent</em> relative to where it started. Both are true and they are
+different numbers. This page always uses percentage points for changes in a rate, so that a change is
+never confused with a proportion of a change.</p></details>
+
+<details><summary><b>Randomised starting injury</b> <span class="gloss">&mdash; and why it is the only honest thing to bin on</span></summary>
+<p>At the start of every episode the environment deals the agent a wound drawn at random, before the
+agent has done anything. That number is <em>causally identified</em>: because it was assigned at
+random, any behaviour that tracks it must have been <strong>caused</strong> by it.</p>
+<p>Contrast the injury the agent happens to be carrying at some later step. That is partly a
+consequence of the agent's own choices &mdash; a cautious agent gets hurt less &mdash; so a
+correlation between carried injury and behaviour could run in either direction. Both quantities get
+measured in this project, but only the randomised one supports a causal claim, and the two are kept
+carefully apart.</p></details>
+
+<details><summary><b>Seed</b>, and why one is not enough <span class="gloss">&mdash; the limit that governs this whole analysis</span></summary>
+<p>A seed is the starting number for the random-number generator: it fixes the initial network
+weights and the order training data arrives in. Two runs of <em>identical</em> configuration with
+different seeds are two samples from the same distribution, and they can land far apart.</p>
+<p>In this project they land <em>very</em> far apart. Five runs of one identical configuration in the
+immediately preceding study finished anywhere between <strong>35.5 and 136.7 survival steps</strong>.
+Every cell in this grid has one seed, so a gap between two cells could be the modulator or could be
+the dice, and nothing in the data separates them.</p></details>
+
+<details><summary><b>Pre-registration</b> <span class="gloss">&mdash; deciding the test before seeing the data</span></summary>
+<p>Writing down what will be measured, and what counts as a positive result, <em>before</em> looking
+at any of the numbers. It exists because a threshold chosen after seeing the data is not a test: with
+enough measures and enough freedom to pick, something always looks significant.</p>
+<p>It is why this page's results section is empty and must stay empty. Once a number from this grid
+has been looked at, nothing in the plan above may be revised without a dated note saying what changed
+and why, with the original left visible.</p></details>
+
+<details><summary><b>Episode</b>, and <b>checkpoint</b> <span class="gloss">&mdash; one life, and a saved snapshot</span></summary>
+<p>An <strong>episode</strong> is one life: the agent spawns into a freshly randomised world, acts
+until it dies or runs out of time, and the world resets. Training here runs for ten million of them.</p>
+<p>A <strong>checkpoint</strong> is a saved copy of the network partway through training. They are
+written periodically, so a run that has reached 9.4 million episodes has roughly forty-seven of them.
+Comparing two agents at different checkpoints compares different amounts of training as well as
+different designs, which is why nothing here is computed until every cell has reached the same one.</p></details>
+
+<details><summary><b>Rest</b> and <b>Eat</b> <span class="gloss">&mdash; the two actions that are not movement</span></summary>
+<p>The agent chooses one action per step. Four of them are moves. The other two are <strong>Rest</strong>,
+which holds still and lets injury heal, and <strong>Eat</strong>, which consumes food on the current
+square.</p>
+<p>They matter disproportionately here. A wounded agent rests far more, and that single fact is what
+makes location-based measures untrustworthy: an agent that stops moving stops changing where it is,
+so any measure of <em>where it is</em> starts reporting how much it rested. The headline measure
+excludes both actions for exactly this reason.</p></details>
+
+<details><summary><b>Confound</b> <span class="gloss">&mdash; two explanations the data cannot separate</span></summary>
+<p>A confound is a second explanation for a result that the measurement cannot rule out. If injured
+agents both rest more and sit in bushes more, then &ldquo;injury causes hiding&rdquo; and
+&ldquo;injury causes resting, and resting happens to occur in bushes&rdquo; predict the same
+observation, and the observation cannot tell them apart.</p>
+<p>Most of the design decisions on this page are attempts to remove one specific confound, and most
+of the limits section is an admission of the ones that remain.</p></details>
+
+<details><summary><b>Quasi-binomial regression</b> <span class="gloss">&mdash; the statistics behind the factor analysis</span></summary>
+<p>A way of modelling a proportion &mdash; here, the fraction of an episode's steps spent in cover
+&mdash; against several explanatory variables at once, so that the effect of each can be read with
+the others held fixed.</p>
+<p>The <em>quasi</em> part matters: ordinary binomial regression assumes a specific amount of
+random scatter, and real episodes scatter much more than that. Left uncorrected, that makes every
+effect look far more certain than it is. The quasi-binomial version measures the excess scatter from
+the data and widens its error bars accordingly &mdash; in this project by a factor of thirteen to
+twenty-seven.</p></details>
+
+<details><summary><b>The trajectory store</b>, and its row footgun <span class="gloss">&mdash; where the data lives</span></summary>
+<p>After training, each agent is put back into the exact world it trained in and run for a large
+number of episodes, and everything it did is recorded into a store of files &mdash; one row per step,
+plus a row for the starting state.</p>
+<p>The footgun: row <code>t</code> holds the state of the world <strong>at</strong> <code>t</code>
+together with the action that <strong>arrived at</strong> <code>t</code>. So the action a row carries
+is the one that produced it, not the one chosen from it. Getting that off by one silently measures a
+different quantity &mdash; and has done, twice, in this project's history. Every measure on this page
+states which row it reads from for that reason.</p></details>
+</section>
+
 <section class="col">
 <h2>What is training</h2>
 <p>Two things about the modulator have never been varied independently, because until this week the
@@ -174,22 +369,23 @@ acts&rdquo;. The grid crosses the two factors.</p>
 </section>
 
 <figure>
+<p class="dia-hint">&larr; the grid extends to the right &mdash; scroll to see all three columns</p>
 <div class="dia"><svg viewBox="0 0 1000 452" role="img" aria-label="A grid of sixteen training runs. Rows are the four places the modulator may re-tune the policy plus an all-sites row; columns are the three things it may read: internal body channels only, external world channels only, or everything. A separate single cell is the unmodulated control.">
   <text x="20" y="26" font-size="10.5" fill="var(--muted)" font-family="monospace">WHAT IT RE-TUNES  &darr;</text>
-  <text x="470" y="26" font-size="10.5" fill="var(--muted)" font-family="monospace">WHAT IT READS  &rarr;</text>
+  <text x="398" y="26" font-size="10.5" fill="var(--muted)" font-family="monospace">WHAT IT READS  &rarr;</text>
 
-  <text x="470" y="62" text-anchor="middle" font-size="11.5" fill="var(--intero)" font-weight="600">I &mdash; body only</text>
-  <text x="470" y="76" text-anchor="middle" font-size="10" fill="var(--muted)">injury, hunger, nociception</text>
-  <text x="650" y="62" text-anchor="middle" font-size="11.5" fill="var(--extero)" font-weight="600">X &mdash; world only</text>
-  <text x="650" y="76" text-anchor="middle" font-size="10" fill="var(--muted)">sight, smell, collision</text>
-  <text x="830" y="62" text-anchor="middle" font-size="11.5" fill="var(--both)" font-weight="600">ALL &mdash; everything</text>
-  <text x="830" y="76" text-anchor="middle" font-size="10" fill="var(--muted)">the current design</text>
+  <text x="398" y="62" text-anchor="middle" font-size="11.5" fill="var(--intero)" font-weight="600">I &mdash; body only</text>
+  <text x="398" y="76" text-anchor="middle" font-size="10" fill="var(--muted)">injury, hunger, nociception</text>
+  <text x="623" y="62" text-anchor="middle" font-size="11.5" fill="var(--extero)" font-weight="600">X &mdash; world only</text>
+  <text x="623" y="76" text-anchor="middle" font-size="10" fill="var(--muted)">sight, smell, collision</text>
+  <text x="848" y="62" text-anchor="middle" font-size="11.5" fill="var(--both)" font-weight="600">ALL &mdash; everything</text>
+  <text x="848" y="76" text-anchor="middle" font-size="10" fill="var(--muted)">the current design</text>
 
   <!-- control -->
-  <rect x="20" y="96" width="330" height="46" rx="4" fill="var(--card)" stroke="var(--rule)"/>
+  <rect x="20" y="96" width="250" height="46" rx="4" fill="var(--card)" stroke="var(--rule)"/>
   <text x="34" y="118" font-size="11.5" fill="var(--ink)" font-family="monospace">t1none &mdash; no modulator</text>
   <text x="34" y="134" font-size="10" fill="var(--muted)">the control. Reads nothing, re-tunes nothing.</text>
-  <text x="338" y="126" text-anchor="end" font-size="10" fill="var(--ink)" font-weight="600">FINISHED</text>
+  <text x="258" y="126" text-anchor="end" font-size="10" fill="var(--ink)" font-weight="600">FINISHED</text>
 
   <g font-family="monospace" font-size="11.5">
     <text x="34" y="182" fill="var(--ink)">t2enc</text><text x="34" y="196" font-size="10" fill="var(--muted)">the sensory front-end</text>
@@ -201,31 +397,31 @@ acts&rdquo;. The grid crosses the two factors.</p>
 
   <!-- 5 rows x 3 cols of cells -->
   <g>
-    <rect x="390" y="162" width="160" height="40" rx="3" fill="var(--intero-soft)" stroke="var(--intero)"/>
-    <rect x="570" y="162" width="160" height="40" rx="3" fill="var(--extero-soft)" stroke="var(--extero)"/>
-    <rect x="750" y="162" width="160" height="40" rx="3" fill="var(--both-soft)" stroke="var(--both)"/>
-    <rect x="390" y="220" width="160" height="40" rx="3" fill="var(--intero-soft)" stroke="var(--intero)"/>
-    <rect x="570" y="220" width="160" height="40" rx="3" fill="var(--extero-soft)" stroke="var(--extero)"/>
-    <rect x="750" y="220" width="160" height="40" rx="3" fill="var(--both-soft)" stroke="var(--both)"/>
-    <rect x="390" y="278" width="160" height="40" rx="3" fill="var(--intero-soft)" stroke="var(--intero)"/>
-    <rect x="570" y="278" width="160" height="40" rx="3" fill="var(--extero-soft)" stroke="var(--extero)"/>
-    <rect x="750" y="278" width="160" height="40" rx="3" fill="var(--both-soft)" stroke="var(--both)"/>
-    <rect x="390" y="336" width="160" height="40" rx="3" fill="var(--intero-soft)" stroke="var(--intero)"/>
-    <rect x="570" y="336" width="160" height="40" rx="3" fill="var(--extero-soft)" stroke="var(--extero)"/>
-    <rect x="750" y="336" width="160" height="40" rx="3" fill="var(--both-soft)" stroke="var(--both)"/>
-    <rect x="390" y="394" width="160" height="40" rx="3" fill="var(--intero-soft)" stroke="var(--intero)"/>
-    <rect x="570" y="394" width="160" height="40" rx="3" fill="var(--extero-soft)" stroke="var(--extero)"/>
-    <rect x="750" y="394" width="160" height="40" rx="3" fill="var(--both-soft)" stroke="var(--both)"/>
+    <rect x="290" y="162" width="215" height="40" rx="3" fill="var(--intero-soft)" stroke="var(--intero)"/>
+    <rect x="515" y="162" width="215" height="40" rx="3" fill="var(--extero-soft)" stroke="var(--extero)"/>
+    <rect x="740" y="162" width="215" height="40" rx="3" fill="var(--both-soft)" stroke="var(--both)"/>
+    <rect x="290" y="220" width="215" height="40" rx="3" fill="var(--intero-soft)" stroke="var(--intero)"/>
+    <rect x="515" y="220" width="215" height="40" rx="3" fill="var(--extero-soft)" stroke="var(--extero)"/>
+    <rect x="740" y="220" width="215" height="40" rx="3" fill="var(--both-soft)" stroke="var(--both)"/>
+    <rect x="290" y="278" width="215" height="40" rx="3" fill="var(--intero-soft)" stroke="var(--intero)"/>
+    <rect x="515" y="278" width="215" height="40" rx="3" fill="var(--extero-soft)" stroke="var(--extero)"/>
+    <rect x="740" y="278" width="215" height="40" rx="3" fill="var(--both-soft)" stroke="var(--both)"/>
+    <rect x="290" y="336" width="215" height="40" rx="3" fill="var(--intero-soft)" stroke="var(--intero)"/>
+    <rect x="515" y="336" width="215" height="40" rx="3" fill="var(--extero-soft)" stroke="var(--extero)"/>
+    <rect x="740" y="336" width="215" height="40" rx="3" fill="var(--both-soft)" stroke="var(--both)"/>
+    <rect x="290" y="394" width="215" height="40" rx="3" fill="var(--intero-soft)" stroke="var(--intero)"/>
+    <rect x="515" y="394" width="215" height="40" rx="3" fill="var(--extero-soft)" stroke="var(--extero)"/>
+    <rect x="740" y="394" width="215" height="40" rx="3" fill="var(--both-soft)" stroke="var(--both)"/>
   </g>
   <g font-size="10" fill="var(--pending)" text-anchor="middle" font-weight="600">
-    <text x="470" y="187">training</text><text x="650" y="187">training</text><text x="830" y="187">training</text>
-    <text x="470" y="245">training</text><text x="650" y="245">training</text><text x="830" y="245">training</text>
-    <text x="470" y="303">training</text><text x="650" y="303">training</text><text x="830" y="303">training</text>
-    <text x="470" y="361">training</text><text x="650" y="361">training</text><text x="830" y="361">training</text>
-    <text x="470" y="419">training</text>
+    <text x="398" y="187">training</text><text x="623" y="187">training</text><text x="848" y="187">training</text>
+    <text x="398" y="245">training</text><text x="623" y="245">training</text><text x="848" y="245">training</text>
+    <text x="398" y="303">training</text><text x="623" y="303">training</text><text x="848" y="303">training</text>
+    <text x="398" y="361">training</text><text x="623" y="361">training</text><text x="848" y="361">training</text>
+    <text x="398" y="419">training</text>
   </g>
   <g font-size="10" fill="var(--ink)" text-anchor="middle" font-weight="600">
-    <text x="650" y="419">FINISHED</text><text x="830" y="419">FINISHED</text>
+    <text x="623" y="419">FINISHED</text><text x="848" y="419">FINISHED</text>
   </g>
 </svg></div>
 <figcaption><b>Sixteen cells, one seed each.</b> Rows are the four places the modulator may re-tune
@@ -260,7 +456,7 @@ a hypothesis but may not settle one.</p>
 
 <p class="tcap">Every measure is computed per cell and compared against the unmodulated control.</p>
 <div class="scroll">
-<table>
+<table class="battery">
   <thead><tr><th>tier</th><th>measure</th><th>what it asks</th><th>why it is in this tier</th></tr></thead>
   <tbody>
     <tr>
@@ -310,6 +506,7 @@ a hypothesis but may not settle one.</p>
 </div>
 
 <h3>What B0 actually is</h3>
+<details><summary><b>The exact computation</b> <span class="gloss">&mdash; open if you will be checking or reproducing this</span></summary>
 <p>Written out because the store's row convention has bitten this project before &mdash; row
 <code>t</code> holds the world <em>at</em> <code>t</code> together with the action that
 <em>arrived at</em> <code>t</code>, so an entry event straddles two rows:</p>
@@ -322,7 +519,10 @@ binned by:    the injury the environment dealt at t = 0, before the agent acted
               -- the only internal-state variable that is causally identified</code></pre>
 <p>Binning on the <em>randomised starting</em> injury rather than the injury the agent happens to be
 carrying is what makes the comparison causal rather than associational. An agent's carried injury is
-partly a consequence of its own behaviour; the wound it was dealt at reset is not.</p>
+partly a consequence of its own behaviour; the wound it was dealt at reset is not.</p></details>
+<p>In one sentence, without the notation: <strong>of the times the agent was standing in the open and
+decided to take a step, how often did that step put it into cover &mdash; and does that fraction
+change depending on how badly it woke up hurt?</strong></p>
 </section>
 
 <section class="col">
@@ -333,7 +533,7 @@ the one factor none of the earlier studies could.</p>
 
 <p class="tcap">Each prior analysis, and what it contributes</p>
 <div class="scroll">
-<table>
+<table class="prov">
   <thead><tr><th>prior analysis</th><th>what it established</th><th>what it contributes here</th></tr></thead>
   <tbody>
     <tr>

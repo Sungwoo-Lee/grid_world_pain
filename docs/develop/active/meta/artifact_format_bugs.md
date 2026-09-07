@@ -551,6 +551,62 @@ category may use it — not a status badge, not a tier label, not an accent bord
 Give chrome its own tokens. Check by grepping every `var(--<data-token>)` outside the figure that
 defines it; on a correct page the only hits are the encoded elements themselves.
 
+### F1 amendment — the same defect wearing `display:flex`
+
+**Saw:** eighteen `<summary>` elements, each holding a marker, a bold term, a **bare text run**
+(`, and why it is not called pain`) and a muted span. At desktop every comma sat 10 px away from its
+word. At 390 px the runs wrapped into *side-by-side columns* — one summary rendered as
+`Neuromodulator | (the / "NMN") | — a small / network that / re-tunes the / big one`, and a two-word
+run `, and` became a 25 px column with the comma on one line and "and" on the next.
+
+**Cause:** `summary{display:flex; gap:10px}`. A bare text run inside a flex container becomes an
+**anonymous flex item**, so it can no longer wrap as part of the surrounding sentence — it shrinks to
+its own min-content and wraps independently. The `gap` then applies *between words*, which is what
+tears the comma off.
+
+**Why it recurs:** this is F1 — the founding entry, first seen as `display:grid` on a list item — and
+it will keep coming back, because flex and grid are the natural way to place a marker beside a label.
+The display value changes; the defect does not.
+
+**Rule:** never make a text-bearing element a flex or grid container. Position the marker instead:
+`position:relative` on the row, `position:absolute; left:0` on the `::before`, and padding to clear
+it. Then term, bare text and span flow as one inline run.
+
+**Verifying a fix:** collect the summary's rectangles with `Range.getClientRects()`, group them by
+`top`, and require the gap between consecutive rects **on the same line** to be 0. A non-zero
+same-line gap is a torn word.
+
+### F3 amendment — a `margin` shorthand un-centres a component that also carries the layout class
+
+**Saw:** one section sat **175 px** left of every other section at 1440 px, hanging out of the page
+column.
+
+**Cause:** `.terms{margin:26px 0}` on an element whose class list is `col terms`. `.col` centres
+itself with `margin-left:auto; margin-right:auto`; the shorthand later in the sheet resets all four
+sides, so the auto margins became zero. Nothing overlaps and nothing overflows, so the geometry
+checker sees a correctly laid-out section that happens to be in the wrong place.
+
+**Rule:** a component rule applied *alongside* a layout class sets `margin-top`/`margin-bottom`
+individually, never the shorthand.
+
+**Verifying a fix:** measure `getBoundingClientRect().left` for every top-level column child; they
+must all be identical.
+
+### F27 — a diagram's legibility floor can push all of its data off a phone
+
+**Saw:** a schematic with a 950 px minimum width inside a scrolling box. At 390 px the reader saw the
+row labels, one control box, and none of the grid the diagram exists to show — with overlay
+scrollbars, no indication anything was missing.
+
+**Cause:** the floor keeps labels readable (correct, see F25) but says nothing about *what is in the
+first screenful*. Here the data columns started a quarter of the way across the viewBox, so the
+visible strip was entirely label gutter.
+
+**Rule:** at the floor, `firstDataX × floor ÷ viewBoxWidth` must land inside the narrowest column
+width supported, or the phone view opens on nothing. Fix by tightening the label gutter in the
+viewBox; where the diagram genuinely cannot fit, **say so** — a one-line scroll cue shown under a
+media query, because an overlay scrollbar is not a cue.
+
 ## Related
 
 - [`artifact_generation_guide`](artifact_generation_guide.md) — the wider guide: content, claims,
