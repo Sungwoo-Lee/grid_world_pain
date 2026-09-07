@@ -638,28 +638,167 @@ rescue one.</li>
 
 <section class="col">
 <h2>Results</h2>
-<div class="pending">
-<h4>Empty on purpose &mdash; no run has been read</h4>
-<p>Thirteen of the sixteen cells are still training as this page is written, and the plan above fixes
-what will be measured <em>before</em> the numbers exist. That ordering is the only thing that makes a
-pre-registered threshold worth anything, so this section stays empty until every cell has reached the
-same checkpoint.</p>
-<p>When it is filled, it will carry: the six reports above in that order; a per-cell table with the
-checkpoint step each number was computed at; the empirical pairing check; the Rest-versus-movement
-guard result for every store; and, for any comparison smaller than the seed-noise floor, the words
-<em>indistinguishable at one seed</em> rather than a rank.</p>
-<p>Nothing in the plan above may be revised once a number from this grid has been looked at. If
-something here turns out to be wrong &mdash; as the bush-hiding measure did in the study before this
-one &mdash; the revision gets its own dated note saying what changed and why, and the original stays
-visible.</p>
+<p class="lede">All sixteen cells trained to ten million episodes and were evaluated on a million
+episodes each, against five unmodulated control runs evaluated the same way. <strong>No modulator
+configuration produced an internal-state-dependent change in behaviour that can be told apart from
+an unmodulated agent.</strong> The section below gives the six reports in the order fixed before the
+numbers existed.</p>
+
+<div class="callout key">
+<h4>The measurement that told me my own test was broken</h4>
+<p>The grid contains its own unmodulated control &mdash; cell <code>t1none</code>, identical to the
+sixteen arms in every respect except that it has no modulator. When the first version of this
+analysis flagged cells as &ldquo;outside the control range&rdquo;, <strong>the control cell was one
+of them</strong>.</p>
+<p>That cannot be a property of the agent, so it is a property of the test. The range of five
+controls is a <em>range</em>, not a confidence interval: a sixth draw from the same distribution is
+the new minimum or maximum with probability 2/6 &mdash; about <strong>33%</strong>. The observed
+rates were 31%, 25% and 6%. Every &ldquo;outside the band&rdquo; flag was noise, and the control
+cell is the proof.</p>
+<p>The tables below therefore report a <strong>z against the control mean and spread</strong>
+instead. It is still five runs on the control side and one on each cell's side, so it screens rather
+than tests &mdash; but it does not manufacture findings.</p>
+</div>
+
+<h3>1 &middot; Does the modulator do anything at all?</h3>
+<p>No. On the pre-registered headline measure, every cell sits within <strong>1.3 standard
+deviations</strong> of the unmodulated control mean, and the control cell itself sits at +1.1.</p>
+
+<p class="tcap">&Delta;B0 &mdash; change in the bush-entry decision between the lowest and highest quarter of randomised starting injury. Control: mean &minus;0.187 pp, sd 0.268, from five seeds.</p>
+<div class="scroll">
+<table class="battery">
+  <thead><tr><th>cell</th><th class="num">&Delta;B0 (pp)</th><th class="num">z</th><th class="num">&Delta;rest (pp)</th><th class="num">z</th><th class="num">survival</th><th class="num">z</th></tr></thead>
+  <tbody>
+    <tr><td><b>t1none</b> &mdash; the control</td><td class="num">+0.099</td><td class="num">+1.1</td><td class="num">52.0</td><td class="num">+1.5</td><td class="num">168.3</td><td class="num">+1.1</td></tr>
+    <tr><td>t2enc_I</td><td class="num">+0.073</td><td class="num">+1.0</td><td class="num">54.5</td><td class="num">+1.7</td><td class="num">163.9</td><td class="num">&minus;1.3</td></tr>
+    <tr><td>t2enc_X</td><td class="num">&minus;0.349</td><td class="num">&minus;0.6</td><td class="num">45.1</td><td class="num">+1.0</td><td class="num">170.5</td><td class="num">+2.3</td></tr>
+    <tr><td>t2enc_ALL</td><td class="num">+0.166</td><td class="num">+1.3</td><td class="num">47.1</td><td class="num">+1.2</td><td class="num">164.0</td><td class="num">&minus;1.2</td></tr>
+    <tr><td>t3rnn_I</td><td class="num">+0.150</td><td class="num">+1.3</td><td class="num">19.4</td><td class="num">&minus;0.7</td><td class="num">166.5</td><td class="num">+0.1</td></tr>
+    <tr><td>t3rnn_X</td><td class="num">+0.122</td><td class="num">+1.2</td><td class="num">32.5</td><td class="num">+0.2</td><td class="num">170.3</td><td class="num">+2.2</td></tr>
+    <tr><td>t3rnn_ALL</td><td class="num">&minus;0.238</td><td class="num">&minus;0.2</td><td class="num">21.4</td><td class="num">&minus;0.6</td><td class="num">164.7</td><td class="num">&minus;0.9</td></tr>
+    <tr><td>t4act_I</td><td class="num">+0.013</td><td class="num">+0.7</td><td class="num">16.9</td><td class="num">&minus;0.9</td><td class="num">167.9</td><td class="num">+0.9</td></tr>
+    <tr><td>t4act_X</td><td class="num">+0.135</td><td class="num">+1.2</td><td class="num">22.0</td><td class="num">&minus;0.5</td><td class="num">169.5</td><td class="num">+1.7</td></tr>
+    <tr><td>t4act_ALL</td><td class="num">&minus;0.061</td><td class="num">+0.5</td><td class="num">20.1</td><td class="num">&minus;0.6</td><td class="num">165.6</td><td class="num">&minus;0.4</td></tr>
+    <tr><td>t5crt_I</td><td class="num">&minus;0.008</td><td class="num">+0.7</td><td class="num">23.5</td><td class="num">&minus;0.4</td><td class="num">166.9</td><td class="num">+0.3</td></tr>
+    <tr><td>t5crt_X</td><td class="num">&minus;0.023</td><td class="num">+0.6</td><td class="num">22.4</td><td class="num">&minus;0.5</td><td class="num">167.9</td><td class="num">+0.9</td></tr>
+    <tr><td>t5crt_ALL</td><td class="num">&minus;0.068</td><td class="num">+0.4</td><td class="num">29.3</td><td class="num">&minus;0.0</td><td class="num">170.6</td><td class="num">+2.3</td></tr>
+    <tr><td>t16quad_I</td><td class="num">&minus;0.178</td><td class="num">+0.0</td><td class="num">19.6</td><td class="num">&minus;0.7</td><td class="num">167.5</td><td class="num">+0.6</td></tr>
+    <tr><td>t16quad_X</td><td class="num">+0.063</td><td class="num">+0.9</td><td class="num">23.0</td><td class="num">&minus;0.5</td><td class="num">171.5</td><td class="num">+2.8</td></tr>
+    <tr><td>t16quad_ALL</td><td class="num">&minus;0.073</td><td class="num">+0.4</td><td class="num">26.5</td><td class="num">&minus;0.2</td><td class="num">169.8</td><td class="num">+1.9</td></tr>
+  </tbody>
+</table>
+</div>
+<p><b>Axes.</b> Rows are the sixteen cells. &Delta;B0 is in percentage points of bush-entry rate,
+positive meaning a more wounded agent steps into cover more often. &Delta;rest is in percentage
+points of steps spent resting, same direction. Survival is mean steps per episode. Each z is
+(cell &minus; control mean) &divide; control standard deviation, where the control is the five
+unmodulated seeds; z is unitless.</p>
+
+<h3>2 &middot; Body-only against world-only &mdash; the thesis test</h3>
+<p>This is the comparison the project's story rests on, and it is reported whichever way it comes
+out. It comes out flat.</p>
+<div class="scroll">
+<table class="battery">
+  <thead><tr><th>modulator reads</th><th class="num">&Delta;B0 (pp)</th><th class="num">&Delta;rest (pp)</th><th class="num">prox trend</th><th class="num">survival</th></tr></thead>
+  <tbody>
+    <tr><td><b>I</b> &mdash; body only</td><td class="num">+0.010</td><td class="num">+26.8</td><td class="num">+3.08</td><td class="num">166.5</td></tr>
+    <tr><td><b>X</b> &mdash; world only</td><td class="num">&minus;0.010</td><td class="num">+29.0</td><td class="num">+2.32</td><td class="num">170.0</td></tr>
+    <tr><td><b>ALL</b> &mdash; everything</td><td class="num">&minus;0.055</td><td class="num">+28.9</td><td class="num">+2.92</td><td class="num">166.9</td></tr>
+    <tr><td>unmodulated control</td><td class="num">&minus;0.187</td><td class="num">+29.7</td><td class="num">+2.67</td><td class="num">166.3</td></tr>
+  </tbody>
+</table>
+</div>
+<p><b>Axes.</b> Rows pool the five sites within each input slice. Columns as above; the last row is
+the five-seed control for reference.</p>
+<p><strong>On the headline measure, body-only and world-only differ by 0.020 percentage points
+&mdash; 0.08 of one control standard deviation.</strong> A modulator restricted to the agent's own
+body produces the same bush-entry behaviour as one restricted to the outside world, and both produce
+the same behaviour as no modulator at all. That is the flattest possible answer to the question this
+grid was built to ask.</p>
+</section>
+
+<section class="col">
+<h3>3 &middot; Which site, if any</h3>
+<p>No ranking is given, because none is supportable. On the headline measure the sixteen cells span
+0.52 percentage points while the five controls alone span 0.68 &mdash; <strong>the whole grid is
+narrower than the noise in the thing it is measured against.</strong> Ordering cells under those
+conditions would be reporting the seed.</p>
+
+<h3>4 &middot; The decomposition, which is where the real effect is</h3>
+<div class="callout">
+<h4>What injury actually changes</h4>
+<p>Across all twenty-one agents, waking up wounded changes the bush-entry decision by about
+<strong>0.1 percentage points</strong> and the resting rate by about <strong>30</strong>. The second
+effect is roughly three hundred times the first, and it is present in every cell, modulated or
+not.</p>
+<p>This is the freeze-to-heal finding reproduced on a different agent family and a fresh million
+episodes per run. It is also the reason this study's headline measure is bush <em>entry</em> rather
+than bush occupancy: a measure of <em>where the agent is</em> would have reported that enormous
+resting effect as if it were a decision to hide.</p>
+</div>
+<p>So the honest description of what a wound does to this agent is: <strong>it makes it stop
+moving.</strong> It does not measurably change where it chooses to go when it does move, and no
+modulator configuration changed that.</p>
+
+<h3>5 &middot; The modulator's own behaviour &mdash; not measured</h3>
+<p>Tier C of the plan asked for the modulator's internal statistics, to separate &ldquo;this site
+does not help&rdquo; from &ldquo;this site never learned to do anything&rdquo;. <strong>Those numbers
+are not in this report.</strong> They live in the training-time metrics rather than the trajectory
+stores, and pulling them is a separate job that has not been done.</p>
+<p>Stated plainly because it matters for how far the null above can be pushed: this analysis
+establishes that the modulators <em>did not change behaviour</em>. It does not establish
+<em>why</em>. A dead modulator and a working-but-useless one look identical from here, and telling
+them apart is the obvious next step.</p>
+
+<h3>6 &middot; Exploratory &mdash; the one place with any structure</h3>
+<p>On <strong>survival</strong>, world-only modulators come out <strong>+3.4 steps</strong> above
+body-only ones (170.0 against 166.5), which is 1.9 control standard deviations. Four of the five
+world-only cells are in the top six survivors; the top cell overall, <code>t16quad_X</code>, sits at
+z&nbsp;=&nbsp;+2.8.</p>
+<div class="callout key">
+<h4>Why this is not a finding, and what would make it one</h4>
+<p>Three reasons to hold it loosely. It is <strong>one seed per cell</strong>. The design
+pre-registered thresholds of <strong>15 and 30 survival steps</strong>; the entire spread across all
+sixteen cells is <strong>7.7 steps</strong>, so nothing here comes close to clearing a bar that was
+set before the data existed. And it points the <em>opposite</em> way to the project's thesis &mdash;
+if it survived replication it would say the modulator's benefit comes from re-reading the outside
+world, not from listening to the body.</p>
+<p>That last property is exactly why it is reported rather than quietly dropped. An exploratory
+signal that contradicts the hypothesis is worth more than one that flatters it, and this one is
+cheap to test: five seeds on <code>t16quad_X</code> and <code>t16quad_I</code> would settle it.</p>
+</div>
+</section>
+
+<section class="col">
+<h2>What this does and does not license</h2>
+<p><strong>It licenses:</strong> that on a million paired episodes per agent, no combination of
+modulation site and input slice produced an internal-state-dependent change in the bush-entry
+decision distinguishable from an unmodulated agent, and that body-only and world-only modulators are
+indistinguishable from each other on that measure.</p>
+<p><strong>It does not license</strong> calling any cell eliminated. Every cell is one seed, and this
+study's own control cell demonstrated how easily one draw lands outside the range of five. A cell
+that failed to clear a threshold here is <strong>untested</strong>, not refuted &mdash; and that
+asymmetry was written into the plan before any number existed, precisely so it could not be
+renegotiated now.</p>
+<p><strong>It does not license</strong> a claim about why. The modulators may have been inert, or
+active but behaviourally irrelevant; nothing measured here separates those.</p>
+<div class="note">
+<h4>What would make the next round decisive</h4>
+<p>The reviewer's staged alternative, recorded in the design as still open, buys replication on every
+comparison for the same number of GPU slots: five write sites at three seeds, then the two survivors
+crossed with the input slices at three seeds. Given that this grid returned a clean null at
+n&nbsp;=&nbsp;1, and that its one suggestive signal &mdash; the world-only survival edge &mdash;
+needs exactly that replication to mean anything, the case for the staged version is now stronger
+than it was when it was declined.</p>
 </div>
 </section>
 
 <div class="col foot">
-<p>Plan only; nothing here has been run. Design and pre-registration:
-<code>docs/experiments/active/nmn_input_site_grid/NMN_INPUT_SITE_GRID.md</code>. The measurement
-tool: <code>scripts/analysis/context_dependence.py</code>. The finding that demoted bush hiding:
-<code>docs/experiments/active/diagnosis/INJURY_HIDING_SIGN_RECONCILIATION.md</code>. Run status read
-from the results tree at 14:34 on 2026-09-07.</p>
+<p>Results computed 2026-09-07 from <code>results/analysis/nmn_site_grid/</code>. Twenty-one runs,
+1,000,000 evaluation episodes each over seeds 1,000,000&ndash;1,999,999, verified per run before any
+measure was computed. Measure: <code>scripts/analysis/context_dependence.py</code>; aggregation:
+<code>scripts/analysis/studies/nmn_site_grid/aggregate_grid.py</code>. Design and pre-registration:
+<code>docs/experiments/active/nmn_input_site_grid/NMN_INPUT_SITE_GRID.md</code>. The GAE_NORM twin of
+this grid is still training and is not included.</p>
 </div>
 </div>
