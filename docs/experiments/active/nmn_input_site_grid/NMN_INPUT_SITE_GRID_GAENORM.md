@@ -11,9 +11,10 @@ develop_link: docs/develop/active/neuromodulation/MODULATION_SITE_REFACTOR.md
 
 # The estimator-swapped twin — the same 16-cell modulation grid, run under GAE_NORM
 
-> **Status**: PRE-REGISTERED — configs written and verified; **not launched**; awaiting
-> `env-config-reviewer` pre-flight and the user's launch decision.
-> **Date**: 2026-09-07
+> **Status**: TRAINED — all 16 cells plus the control launched and finished 2026-09-07 at the full
+> 10M-episode budget. Million-episode evaluation trajectories were collected 2026-09-08 into
+> `results/trajectories_nmngae/`; analysis not yet written.
+> **Date**: 2026-09-07 (pre-registered), status updated 2026-09-08
 > **Author**: `experiment-designer`
 > **Mode**: fully pre-registered. Every threshold and failure-mode ruling below is fixed **before**
 > any run of this grid launches and may not be adjusted afterwards.
