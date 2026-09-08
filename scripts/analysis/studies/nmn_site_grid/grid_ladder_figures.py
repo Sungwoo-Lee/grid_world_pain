@@ -32,7 +32,10 @@ sys.path.insert(0, os.path.join(ROOT, "scripts", "analysis", "ladder"))
 os.chdir(ROOT)
 import _ladder as L                                                    # noqa: E402
 
-IN  = "results/analysis/nmn_site_grid/ladderstyle"
+# Redirectable so the GAE_NORM twin grid runs the SAME figure code over its own aggregates.
+# Hardcoding either path would mean a second copy of this file, and two copies of a figure script
+# drift the moment one of them is fixed.
+IN  = os.environ.get("NMN_IN_ROOT",  "results/analysis/nmn_site_grid/ladderstyle")
 FIG = os.environ.get("NMN_FIG_ROOT", "docs/experiments/active/nmn_input_site_grid/figures")
 
 SITES  = ["t2enc", "t3rnn", "t4act", "t5crt", "t16quad"]
