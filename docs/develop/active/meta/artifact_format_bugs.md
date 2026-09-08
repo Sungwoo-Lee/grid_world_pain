@@ -800,6 +800,38 @@ opaque figure background of [F30](#f30) was the fix that made [F25](#f25)'s narr
 the narrowing then sheared an axis label off the canvas. A figure script that is edited to satisfy a
 review finding should be re-rendered and re-read as a whole, not diffed.
 
+### F34 — a `min-width` floor sized for the widest table, applied by a type selector
+
+**Saw:** at a 390px phone width, a sixteen-row numeric table rendering its row-label column and
+**neither of its two numbers** — a list of sixteen names with no data. At 500px the same table was
+worse than useless: the clip edge fell exactly on the decimal point, so 28.62, 26.67 and 24.03 read
+as "28", "26" and "24" — plausible integers, wrong values, with nothing to suggest anything was
+missing.
+
+**Cause:** `table{min-width:560px}` — a bare type selector. The 560 was derived honestly, for the
+page's seven-column results table. Every other table on the page then inherited it, including a
+three-column one whose own content needs about 350px and which would have fitted a phone with room
+to spare. The floor did not describe that table's content; it described a different table's.
+
+**Why neither review method catches it:** the floor is inside a `.scroll` container, so nothing
+overflows the page and the geometry checker is silent. The table is not squeezed — it is at its
+floor, which is the state the floor exists to produce. And a review at the common 500px checkpoint
+sees numbers, because the clip lands mid-value rather than before it; only reading them against the
+source shows they are truncations rather than values.
+
+**Rule:** a `min-width` floor is a statement about one table's content, so it belongs on a class,
+never on `table{}`. Every table gets the floor its own columns need, or none.
+
+**A second trap in the same family:** a `.scroll` box inside a padded component is narrower than one
+in a bare section — on this page, 52px narrower inside a `.callout`. A cue breakpoint derived as
+`floor + column padding` is therefore wrong by exactly that much for the boxes inside callouts, and
+the table's verdict column was cut with no cue across a 50px band. Derive each breakpoint from the
+box's own measured `clientWidth`, not from the column's.
+
+**Verifying a fix:** for every table, assert its declared floor is no greater than its `max-content`
+width plus whatever headroom was intended; and for every `.scroll`, assert `cueVisible ==
+(scrollWidth > clientWidth)` at a sweep of widths rather than at two checkpoints.
+
 ## Related
 
 - [`artifact_generation_guide`](artifact_generation_guide.md) — the wider guide: content, claims,

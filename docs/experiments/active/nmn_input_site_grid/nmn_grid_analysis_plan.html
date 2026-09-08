@@ -90,17 +90,18 @@ figure .figscroll img{display:block;width:100%;min-width:620px;height:auto}
    advertising a sideways scroll they did not have, across every tablet width (defect F32). Each
    breakpoint is the box's content floor plus the column's 2x26px of side padding, minus one, so
    the cue appears on the first width at which the box actually overflows. */
-@media (max-width:1009px){ .dia-hint{display:block} }
+@media (max-width:1001px){ .dia-hint{display:block} }
 @media (max-width:671px){ .fig-hint{display:block} }
 /* Same reasoning as the diagram: a seven-column numeric table cannot fit a phone, and an overlay
    scrollbar is not a cue. Shown only where the table actually overflows. */
 .tbl-hint{display:none;font-family:var(--mono);font-size:11px;letter-spacing:.04em;
   color:var(--muted);margin:0 0 6px}
-/* 820 was a guess. The numeric tables' content floor is the global `table{min-width:560px}`, and
+/* 820 was a guess. The wide results tables' content floor is `table.results{min-width:560px}`, and
    the column adds 26px of padding on each side, so they fit down to a 612px viewport and overflow
    from 611. Between 612 and 820 the page was announcing a scroll that was not there -- the same
    defect as F32, on the tables rather than the figures. Each breakpoint below is
-   `content floor + 52px of column padding, minus one`. */
+   `content floor + the padding between it and the viewport, minus one` -- and the padding is not
+   the same for every box, which is what the .repl rule below is about. */
 @media (max-width:611px){ .tbl-hint{display:block} }
 /* The replication table is six columns, one of them a sentence-length label, so its floor is
    higher than the other numeric tables' 560. Its own floor, its own breakpoint -- which is the
@@ -108,7 +109,11 @@ figure .figscroll img{display:block;width:100%;min-width:620px;height:auto}
    of them. */
 table.repl{min-width:660px}
 table.repl td:first-child, table.repl th:first-child{min-width:230px}
-@media (max-width:711px){ .tbl-hint.repl{display:block} }
+/* 660 (floor) + 52 (the callout's own padding and borders) + 52 (column padding) - 1. A `.scroll`
+   inside a `.callout` is 52px narrower than one in a bare section, which the first version of this
+   breakpoint missed -- so from 712 to 763 the "survives?" column, the verdict of the whole table,
+   was cut to its first letter with no cue. */
+@media (max-width:763px){ .tbl-hint.repl{display:block} }
 /* ...but the media query is only the right form when the scroll box is as wide as the VIEWPORT.
    The two prose tables have a content floor (860px / 800px) larger than the 730px column, so they
    overflow at EVERY width, desktop included, and a viewport-keyed cue is simply absent exactly
@@ -148,11 +153,16 @@ pre code{background:none;padding:0;font-size:inherit}
    its content and scroll beats squeezing digits; it is exactly wrong for four columns of prose,
    where max-content means "as wide as the longest sentence" and the container then hides three
    quarters of the table at EVERY width, silently, behind an overlay scrollbar. */
-table{border-collapse:collapse;width:100%;min-width:560px;font-size:13.5px;
+table{border-collapse:collapse;width:100%;font-size:13.5px;
   font-variant-numeric:tabular-nums}
 td.tier{white-space:nowrap}
 /* PROSE tables: the first column is a short label and without a floor it is squeezed to 140-160px
    and wraps to five lines while the prose columns beside it have room to spare. */
+/* Per-table floors (F34). `table{min-width:560px}` was sized for the seven-column results table
+   and every other table on the page inherited it, including a three-column one whose own content
+   needs about 350px -- on a phone that table rendered its sixteen row labels and neither number. */
+table.results{min-width:560px}
+table.results.narrow{min-width:0}
 table.measures{min-width:860px}
 table.measures td:first-child, table.measures th:first-child{width:64px}
 table.measures td:nth-child(2), table.measures th:nth-child(2){min-width:200px}
@@ -561,13 +571,17 @@ a hypothesis but may not settle one.</p>
 <p>Written out because the store's row convention has bitten this project before &mdash; row
 <code>t</code> holds the world <em>at</em> <code>t</code> together with the action that
 <em>arrived at</em> <code>t</code>, so an entry event straddles two rows:</p>
-<pre><code>denominator:  agent_in_bush[t]   == False        # standing in the open
-              action[t+1]        in {0,1,2,3}    # and chose to MOVE (not Rest, not Eat)
+<pre><code># denominator: the agent was standing in the open and chose to MOVE
+#              (not Rest, not Eat)
+denominator:  agent_in_bush[t]   == False
+              action[t+1]        in {0,1,2,3}
 
-numerator:    agent_in_bush[t+1] == True         # the move landed in cover
+# numerator: that move landed it in cover
+numerator:    agent_in_bush[t+1] == True
 
-binned by:    the injury the environment dealt at t = 0, before the agent acted
-              -- the only internal-state variable that is causally identified</code></pre>
+# binned by the injury the environment dealt at t = 0, before the agent acted --
+# the only internal-state variable that is causally identified
+binned by:    injury[t = 0]</code></pre>
 <p>Binning on the <em>randomised starting</em> injury rather than the injury the agent happens to be
 carrying is what makes the comparison causal rather than associational. An agent's carried injury is
 partly a consequence of its own behaviour; the wound it was dealt at reset is not.</p></details>
@@ -708,9 +722,8 @@ measure.</p>
 
 <p class="tcap"><b>Corrected &Delta;rest</b> &mdash; rise in resting between the lowest and highest
 <em>populated</em> quarter of randomised starting injury. Control: mean 19.77 pp, sd 1.21, n=5.</p>
-<p class="tbl-hint">&larr; the table scrolls sideways &mdash; two numeric columns follow the cell name</p>
 <div class="scroll">
-<table class="results">
+<table class="results narrow">
   <thead><tr><th>cell</th><th class="num">&Delta;rest (pp)</th><th class="num">z</th></tr></thead>
   <tbody>
     <tr><td>t2enc_ALL</td><td class="num">28.62</td><td class="num">7.3</td></tr>
@@ -809,14 +822,13 @@ where the agent stood outside a bush <em>and</em> chose to move, the percentage 
 a bush on the next row. Resting and eating are
 excluded from that denominator on purpose, so it scores a decision to move into cover and cannot be
 inflated by an agent that simply stopped moving. <b>Middle panel</b>, rest rate: the
-percentage of all first-25 steps on which it chose to rest. <b>Bottom panel</b>: both, unrescaled, on one axis.
-One alignment rule runs throughout: the action on a row was chosen while the agent looked at the
-<em>previous</em> row, so the standing-in-the-open test is read at
+percentage of all first-25 steps on which it chose to rest. <b>Bottom panel</b>: both on one axis,
+unrescaled. The action on a row was chosen while the agent looked at the <em>previous</em> row, so
+the standing-in-the-open test is read at
 <code>t</code> and the arrival at <code>t+1</code>. A bin holding fewer than 2,000 qualifying steps
 is dropped, which is why <code>injury 0</code> appears nowhere: the wound is drawn from a continuous
-range, so exactly zero occurs about 25 times in five million rows. The grey band is the
-smallest-to-largest envelope of the five reference controls &mdash; a range, not a confidence
-interval.</p></div>
+range, so exactly zero occurs about 25 times in five million rows. The grey band is the range of the
+five reference controls, not a confidence interval.</p></div>
 
 <div><h5>What it shows</h5><p>The two panels are not comparable events. Take each agent from its
 least-injured quarter to its most-injured one: <b>no cell's bush-entry rate moves more than 0.35
@@ -1417,6 +1429,9 @@ than it was when it was declined.</p>
 measure was computed. Measure: <code>scripts/analysis/context_dependence.py</code>; aggregation:
 <code>scripts/analysis/studies/nmn_site_grid/aggregate_grid.py</code>. Design and pre-registration:
 <code>docs/experiments/active/nmn_input_site_grid/NMN_INPUT_SITE_GRID.md</code>. The GAE_NORM twin of
-this grid is still training and is not included.</p>
+this grid finished training on 2026-09-07 and was evaluated on 2026-09-08; it appears on this page
+only in the replication table of section 1d, and its own analysis is a separate job. The
+ladder-style measures in section 1d come from
+<code>scripts/analysis/studies/sensor_ladder/collect_arm_data.py --manifest</code>.</p>
 </div>
 </div>
