@@ -171,8 +171,11 @@ table.results.narrow{min-width:0}
    the mirror of F34 and does not overflow: the table meets it by breaking a value at its space,
    turning "14.45 +- 0.57" into two lines and, on a phone, into a blank row. 580 leaves headroom. */
 table.results.est{min-width:580px}
-/* And belt-and-braces, so no future floor can split a value again. */
-table.results td.num, table.results th.num{white-space:nowrap}
+/* And belt-and-braces, so no future floor can split a value again. `td` ONLY: adding `th` to this
+   selector raised the replication table's min-content from 660 to 687, because wrapping header
+   cells were exactly what let that table meet its floor -- a nowrap on a shared selector is a
+   min-content change on every table it reaches (F35 amendment). Headers may wrap; values may not. */
+table.results td.num{white-space:nowrap}
 /* Specificity, not source order, is what makes a per-table floor stick. Written as `table.repl`
    earlier in the sheet, this rule tied with `table.results` on specificity (0,1,1) and lost on
    source order, so the browser applied 560 and the floor below was dead code that read as live

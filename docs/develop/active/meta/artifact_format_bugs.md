@@ -892,6 +892,33 @@ tall (`height − padding ≤ line-height`). F34's check — floor ≤ max-conte
 direction and cannot see this one; both are needed, and together they say the floor must equal the
 content, not merely bound it from one side.
 
+### F35 amendment — `white-space:nowrap` on a shared selector is a min-content change everywhere it reaches
+
+F35's fix was `td.num{white-space:nowrap}`, so a value could never again be split across lines. It
+was applied as `td.num, th.num` — belt and braces, and one word too many.
+
+**Saw:** a *different* table, six columns wide and previously fitting its 660px floor exactly, began
+overflowing its box with no cue, cutting its verdict column mid-word at tablet widths and losing its
+last column's padding at every desktop width up to 1440.
+
+**Cause:** that table met its floor only because its four header cells — "original grid", "sites
+agreeing", "twin grid", "sites agreeing" — were free to wrap to two lines. `th.num{nowrap}` took
+that away, raising its min-content from 660 to 687 against a box that is at most 678 wide. The floor
+was never the problem; the slack was in the headers, and the fix removed the slack.
+
+**Why it is worth its own entry:** the review that requested the belt-and-braces, the author who
+applied it, and the check that verified F35 were all looking at the table F35 was about. A rule
+written on a shared selector is not a property of the table you are fixing; it is a property of
+every table the selector reaches, and `nowrap` in particular changes a box's *minimum* size, which
+is the quantity every floor and every cue breakpoint is derived from.
+
+**Rule:** `nowrap` goes on `td.num` only — headers may wrap, values may not. More generally: after
+editing any selector shared across components, re-run the floor-versus-content check on **all** of
+them, not on the one being fixed.
+
+**Verifying:** for every table, print declared floor, `max-content` and `min-content` side by side
+both before and after the edit. A min-content that moved on a table you did not touch is the defect.
+
 ## Related
 
 - [`artifact_generation_guide`](artifact_generation_guide.md) — the wider guide: content, claims,
