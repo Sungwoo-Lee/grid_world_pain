@@ -35,8 +35,14 @@ GAE = "results/analysis/nmn_gaenorm_grid/ladderstyle"
 FIG = os.environ.get("NMN_FIG_ROOT", "docs/experiments/active/nmn_input_site_grid/figures_gae")
 CTRL = [f"baseline_s{s}" for s in (42, 43, 44, 45, 46)]
 PAPER = "#f8f7f5"; ANNO = "#3d3c3a"
-# Two estimators are not two input slices, so they may NOT use the page's three data colours.
-C_MC, C_GAE = "#7a5c3e", "#3f5a7a"
+# Two estimators are not two input slices, so they may not use the page's three data colours -- and
+# "not the same colour" is not the test. A first attempt used a blue-grey that measured only 13.5
+# CIE76 from `--extero`, the blue that means "reads the world only" on this page: distinguishable in
+# a swatch, and read as "blue" by anyone who met the legend three thousand pixels earlier. Every hue
+# on the page is spent, so the answer is the neutral ramp the register prescribes -- and these two
+# neutrals are the ones already used for the outcome categories in g04, so the page carries one
+# neutral pair rather than inventing a second.
+C_MC, C_GAE = "#3c4650", "#8d99a6"
 plt.rcParams.update({"font.size": 17, "axes.titlesize": 19, "axes.labelsize": 17,
                      "xtick.labelsize": 16, "ytick.labelsize": 16, "legend.fontsize": 15,
                      "figure.facecolor": PAPER, "savefig.facecolor": PAPER,
@@ -56,7 +62,7 @@ def main():
     near_gae = [nearfar(GAE, n)[0] for n in CTRL]; far_gae = [nearfar(GAE, n)[1] for n in CTRL]
 
     fig, ax = plt.subplots(figsize=(11.0, 7.6))
-    groups = [("a predator 1-2 cells away", near_mc, near_gae),
+    groups = [("a predator 1\u20132 cells away", near_mc, near_gae),
               ("no predator within 6 cells", far_mc, far_gae)]
     w = 0.30
     for gi, (lab, a, b) in enumerate(groups):
@@ -68,6 +74,8 @@ def main():
             # the five seeds themselves, so the reader sees the spread the bar is an average of
             ax.scatter(np.full(len(vals), x), vals, s=40, facecolor="white",
                        edgecolor=ANNO, lw=1.1, zorder=4)
+    # a mid-grey bar and a dark-grey bar read as one series if nothing separates them
+    for b in ax.patches: b.set_edgecolor(ANNO); b.set_linewidth(1.0)
     ax.set_xticks([0, 1]); ax.set_xticklabels([g[0] for g in groups])
     ax.set_ylabel("share of those steps spent in a bush (%)")
     ax.set_title("Where the estimator's effect actually is", loc="left")

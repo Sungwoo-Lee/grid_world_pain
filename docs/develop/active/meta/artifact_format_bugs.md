@@ -858,6 +858,40 @@ box's own measured `clientWidth`, not from the column's.
 width plus whatever headroom was intended; and for every `.scroll`, assert `cueVisible ==
 (scrollWidth > clientWidth)` at a sweep of widths rather than at two checkpoints.
 
+### F35 — a shared `min-width` floor SMALLER than a table's content, where a value takes the hit
+
+The mirror of [F34](#f34). There an inherited floor was too large and pushed columns off a phone.
+Here it is 14 pixels too small, and the failure is stranger: the table does not overflow at all.
+
+**Saw:** across a 126px band of viewport widths, one row of a numeric table rendered as
+
+```
+bush hiding (% of steps)     14.45 ±      13.84 ± 0.53
+                              0.57
+```
+
+and two column headers broke at their hyphens. On a 390px phone the clip fell after `14.` and the
+wrapped `0.57` was off-screen, so the row showed a number over an empty line.
+
+**Cause:** the table inherited `table.results{min-width:560px}`, sized for a different table. Its own
+max-content width is 574px. A table asked to fit inside less than its content does not necessarily
+overflow — it looks for something to break, and a numeric cell like `14.45 ± 0.57` contains a
+breakable space. So the table met the floor by splitting a *value* across two lines.
+
+**Why every check passes:** nothing overflows, so the scroll cue is correct at every width — and the
+`cueVisible == (scrollWidth > clientWidth)` sweep that catches F31 and F32 confirms it. No text is
+narrow, nothing overlaps, nothing sticks out, and the table is fully legible at desktop and at the
+floor. The defect exists only between the two, and it is one deformed row.
+
+**Rule:** a numeric table's floor is *its own* measured max-content width, never a number borrowed
+from a wider table — and `td.num` carries `white-space:nowrap`, so no future floor can split a value
+whatever else it does.
+
+**Verifying a fix:** render each table at its declared floor and assert every body cell is one line
+tall (`height − padding ≤ line-height`). F34's check — floor ≤ max-content — tests the other
+direction and cannot see this one; both are needed, and together they say the floor must equal the
+content, not merely bound it from one side.
+
 ## Related
 
 - [`artifact_generation_guide`](artifact_generation_guide.md) — the wider guide: content, claims,
