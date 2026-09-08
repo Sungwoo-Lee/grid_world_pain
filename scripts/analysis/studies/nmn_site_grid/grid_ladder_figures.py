@@ -73,11 +73,23 @@ def label(name):
     return f"{SITE_NAME[s]} / {SLICE_NAME[sl]}"
 
 
-def finish(fig, stem):
+def finish(fig, stem, edge=3):
     os.makedirs(FIG, exist_ok=True)
     p = f"{FIG}/{stem}.png"
     fig.savefig(p, dpi=150, bbox_inches="tight", facecolor=PAPER)
     plt.close(fig)
+    # Ink touching the canvas edge means a label was cut, not that the crop was snug. Narrowing
+    # this figure for a legibility floor sheared the closing bracket off an axis label, and it
+    # read as a deliberate abbreviation rather than as damage.
+    from PIL import Image
+    a = np.asarray(Image.open(p).convert("RGB")).astype(int)
+    bg = np.array([248, 247, 245])
+    ink = (np.abs(a - bg).sum(2) > 40)
+    for side, strip in (("left", ink[:, :edge]), ("right", ink[:, -edge:]),
+                        ("top", ink[:edge, :]), ("bottom", ink[-edge:, :])):
+        if strip.sum():
+            raise SystemExit(f"{stem}: {strip.sum()} ink pixels in the {edge}px {side} margin "
+                             f"- something is clipped by the canvas edge")
     print(f"  wrote {p}")
 
 
@@ -118,7 +130,7 @@ def fig3(D):
     # they are the same axis. Both bugs shipped in the first render of this figure.
     fig, ax = plt.subplots(1, 2, figsize=(12.6, 9.0))
     hbars(ax[0], names, surv, "mean survival (steps per episode)", "How long it lives", "{:.0f}")
-    hbars(ax[1], names, hide, "bush hiding (% of an episode's steps in a bush)",
+    hbars(ax[1], names, hide, "bush hiding (% of steps in a bush)",
           "How much of its life it spends hidden", "{:.1f}")
     ax[1].set_yticks(np.arange(len(names))); ax[1].set_yticklabels([])
     for a, vals in ((ax[0], surv), (ax[1], hide)):

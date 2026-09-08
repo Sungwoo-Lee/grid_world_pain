@@ -767,6 +767,39 @@ name, colour by colour, why each near match is intended; the one that cannot be 
 Running it on the fixed figure above returns only its own data colours and its text ink, and nothing
 within reach of `--pending`.
 
+### F33 — the legibility fix for an in-panel annotation deletes the data it was illegible against
+
+**Saw:** in a panel whose entire claim is "these sixteen lines are flat", one of the sixteen ran
+into a tidy label box two thirds of the way across and never came out. The label was perfectly
+readable. So was every other line. Nothing looked wrong.
+
+**Cause:** the annotation had previously been reported as hard to read, because three thin series
+ran through its glyphs. The fix applied was an opaque `bbox` behind the text. But text-on-data and
+box-on-data are the same collision over the same pixels: an opaque ground does not resolve it, it
+only decides which of the two the reader loses. The first version lost the text; the second lost the
+data, which is strictly worse, and is invisible because a missing line looks like a line that was
+never plotted.
+
+**Why neither review method catches it:** the geometry checker sees one PNG and no overflow. A
+screenshot scan sees a clean, legible label — the defect is the *absence* of something, and absence
+does not attract the eye. Finding it means tracing one specific line from one end of the panel to
+the other and noticing it stops.
+
+**Rule:** an annotation goes where there is no ink. Enlarge the axis margin until empty space
+exists, or move the text into it. A filled `bbox` is permitted only over axes that are genuinely
+empty there. Where the text must sit over data, use a halo
+(`path_effects.withStroke(linewidth=…, foreground=<paper>)`) instead: the glyphs stay legible and
+the line runs through the gaps between them, so neither is deleted.
+
+**Verifying a fix:** for each annotation take its bounding box in data coordinates and assert that
+no plotted series has a y-value inside it across the box's x-range. Failing that, crop the region at
+full resolution and follow each line through it.
+
+**Related:** this is the third defect in the family where a *fix* introduced the next one — the
+opaque figure background of [F30](#f30) was the fix that made [F25](#f25)'s narrowing necessary, and
+the narrowing then sheared an axis label off the canvas. A figure script that is edited to satisfy a
+review finding should be re-rendered and re-read as a whole, not diffed.
+
 ## Related
 
 - [`artifact_generation_guide`](artifact_generation_guide.md) — the wider guide: content, claims,

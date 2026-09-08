@@ -18,6 +18,7 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.patheffects as pe
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", ".."))
 os.chdir(ROOT)
@@ -72,11 +73,21 @@ def prox_curve(d):
     return [next((r["proximity_effect"] for r in rows if r["state"] == b), np.nan) for b in BINS]
 
 
-def finish(fig, name):
+def finish(fig, name, edge=3):
     os.makedirs(FIG, exist_ok=True)
     p = f"{FIG}/{name}.png"
     fig.savefig(p, dpi=150, bbox_inches="tight", facecolor=PAPER)
     plt.close(fig)
+    # Ink on the canvas edge means a label was sheared, not that the crop was snug; the sheared
+    # result reads as a deliberate abbreviation, so nothing about it looks wrong.
+    from PIL import Image
+    a = np.asarray(Image.open(p).convert("RGB")).astype(int)
+    ink = (np.abs(a - np.array([248, 247, 245])).sum(2) > 40)
+    for side, strip in (("left", ink[:, :edge]), ("right", ink[:, -edge:]),
+                        ("top", ink[:edge, :]), ("bottom", ink[-edge:, :])):
+        if strip.sum():
+            raise SystemExit(f"{name}: {strip.sum()} ink pixels in the {edge}px {side} margin "
+                             f"- something is clipped by the canvas edge")
     print(f"  wrote {p}")
 
 
@@ -121,9 +132,11 @@ def main():
         span = np.nanmax(hi) - np.nanmin(lo)
         ax[i].annotate(f"the five controls span {span:.1f} pp in total", xy=(.98, .04), xycoords="axes fraction",
                        ha="right", fontsize=19, color=ANNO, fontweight="bold",
-                       # three thin series ran straight through these glyphs in the top panel,
-                       # occluding the flat lines the panel exists to show
-                       bbox=dict(facecolor=PAPER, edgecolor="none", pad=2.5))
+                       # A halo, not a filled box. Three thin series run under this text in the
+                       # top panel; an opaque box made the label readable by deleting the lowest
+                       # of them from the picture, which is the wrong trade in a panel whose
+                       # whole claim is that those lines are flat.
+                       path_effects=[pe.withStroke(linewidth=4.5, foreground=PAPER)])
         # The legend goes upper-left, so the data must not. Lift the top of the axis until the
         # legend block has empty plot to sit on rather than covering the control band.
         b, t = ax[i].get_ylim()
@@ -139,11 +152,11 @@ def main():
     ax[2].set_ylabel("percent of steps\nboth quantities, one scale", fontsize=18)
     ax[2].set_title("The same two quantities, on one axis", fontsize=21, loc="left")
     ax[2].grid(alpha=.25, lw=.5)
-    BB = dict(facecolor=PAPER, edgecolor="none", pad=2.5)
+    HALO = [pe.withStroke(linewidth=4.5, foreground=PAPER)]
     ax[2].annotate("resting", xy=(1.95, 65), ha="right", fontsize=20, color=ANNO,
-                   fontweight="bold", bbox=BB)
+                   fontweight="bold", path_effects=HALO)
     ax[2].annotate("entering cover — the flat line along the bottom", xy=(0.02, 11.5),
-                   fontsize=20, color=ANNO, fontweight="bold", bbox=BB)
+                   fontsize=20, color=ANNO, fontweight="bold", path_effects=HALO)
     h = [plt.Line2D([], [], color=C[s], lw=1.6) for s in SLICES]
     ax[0].legend(handles=h + ax[0].get_legend_handles_labels()[0],
                  labels=["reads body only", "reads world only", "reads everything"]
