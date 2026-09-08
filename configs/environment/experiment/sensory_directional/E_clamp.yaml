@@ -183,7 +183,7 @@ sensory:
   visual_sensor_enabled: true
   visual_sensor_range: 2
   visual_vector_size: 8
-  visual_blur_enabled: false
+  visual_blur_enabled: true
   visual_blur_radial_scale: 0.5
   visual_blur_anisotropy: 3.0
   visual_blur_sigma_floor: 0.5

@@ -89,6 +89,10 @@ def build(sensory_ov, vec, blockers):
     d = copy.deepcopy(load_env_config(BASE_TASK).to_dict())
     d.pop('extends', None)
     d['sensory']['visual_sensor_range'] = 2
+    # All generated arms carry the anisotropic PSF: the cone gate is inert below
+    # 45 deg on a sharp range-2 diamond (only exact collinearity blocks), so blur
+    # is what makes the occlusion cone angle do anything at all.
+    d['sensory']['visual_blur_enabled'] = True
     d['sensory'].update(sensory_ov)
     if vec is not None:
         d['sensory']['visual_vector_size'] = vec
