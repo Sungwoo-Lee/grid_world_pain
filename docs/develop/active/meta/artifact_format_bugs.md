@@ -710,6 +710,63 @@ media-query form is correct only when the box is as wide as the viewport.
 supported viewport. Any box where `scrollWidth > clientWidth` there must have a cue that is visible
 at that width.
 
+### F32 — one scroll cue serving two components with different content floors
+
+**Saw:** the cue "the plot is wider than a phone screen — scroll it sideways" printed above seven
+figures that fitted their column perfectly, at every tablet width from about 670px to 1010px. Below
+670 it was correct; above 1010 it was correctly absent. The false band was the middle.
+
+**Cause:** the page had one `.dia-hint` class and one breakpoint, `@media (max-width:1010px)`. That
+breakpoint was derived correctly — for the SVG diagram, whose legibility floor is 950px. When raster
+figures were later given the same scroll-with-a-cue treatment, they reused the class, and their
+floor is 620px. One breakpoint cannot be right for two floors, so it was wrong for whichever
+component did not own it.
+
+**Why neither review method catches it:** the phone width is the one everybody checks, and there the
+cue is present and true; the desktop width is the second, and there it is correctly absent. The
+defect lives only in the band between the two floors, which is exactly the range a two-width review
+skips. Nothing overflows, nothing clips — the page is merely lying to the reader about a scrollbar.
+
+**Rule:** one cue per floor, and the breakpoint is `floor + the column's side padding`, written in a
+comment beside the rule so the derivation can be checked rather than trusted. This is the mirror of
+[F31](#f31--a-scroll-cue-keyed-to-the-viewport-for-an-overflow-keyed-to-the-column): there the cue
+was absent where overflow existed, here it is present where none does. Both come from a cue whose
+condition and an overflow whose condition were allowed to drift apart.
+
+**Verifying a fix:** for each scroll box, at three widths spanning the floors, assert
+`cueVisible == (scrollWidth > clientWidth)`.
+
+### F11, second amendment — a figure that borrows the page's *status* palette
+
+The original F11 and its first amendment forbid the page's chrome from using the data colours. This
+is the same defect running the other way: a figure script choosing a categorical colour with no
+knowledge of what the surrounding page has already spent.
+
+**Saw:** a stacked-bar figure drew "starved" in `#8a6d1f` — byte-identical to the page's
+`--pending` token, the ochre that borders every "still open" callout — and "survived" in a green a
+short hop from `--both`, the colour that means "the modulator reads everything" in the figure 1,300
+pixels above. A reader who has just learned that green means *everything* meets green bars on the
+same rows meaning *survived*.
+
+**Why the caption is not the fix:** the caption said, in as many words, "these colours mean an
+outcome and nothing else — they are not the purple/blue/green that mean what the modulator reads."
+A sentence telling the reader to ignore what they can see is an admission that the figure and the
+page disagree, not a repair.
+
+**Rule:** the figure module owns one colour→meaning map for the whole page, chrome tokens included,
+and a new categorical set is checked against every token in `:root` before it ships — by perceptual
+distance, not equality, since a near neighbour reads the same as an exact match. Where every hue is
+already spent, the honest answer is a neutral ramp: it carries the ordering without claiming a
+meaning the page has given away.
+
+**Verifying a fix:** take a pixel census of the rendered PNG, take the token list from `:root`, and
+report the closest token to each figure colour. The output is not pass/fail — an exact match is
+*correct* when the figure element means what the token means, and this project's data figures should
+hit `--intero` / `--extero` / `--both` dead on. The check earns its keep by forcing the author to
+name, colour by colour, why each near match is intended; the one that cannot be named is the defect.
+Running it on the fixed figure above returns only its own data colours and its text ink, and nothing
+within reach of `--pending`.
+
 ## Related
 
 - [`artifact_generation_guide`](artifact_generation_guide.md) — the wider guide: content, claims,

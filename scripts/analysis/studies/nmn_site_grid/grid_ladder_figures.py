@@ -97,7 +97,7 @@ def hbars(ax, names, vals, xlabel, title, fmt="{:.1f}", pad=0.012):
     span = max(vals) - 0
     ax.set_xlim(0, max(vals) * 1.16)
     for i, v in enumerate(vals):
-        ax.text(v + span * pad, i, fmt.format(v), va="center", fontsize=13, color=ANNO)
+        ax.text(v + span * pad, i, fmt.format(v), va="center", fontsize=16, color=ANNO)
     # Every annotation must sit on its own bar. Read both back off the axes rather than trusting
     # the loop above: this exact pairing has silently inverted before, in the ladder's figure 1.
     bars = {round(b.get_y() + b.get_height() / 2, 3): b.get_width() for b in ax.patches}
@@ -116,7 +116,7 @@ def fig3(D):
     # undoes the first, so the rows silently come out bottom-to-top while every label still reads
     # top-to-bottom; blanking the right panel's tick labels also blanks the left panel's, because
     # they are the same axis. Both bugs shipped in the first render of this figure.
-    fig, ax = plt.subplots(1, 2, figsize=(16.5, 9.0))
+    fig, ax = plt.subplots(1, 2, figsize=(12.6, 9.0))
     hbars(ax[0], names, surv, "mean survival (steps per episode)", "How long it lives", "{:.0f}")
     hbars(ax[1], names, hide, "bush hiding (% of an episode's steps in a bush)",
           "How much of its life it spends hidden", "{:.1f}")
@@ -133,16 +133,21 @@ def fig4(D):
     """Which of the three ways of dying each cell actually dies of."""
     names = ORDER
     keys = ["killed by predator", "starved", "survived to time limit"]
-    cols = ["#8c3b34", "#8a6d1f", "#3f6f53"]      # outcome colours: NOT the three data colours
-    fig, ax = plt.subplots(figsize=(13.5, 9.0))
+    # A dark-to-light neutral ramp. Deliberately NOT hue-coded: every hue on this page is spent
+    # (purple/blue/green mean what the modulator reads, red is the callout accent, ochre is
+    # "pending"), and a figure that reaches for a fourth hue lands on one of them. Ordering the
+    # three neutrals dark-to-light also matches the order they are stacked in.
+    cols = ["#3c4650", "#8d99a6", "#ccd3d9"]
+    txt  = ["#ffffff", "#ffffff", "#2a3138"]
+    fig, ax = plt.subplots(figsize=(12.2, 9.0))
     y = np.arange(len(names)); left = np.zeros(len(names))
-    for k, c in zip(keys, cols):
+    for k, c, tc in zip(keys, cols, txt):
         v = np.array([D[n]["term_pct"].get(k, 0.0) for n in names])
         ax.barh(y, v, left=left, color=c, height=.72, label=k)
         for i, (l_, w) in enumerate(zip(left, v)):
             if w > 4.5:
                 ax.text(l_ + w / 2, i, f"{w:.0f}", va="center", ha="center",
-                        fontsize=12, color="white", fontweight="bold")
+                        fontsize=16, color=tc, fontweight="bold")
         left += v
     if not np.allclose(left, 100, atol=.05):
         raise SystemExit(f"outcome shares do not sum to 100: {left.min():.2f}..{left.max():.2f}")
@@ -157,7 +162,7 @@ def fig4(D):
 def fig5(D):
     """Hiding against how close the nearest predator, and the nearest rabbit, actually is."""
     x = np.arange(L.DIST_MAX)
-    fig, ax = plt.subplots(2, 1, figsize=(11.5, 13.0), sharex=True,
+    fig, ax = plt.subplots(2, 1, figsize=(11.5, 13.0), sharex=True, sharey=True,
                            gridspec_kw={"hspace": .30})
     for i, (bk, tk, who) in enumerate([("pd_bush", "pd_tot", "predator"),
                                        ("rd_bush", "rd_tot", "rabbit")]):
@@ -173,8 +178,9 @@ def fig5(D):
         ax[i].set_ylabel("in a bush (% of steps)")
         ax[i].set_title(f"Nearest {who}", loc="left")
         ax[i].grid(alpha=.25, lw=.5)
-        b, t = ax[i].get_ylim(); ax[i].set_ylim(b, b + (t - b) * 1.28)
         ax[i].legend(loc="upper left", framealpha=.94)
+    # one shared scale, with headroom for the two legends
+    ax[0].set_ylim(0, 68)
     ax[1].set_xlabel("distance from the agent to the nearest one, in chebyshev steps")
     h = [plt.Line2D([], [], color=C[s], lw=1.8) for s in SLICES]
     ax[0].legend(handles=h + ax[0].get_legend_handles_labels()[0],

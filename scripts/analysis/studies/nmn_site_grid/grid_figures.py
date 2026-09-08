@@ -120,8 +120,10 @@ def main():
         ax[i].grid(alpha=.25, lw=.5)
         span = np.nanmax(hi) - np.nanmin(lo)
         ax[i].annotate(f"the five controls span {span:.1f} pp in total", xy=(.98, .04), xycoords="axes fraction",
-                       ha="right", fontsize=19, color=ANNO,
-                       fontweight="bold")
+                       ha="right", fontsize=19, color=ANNO, fontweight="bold",
+                       # three thin series ran straight through these glyphs in the top panel,
+                       # occluding the flat lines the panel exists to show
+                       bbox=dict(facecolor=PAPER, edgecolor="none", pad=2.5))
         # The legend goes upper-left, so the data must not. Lift the top of the axis until the
         # legend block has empty plot to sit on rather than covering the control band.
         b, t = ax[i].get_ylim()
@@ -137,9 +139,11 @@ def main():
     ax[2].set_ylabel("percent of steps\nboth quantities, one scale", fontsize=18)
     ax[2].set_title("The same two quantities, on one axis", fontsize=21, loc="left")
     ax[2].grid(alpha=.25, lw=.5)
-    ax[2].annotate("resting", xy=(1.95, 65), ha="right", fontsize=20, color=ANNO, fontweight="bold")
+    BB = dict(facecolor=PAPER, edgecolor="none", pad=2.5)
+    ax[2].annotate("resting", xy=(1.95, 65), ha="right", fontsize=20, color=ANNO,
+                   fontweight="bold", bbox=BB)
     ax[2].annotate("entering cover — the flat line along the bottom", xy=(0.02, 11.5),
-                   fontsize=20, color=ANNO, fontweight="bold")
+                   fontsize=20, color=ANNO, fontweight="bold", bbox=BB)
     h = [plt.Line2D([], [], color=C[s], lw=1.6) for s in SLICES]
     ax[0].legend(handles=h + ax[0].get_legend_handles_labels()[0],
                  labels=["reads body only", "reads world only", "reads everything"]
