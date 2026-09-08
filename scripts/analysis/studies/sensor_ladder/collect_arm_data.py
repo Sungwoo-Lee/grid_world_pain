@@ -44,14 +44,24 @@ STEP_COLS = ["episode_seed", "t", "agent_in_bush", "injury_level", "nutrition", 
              "ate_food", "agent_row", "agent_col", "animal_row", "animal_col"]
 
 
-def build(arm: str, run: str, verbose: bool = True) -> dict:
+def build(arm: str, run: str, verbose: bool = True, stores: list[str] | None = None) -> dict:
+    """Scan one run and write its aggregate.
+
+    `stores` exists so the SAME sweep can be pointed at a population outside the sensor ladder -
+    the neuromodulator site grid reuses it unchanged, which is the only way its figures are
+    honestly "the same analysis" rather than a re-implementation that happens to agree. Nothing
+    below is conditional on which study is calling: the ladder passes None and gets
+    `L.arm_stores(arm)`, exactly as before, so the golden gate still covers this file.
+    The output directory follows `$LADDER_OUT_ROOT`, which `_ladder` already honours.
+    """
     cfg = L.arm_config(run)
     lay = ENV.slot_layout(cfg)
     P, R = lay["pred"], lay["neutral"]
     na = lay["n_animal"]
     ch1, ch2 = ENV.smell_channels(cfg)
 
-    st = STORE.open_run(L.arm_stores(arm), EP_COLS)
+    stores = L.arm_stores(arm) if stores is None else list(stores)
+    st = STORE.open_run(stores, EP_COLS)
     nep, seed0 = st.n_episodes, st.seed0
 
     length = st.episode("length", np.float64)
@@ -159,7 +169,7 @@ def build(arm: str, run: str, verbose: bool = True) -> dict:
                         n_pred=n_pred, n_rab=n_rab,
                         pred_olf=pred_olf, rab_olf=rab_olf)
 
-    out = {"arm": arm, "run": run, "stores": L.arm_stores(arm), "n_episodes": int(nep),
+    out = {"arm": arm, "run": run, "stores": stores, "n_episodes": int(nep),
            "seed_range": [int(seed.min()), int(seed.max())],
            "sensory": L.sensory_summary(cfg),
            "mean_survival": float(length.mean()),
@@ -177,9 +187,21 @@ def build(arm: str, run: str, verbose: bool = True) -> dict:
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--arms", nargs="*", default=L.ARM_ORDER)
+    ap.add_argument("--arms", nargs="*", default=None,
+                    help="which arms to scan. Default: the whole sensor ladder, or every key of "
+                         "--manifest when one is given.")
+    ap.add_argument("--manifest", default=None,
+                    help='JSON mapping name -> {"run": <run dir>, "stores": [<store dir>, ...]}. '
+                         "Use this to run the ladder sweep over a population that is not the "
+                         "ladder; pair it with $LADDER_OUT_ROOT so the aggregates land elsewhere.")
     a = ap.parse_args()
-    runs = L.arm_runs()
-    for arm in a.arms:
-        build(arm, runs[arm])
-        print(f"{arm}: scanned")
+    if a.manifest:
+        man = json.load(open(a.manifest))
+        for arm in (a.arms or list(man)):
+            build(arm, man[arm]["run"], stores=man[arm]["stores"])
+            print(f"{arm}: scanned")
+    else:
+        runs = L.arm_runs()
+        for arm in (a.arms or L.ARM_ORDER):
+            build(arm, runs[arm])
+            print(f"{arm}: scanned")

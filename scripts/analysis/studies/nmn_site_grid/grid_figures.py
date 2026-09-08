@@ -33,13 +33,17 @@ C = {"I": "#8a4b8f", "X": "#2f6f9f", "ALL": "#2d6a4f", "ctrl": "#6f6d69", "none"
 # in the surrounding page, and inside panel 3 a red annotation sat directly above a red line and
 # read as its label. A data series and the page's chrome must not share a colour.
 ANNO = "#3d3c3a"
+# The page renders in the viewer's theme; a PNG does not. A transparent figure therefore inherits
+# whichever ground the reader happens to have, and near-black ink on the dark ground is invisible
+# (defect F30). Ship one opaque light card instead, which reads correctly on either ground.
+PAPER = "#f8f7f5"
 # Rendered text size = native size x (column width / figure width). At a 730px column a 2266px-wide
 # figure scales by 0.26, so a 10pt tick label lands at 7.7px -- below the 9px floor this project
 # uses for diagrams. Sizes here are chosen so the SMALLEST text clears 9px after that scaling.
 plt.rcParams.update({"font.size": 21, "axes.titlesize": 22, "axes.labelsize": 20,
                      "xtick.labelsize": 19, "ytick.labelsize": 19, "legend.fontsize": 18,
-                     "figure.facecolor": "none", "savefig.facecolor": "none",
-                     "axes.facecolor": "white"})
+                     "figure.facecolor": PAPER, "savefig.facecolor": PAPER,
+                     "axes.facecolor": "#ffffff"})
 MARK = {"t2enc": "o", "t3rnn": "s", "t4act": "^", "t5crt": "D", "t16quad": "v"}
 DASH = {"t2enc": (0,()), "t3rnn": (0,(5,2)), "t4act": (0,(1,1.5)),
         "t5crt": (0,(6,2,1,2)), "t16quad": (0,(3,1,1,1,1,1))}
@@ -71,7 +75,7 @@ def prox_curve(d):
 def finish(fig, name):
     os.makedirs(FIG, exist_ok=True)
     p = f"{FIG}/{name}.png"
-    fig.savefig(p, dpi=150, bbox_inches="tight", transparent=True)
+    fig.savefig(p, dpi=150, bbox_inches="tight", facecolor=PAPER)
     plt.close(fig)
     print(f"  wrote {p}")
 
@@ -105,17 +109,17 @@ def main():
               "rest rate (%)\nsteps spent resting")]):
         lo, hi = band(fn, ctrl)
         ax[i].fill_between(x, lo, hi, color=C["ctrl"], alpha=.25, lw=0,
-                           label="five unmodulated controls (range)")
+                           label="controls (range)")
         for k, d in cells.items():
             ax[i].plot(x, fn(d), color=C[k.split("_")[1]], lw=1.0, alpha=.45)
-        ax[i].plot(x, fn(none), color=C["none"], lw=2.4, label="t1none — in-grid control", zorder=5)
+        ax[i].plot(x, fn(none), color=C["none"], lw=2.4, label="t1none (control)", zorder=5)
         ax[i].set_xticks(x); ax[i].set_xticklabels(XT)
         ax[i].set_xlabel("randomised starting injury (0-100 scale), in quarters")
         ax[i].set_ylabel(yl, fontsize=18)
         ax[i].set_title(ttl, fontsize=21, loc="left")
         ax[i].grid(alpha=.25, lw=.5)
         span = np.nanmax(hi) - np.nanmin(lo)
-        ax[i].annotate(f"this axis spans {span:.1f} pp", xy=(.98, .04), xycoords="axes fraction",
+        ax[i].annotate(f"the five controls span {span:.1f} pp in total", xy=(.98, .04), xycoords="axes fraction",
                        ha="right", fontsize=19, color=ANNO,
                        fontweight="bold")
         # The legend goes upper-left, so the data must not. Lift the top of the axis until the
@@ -138,7 +142,7 @@ def main():
                    fontsize=20, color=ANNO, fontweight="bold")
     h = [plt.Line2D([], [], color=C[s], lw=1.6) for s in SLICES]
     ax[0].legend(handles=h + ax[0].get_legend_handles_labels()[0],
-                 labels=["modulator reads body only", "reads world only", "reads everything"]
+                 labels=["reads body only", "reads world only", "reads everything"]
                         + ax[0].get_legend_handles_labels()[1],
                  fontsize=17, loc="upper left", ncol=2, framealpha=.94)
     ax[1].legend(fontsize=17, loc="upper left", framealpha=.94)

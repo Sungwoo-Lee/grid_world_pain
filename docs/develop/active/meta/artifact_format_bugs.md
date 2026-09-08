@@ -658,6 +658,58 @@ cells as the `<thead>` has headers, for every table on the page.
 header count, is the defect. This is three lines and catches every table at once; counting by eye on
 the rendered page does not scale past about five columns.
 
+### F30 — a transparent raster figure carries one theme's ink onto both grounds
+
+**Saw:** in dark mode, two plots with no visible title, no axis labels, no ticks, no spines and no
+reference line — a nearly empty rectangle with two bright white legend boxes floating in it. The
+same two files look perfect in light mode, in a file browser, and in every screenshot taken so far.
+
+**Cause:** the figures were written with `savefig(transparent=True)` and `figure.facecolor: none`,
+which was done deliberately so they would sit on the page's paper colour rather than a white card.
+But transparency does not make a figure theme-aware — it makes it inherit whatever ground the
+reader has, while its ink stays the single colour it was drawn in. Near-black ink on a `#141416`
+ground is invisible. The legends survived only because a legend frame has its own opaque fill,
+which is what makes the failure look bizarre rather than blank.
+
+**Why neither review method catches it:** the PNG is correct in isolation and the CSS is correct in
+isolation; the defect exists only in the composite. The layout checker substitutes placeholders for
+images and renders light by default, so it reports nothing. A screenshot review that looks at the
+light render — the natural one to take — sees a good figure.
+
+**Rule:** a raster figure either carries an **opaque** background, or ships one variant per theme
+switched by `[data-theme]` plus the guarded media query. Transparency is only safe when every mark
+in the image is drawn in a colour legible on both grounds, which for a plot with axes and text it
+never is. This project's convention is the opaque form: `_plot.finish()` has always passed
+`facecolor="white"`, and a new figure script that departs from it is the defect.
+
+**Verifying a fix:** read the PNG's corner pixel and assert alpha is 255; then composite the image
+over both `--paper` values and look at each.
+
+### F31 — a scroll cue keyed to the viewport, for an overflow keyed to the column
+
+**Saw:** at 1440px — a desktop, with room to spare — a prose table's last column cut off mid-word
+("not a location, so a freezi"), with an overlay scrollbar as the only indication that anything was
+missing. At 500px the same table showed a correct scroll cue.
+
+**Cause:** the cue was written as `.tbl-hint{display:none}` plus
+`@media (max-width:820px){.tbl-hint{display:block}}` — the right form for a table that overflows
+only on a narrow *viewport*. But the table had since been given a content floor (`min-width:860px`)
+larger than the 730px reading column it sits in, so it overflows its scroll box at **every**
+viewport width. The condition that hides the cue and the condition that creates the overflow are
+different conditions, and they had drifted apart.
+
+**Why neither review method catches it:** the `.scroll` container absorbs the overflow, so nothing
+spills onto the page and a geometry checker sees a clean box. A reviewer checking the phone width —
+the width where scroll cues are usually wrong — finds the cue present and correct.
+
+**Rule:** compare the scroll box's content floor against the width of the **column** it lives in,
+not the viewport. If the floor is larger, the cue is unconditional (`display:block`); the
+media-query form is correct only when the box is as wide as the viewport.
+
+**Verifying a fix:** for each `.scroll`, read `scrollWidth` and `clientWidth` at the widest
+supported viewport. Any box where `scrollWidth > clientWidth` there must have a cue that is visible
+at that width.
+
 ## Related
 
 - [`artifact_generation_guide`](artifact_generation_guide.md) — the wider guide: content, claims,
