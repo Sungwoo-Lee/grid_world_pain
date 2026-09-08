@@ -102,6 +102,13 @@ figure .figscroll img{display:block;width:100%;min-width:620px;height:auto}
    defect as F32, on the tables rather than the figures. Each breakpoint below is
    `content floor + 52px of column padding, minus one`. */
 @media (max-width:611px){ .tbl-hint{display:block} }
+/* The replication table is six columns, one of them a sentence-length label, so its floor is
+   higher than the other numeric tables' 560. Its own floor, its own breakpoint -- which is the
+   whole lesson of F32: a cue inherited from a component with a different floor is wrong for one
+   of them. */
+table.repl{min-width:660px}
+table.repl td:first-child, table.repl th:first-child{min-width:230px}
+@media (max-width:711px){ .tbl-hint.repl{display:block} }
 /* ...but the media query is only the right form when the scroll box is as wide as the VIEWPORT.
    The two prose tables have a content floor (860px / 800px) larger than the 730px column, so they
    overflow at EVERY width, desktop included, and a viewport-keyed cue is simply absent exactly
@@ -1174,12 +1181,56 @@ low-hiding end of ordinary seed variation" fits these numbers as well as "readin
 it". The <em>everything</em> cells also read the world channels, and they sit with the body-only
 cells and the control on every one of these measures, which is not what a "reading the world causes
 it" story predicts.</p>
-<p><strong>Nothing here shows the modulator changes behaviour.</strong> It says that if it does, the
-body-versus-world contrast is where to look &mdash; which is the comparison this study's design had
-already committed to replicating at five seeds. The replication is <em>already running</em>: the
-twin grid trained with the other return estimator finished on 2026-09-07, and its million-episode
-evaluation stores are being collected now. Pointing the same sweep at them is what turns this
-paragraph into either a finding or a closed door, at no training cost.</p>
+<p><strong>Nothing here shows the modulator changes behaviour.</strong> It says that if it does,
+the body-versus-world contrast is where to look. That was written before the check below existed;
+the check has since been run, and it closes the question.</p>
+</div>
+
+<div class="callout key">
+<h4>The pattern was checked against a second grid, and it did not survive</h4>
+<p>This project trained a <strong>twin of the entire sixteen-cell grid</strong> that differs in one
+respect: how the agent estimates the future value of what it is doing. The original grid adds up
+what actually happened for the rest of the episode; the twin uses the standard smoothed estimate
+instead. Everything else &mdash; the environment, the architecture, the budget, the evaluation
+worlds &mdash; is identical. If reading the body rather than the world genuinely changes an agent's
+behaviour, that should not depend on which of two standard bookkeeping methods was used to train it.
+Those sixteen runs finished on 2026-09-07; their million-episode evaluations were collected on
+2026-09-08 and put through the same sweep, and this is the result.</p>
+<p class="tbl-hint repl">&larr; this table is wider than the column &mdash; scroll it sideways for
+the &ldquo;survives?&rdquo; column</p>
+<div class="scroll">
+<table class="results repl">
+<thead><tr><th>measure, world-only minus body-only</th><th class="num">original grid</th><th class="num">sites agreeing</th><th class="num">twin grid</th><th class="num">sites agreeing</th><th>survives?</th></tr></thead>
+<tbody>
+<tr><td>mean survival (steps)</td><td class="num">+3.44</td><td class="num">5 of 5</td><td class="num">+0.61</td><td class="num">2 of 5</td><td>collapses</td></tr>
+<tr><td>bush hiding (pp)</td><td class="num">&minus;1.08</td><td class="num">5 of 5</td><td class="num">+0.31</td><td class="num">2 of 5</td><td>reverses</td></tr>
+<tr><td>killed by predator (pp)</td><td class="num">+1.97</td><td class="num">5 of 5</td><td class="num">+0.06</td><td class="num">3 of 5</td><td>collapses</td></tr>
+<tr><td>starved (pp)</td><td class="num">&minus;2.60</td><td class="num">5 of 5</td><td class="num">+0.02</td><td class="num">3 of 5</td><td>reverses</td></tr>
+<tr><td>response to a nearby predator (pp)</td><td class="num">+3.24</td><td class="num">5 of 5</td><td class="num">&minus;0.65</td><td class="num">1 of 5</td><td>reverses</td></tr>
+<tr><td>response to a nearby rabbit (pp)</td><td class="num">+0.59</td><td class="num">4 of 5</td><td class="num">+0.18</td><td class="num">3 of 5</td><td>collapses</td></tr>
+</tbody>
+</table>
+</div>
+<p class="tcap">Each row is the world-only modulator minus the body-only modulator <em>at the same
+site</em>, averaged over the five sites. "Sites agreeing" counts how many of the five point the same
+way as the original grid's average. No external reference run is involved in any of these numbers,
+so the batch problem of section 1b cannot reach them.</p>
+<p><strong>Every one of the six either collapses towards zero or changes sign.</strong> The measure
+that looked strongest in the original grid &mdash; the body-only modulator answering a nearby
+predator less strongly, at all five sites &mdash; comes back in the twin pointing the other way, with
+one site of five agreeing. On the original grid alone the honest reading was "this could be five
+draws that happened to land together, or it could be real". The twin is a fresh set of draws, and
+the pattern is not in them.</p>
+<p><strong>What this does and does not settle.</strong> The twin is not a fresh <em>seed</em> &mdash;
+both grids train their cells from seed 42 &mdash; so this does not measure seed-to-seed variation
+directly. What it shows is that the pattern does not survive a change in a training detail that has
+nothing to do with what the modulator reads, which is the robustness a claim about
+<em>what the modulator reads</em> would have to have. The five-seed replication the design
+pre-registered would still be the stronger test, and it is no longer worth running for this
+purpose.</p>
+<p>The twin grid deserves its own analysis on its own terms, and that is a separate job, not
+attempted here. The table above uses it for one narrow purpose: to ask whether the one pattern this
+page was tempted to report holds up. It does not.</p>
 </div>
 </section>
 
