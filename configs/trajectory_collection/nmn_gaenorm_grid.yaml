@@ -1,0 +1,52 @@
+# GAE_NORM twin of the NMN input x site grid - post-training evaluation population.
+#
+# ONE PASS, not two. The MC grid needed 300,000 + 700,000 because its first collection was already
+# on disk when the population was raised to a million, and `n_episodes` is a guarded manifest field
+# so that store could not be extended. Nothing is collected for these runs yet, so the full million
+# goes in one store with one manifest -- simpler to read and impossible to half-collect.
+#
+# THE SEED RANGE IS THE SAME AS THE MC GRID'S, deliberately: seed_base 1,000,000 over 1,000,000
+# episodes covers 1,000,000..1,999,999, exactly the union the MC arms cover across their two passes.
+# Episode i therefore presents the same world to a GAE_NORM arm as to its MC twin, which is what
+# makes the cross-grid comparison paired rather than merely same-sized.
+#
+# 21 runs: the 16 grid cells plus the 5 unmodulated GAE_NORM controls that supply this grid's own
+# control band. The MC grid's controls are NOT a valid control here -- they differ in the return
+# estimator, which is the whole point of the twin.
+
+name: nmn_gaenorm_grid
+algo: rppo
+out_root: results/trajectories_nmngae
+episodes: 1000000
+seed_base: 1000000         # LOAD-BEARING - must match the MC grid for the paired cross-grid read
+checkpoints: [final]
+nodes: [102, 109, 110, 111, 112, 113, 114]   # 101,103-108 hold other work; verified free 2026-09-08
+obs_precision: float32     # must match the MC grid's stores
+device: gpu
+npar: 1                    # correctness, not throughput: every GPU worker on a node lands on GPU 0
+batch_size: 5000
+shard_episodes: 5000
+blocks_per_cell: 200       # 1,000,000 / 5,000
+
+runs:
+  - {label: G1_none, path: results/JAX_RecurrentPPO/20260907-155854_rppo_nmngaenorm_t1none_s42}
+  - {label: G2_enc_I, path: results/JAX_RecurrentPPO/20260907-155857_rppo_nmngaenorm_t2enc_I_s42}
+  - {label: G2_enc_X, path: results/JAX_RecurrentPPO/20260907-155857_rppo_nmngaenorm_t2enc_X_s42}
+  - {label: G2_enc_ALL, path: results/JAX_RecurrentPPO/20260907-155855_rppo_nmngaenorm_t2enc_ALL_s42}
+  - {label: G3_rnn_I, path: results/JAX_RecurrentPPO/20260907-155859_rppo_nmngaenorm_t3rnn_I_s42}
+  - {label: G3_rnn_X, path: results/JAX_RecurrentPPO/20260907-155900_rppo_nmngaenorm_t3rnn_X_s42}
+  - {label: G3_rnn_ALL, path: results/JAX_RecurrentPPO/20260907-155858_rppo_nmngaenorm_t3rnn_ALL_s42}
+  - {label: G4_act_I, path: results/JAX_RecurrentPPO/20260907-155902_rppo_nmngaenorm_t4act_I_s42}
+  - {label: G4_act_X, path: results/JAX_RecurrentPPO/20260907-155903_rppo_nmngaenorm_t4act_X_s42}
+  - {label: G4_act_ALL, path: results/JAX_RecurrentPPO/20260907-155901_rppo_nmngaenorm_t4act_ALL_s42}
+  - {label: G5_crt_I, path: results/JAX_RecurrentPPO/20260907-155905_rppo_nmngaenorm_t5crt_I_s42}
+  - {label: G5_crt_X, path: results/JAX_RecurrentPPO/20260907-155906_rppo_nmngaenorm_t5crt_X_s42}
+  - {label: G5_crt_ALL, path: results/JAX_RecurrentPPO/20260907-155904_rppo_nmngaenorm_t5crt_ALL_s42}
+  - {label: G16_quad_I, path: results/JAX_RecurrentPPO/20260907-155909_rppo_nmngaenorm_t16quad_I_s42}
+  - {label: G16_quad_X, path: results/JAX_RecurrentPPO/20260907-155911_rppo_nmngaenorm_t16quad_X_s42}
+  - {label: G16_quad_ALL, path: results/JAX_RecurrentPPO/20260907-155907_rppo_nmngaenorm_t16quad_ALL_s42}
+  - {label: GC_ctrl_s42, path: results/JAX_RecurrentPPO/20260904-185748_rppo_cmp10m_gaenorm_s42}
+  - {label: GC_ctrl_s43, path: results/JAX_RecurrentPPO/20260904-185919_rppo_cmp10m_gaenorm_s43}
+  - {label: GC_ctrl_s44, path: results/JAX_RecurrentPPO/20260904-190037_rppo_cmp10m_gaenorm_s44}
+  - {label: GC_ctrl_s45, path: results/JAX_RecurrentPPO/20260904-190155_rppo_cmp10m_gaenorm_s45}
+  - {label: GC_ctrl_s46, path: results/JAX_RecurrentPPO/20260904-190314_rppo_cmp10m_gaenorm_s46}
