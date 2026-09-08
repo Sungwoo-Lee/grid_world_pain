@@ -592,6 +592,32 @@ individually, never the shorthand.
 **Verifying a fix:** measure `getBoundingClientRect().left` for every top-level column child; they
 must all be identical.
 
+### F3, second amendment — two rules that TIE on specificity, where the later one silently wins
+
+The original F3 is a rule that *beats* another on specificity. This is the flatter case, and it is
+harder to see: two rules with **equal** specificity, where source order decides and the loser reads
+as live code.
+
+**Saw:** a table given its own wider floor, `table.repl{min-width:660px}`, rendering at 560 —
+because `table.results{min-width:560px}` appears later in the sheet and both selectors score
+(0,1,1). The consequence was not visual: the table simply had a smaller floor than intended, its
+real overflow point moved, and the scroll cue derived from the intended 660 then announced a scroll
+across a 76px band where nothing scrolled. A dead declaration produced a wrong cue two rules away.
+
+**Why neither review method catches it:** the stylesheet reads correctly — both rules are present,
+both are well-formed, and the intent is obvious. Nothing overlaps, clips or overflows, so the
+geometry checker is silent, and the rendered table looks entirely normal at its unintended floor.
+The defect is only visible by comparing the declared value against the computed one.
+
+**Rule:** a per-instance floor must **out-score** the shared rule it is meant to override, not merely
+follow it: write `table.results.repl`, not `table.repl`. And never trust a `min-width` you have only
+read — confirm it with `getComputedStyle(el).minWidth` on the rendered page, then derive any
+breakpoint from that number.
+
+**Verifying a fix:** for every element carrying a floor, print the declared value beside
+`getComputedStyle(el).minWidth`. Any disagreement is a rule that lost a tie you did not know it was
+in.
+
 ### F27 — a diagram's legibility floor can push all of its data off a phone
 
 **Saw:** a schematic with a 950 px minimum width inside a scrolling box. At 390 px the reader saw the

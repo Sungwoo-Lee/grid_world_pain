@@ -107,8 +107,6 @@ figure .figscroll img{display:block;width:100%;min-width:620px;height:auto}
    higher than the other numeric tables' 560. Its own floor, its own breakpoint -- which is the
    whole lesson of F32: a cue inherited from a component with a different floor is wrong for one
    of them. */
-table.repl{min-width:660px}
-table.repl td:first-child, table.repl th:first-child{min-width:230px}
 /* 660 (floor) + 52 (the callout's own padding and borders) + 52 (column padding) - 1. A `.scroll`
    inside a `.callout` is 52px narrower than one in a bare section, which the first version of this
    breakpoint missed -- so from 712 to 763 the "survives?" column, the verdict of the whole table,
@@ -119,6 +117,11 @@ table.repl td:first-child, table.repl th:first-child{min-width:230px}
    overflow at EVERY width, desktop included, and a viewport-keyed cue is simply absent exactly
    where the reader is losing a column mid-word. Those two get an unconditional cue (defect F31). */
 .tbl-hint.always{display:block}
+/* The code block's content is 628px wide and it sits inside a <details>, which costs 40px on top
+   of the column's 52, so its box is `viewport - 92` and it fits only from 720 up. 628 + 92 - 1. */
+.pre-hint{display:none;font-family:var(--mono);font-size:11px;letter-spacing:.04em;
+  color:var(--muted);margin:0 0 6px}
+@media (max-width:719px){ .pre-hint{display:block} }
 /* Legibility floor derived per diagram: rendered label = floor x fontSize / viewBoxWidth.
    viewBox is 1000 wide and the smallest label is 10 units, so 950px gives 9.5px. An earlier
    comment here said 10.5 units and 900px, which computes to 9.45px of apparent headroom against
@@ -163,6 +166,12 @@ td.tier{white-space:nowrap}
    needs about 350px -- on a phone that table rendered its sixteen row labels and neither number. */
 table.results{min-width:560px}
 table.results.narrow{min-width:0}
+/* Specificity, not source order, is what makes a per-table floor stick. Written as `table.repl`
+   earlier in the sheet, this rule tied with `table.results` on specificity (0,1,1) and lost on
+   source order, so the browser applied 560 and the floor below was dead code that read as live
+   (defect F3). Verify a floor with getComputedStyle().minWidth, never by reading the sheet. */
+table.results.repl{min-width:660px}
+table.results.repl td:first-child, table.results.repl th:first-child{min-width:230px}
 table.measures{min-width:860px}
 table.measures td:first-child, table.measures th:first-child{width:64px}
 table.measures td:nth-child(2), table.measures th:nth-child(2){min-width:200px}
@@ -571,6 +580,7 @@ a hypothesis but may not settle one.</p>
 <p>Written out because the store's row convention has bitten this project before &mdash; row
 <code>t</code> holds the world <em>at</em> <code>t</code> together with the action that
 <em>arrived at</em> <code>t</code>, so an entry event straddles two rows:</p>
+<p class="pre-hint">&larr; this block is wider than the column here &mdash; scroll it sideways</p>
 <pre><code># denominator: the agent was standing in the open and chose to MOVE
 #              (not Rest, not Eat)
 denominator:  agent_in_bush[t]   == False
