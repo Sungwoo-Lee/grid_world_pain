@@ -119,3 +119,29 @@ def test_smell_channels_refuses_a_config_that_does_not_separate():
         {"class": "neutral", "count_high": 1, "properties": [1.0, 1.0]}]}}
     with pytest.raises(SystemExit):
         E.smell_channels(cfg)
+
+
+def test_rest_delta_ignores_an_underpopulated_bin():
+    """Delta_rest must skip a bin too small to estimate a rate from, exactly as B0 does.
+
+    The starting wound is drawn from a continuous range, so an exactly-zero starting injury is a
+    measure-zero event: in a million episodes that bin holds about 25 rows. Taking it as the
+    baseline of a difference produced Delta_rest values that varied by 46 percentage points across
+    runs that differ only in seed -- almost all of it noise from those 25 rows.
+    """
+    import numpy as np
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                    "..", "..", "scripts", "analysis"))
+    import context_dependence as CD
+
+    # one window, four bins, [not-rest, rest] counts. Bin 0 is the degenerate one.
+    REST = np.zeros((len(CD.WINDOWS), 4, 2))
+    REST[0, 0] = [24, 1]              # 25 rows -> 4% rest, far below min_n
+    REST[0, 1] = [700_000, 300_000]   # 30%
+    REST[0, 2] = [600_000, 400_000]   # 40%
+    REST[0, 3] = [500_000, 500_000]   # 50%
+    out = CD.entry_rest_metrics(REST)[CD.WINDOWS[0]]
+    assert out["bins_used"] == [CD.ENTRY_LABELS[1], CD.ENTRY_LABELS[3]]
+    assert out["delta_rest"] == pytest.approx(20.0), (
+        "delta_rest must be 50% - 30% = 20 pp, not 50% - 4% = 46 pp from the 25-row bin")
+    assert np.isnan(out["rows"][0]["rest_rate"])

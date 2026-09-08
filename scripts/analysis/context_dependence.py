@@ -305,17 +305,27 @@ def entry_metrics(ENT, min_n=ENTRY_MIN_N):
     return out
 
 
-def entry_rest_metrics(REST):
-    """B1 — fraction of acting steps on which the agent chose `Rest`, per starting-injury bin."""
+def entry_rest_metrics(REST, min_n=ENTRY_MIN_N):
+    """B1 — fraction of acting steps on which the agent chose `Rest`, per starting-injury bin.
+
+    Δ_rest takes the TOP minus the BOTTOM *populated* bin, where populated means at least `min_n`
+    rows — the same guard B0 uses, and for the same reason. Without it this took the first bin that
+    happened to be finite, which in this environment is `injury 0`: the starting wound is drawn from
+    a continuous range, so exactly-zero is a measure-zero event and that bin held **25 rows out of
+    five million**. Every Δ_rest computed before this guard was a difference against a 25-sample
+    estimate, and the resulting spread across runs (8.6 to 54.5 pp) was almost entirely that noise.
+    With the guard the same runs span 17.2 to 28.6.
+    """
     out = {}
     for wi, w in enumerate(WINDOWS):
         rows = []
         for i, lab in enumerate(ENTRY_LABELS):
             n = float(REST[wi, i].sum()); x = float(REST[wi, i, 1])
-            rate, _ = _prop_ci(x, n)
+            rate, _ = _prop_ci(x, n) if n >= min_n else (np.nan, np.nan)
             rows.append(dict(bin=lab, n=n, rest_rate=rate))
         fin = [r for r in rows if np.isfinite(r["rest_rate"])]
-        out[w] = dict(rows=rows,
+        out[w] = dict(rows=rows, min_n=min_n,
+                      bins_used=[fin[0]["bin"], fin[-1]["bin"]] if len(fin) > 1 else [],
                       delta_rest=(fin[-1]["rest_rate"] - fin[0]["rest_rate"]) if len(fin) > 1
                                  else np.nan)
     return out
