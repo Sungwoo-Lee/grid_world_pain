@@ -3,7 +3,7 @@ title: "Training-health and engineering-correctness audit of the modulation-site
 topic: nmn_input_site_grid
 status: active
 created: 2026-09-07
-last_updated: 2026-09-07
+last_updated: 2026-09-08
 wandb_group: "nmn_input_site_grid, nmn_input_site_grid_gaenorm"
 wandb_tag: "rppo_nmnsite_*_s42, rppo_nmngaenorm_*_s42"
 develop_link: docs/develop/active/neuromodulation/MODULATION_SITE_REFACTOR.md
@@ -30,61 +30,88 @@ wired to the thing it claims to switch, is any number diverging, is anything una
 scientific comparison between the sixteen arrangements, and between the two batches, is separate
 work and is deliberately not attempted here.
 
-**Where each batch stands.** The first batch (the "MC grid") has **finished — all sixteen runs
-completed their full ten million episodes**, so every number reported for it below is a genuine
-end-of-training value rather than a snapshot of a run still in progress. The second batch (the
-"GAE_NORM twin") is **12.8% to 20.6% of the way through**, so it gets an early-life health check
-only. Nothing in this document compares the two batches on how well they perform.
+**Where each batch stands.** **Both batches have now finished.** All thirty-two runs completed their
+full ten million episodes — the first batch on 7 September, the second on 8 September. Every number
+reported below is a genuine end-of-training value; nothing in this version of the document is a
+snapshot of a run still in progress, and every figure the previous version marked provisional has
+been recomputed on the full histories.
 
-**The verdict: the machinery is working, in both batches.** Across all thirty-two runs there is not a
-single not-a-number or infinite value in any logged quantity. Every run's survival time rises from
-about 18 steps at the start toward the mid-160s (finished batch) or mid-150s and still climbing
-(running batch). Each of the thirty-two configurations logs exactly the signals its own saved
-configuration says it should, and none that it should not. In all thirty modulated runs the
-modulator is receiving real training signal — its gradient never once fell to the "disconnected"
-level, the smallest value seen anywhere in either batch being about **seven times** the threshold the
-project's own metrics guide calls vanishing. Nothing here justifies stopping, restarting or
-discarding a run.
+**The verdict: the machinery is working, in both batches.** Across all thirty-two completed runs
+there is not a single not-a-number or infinite value in any logged quantity. Every run's survival
+time rises from about 18 steps at the start to the mid-160s (first batch) or the low 170s (second
+batch), still very slightly rising when the episode budget expires. Each of the thirty-two
+configurations logs exactly the signals its own saved configuration says it should, and none that it
+should not. In all thirty modulated runs the modulator received real training signal from beginning
+to end — its gradient never once fell to the "disconnected" level, the smallest value seen anywhere
+across either batch's complete history being about **seven times** the threshold the project's own
+metrics guide calls vanishing (0.0071 in the first batch, 0.0076 in the second, and in both cases the
+same cell: modulation written into the action-choosing head, driven by the two internal-body signals
+only). **No run needs to be discarded, in either batch.**
 
-**Four things worth the user's attention:**
+**Both reference runs pass their pre-registered gates.** The first batch's unmodulated control
+finished at **164.46** mean survival steps over its final million episodes, inside the 162.4–166.9
+band its design registered in advance from five earlier seeds. The second batch's control finished at
+**170.62**, inside the **169.9–171.2** band its own design registered — a materially narrower gate,
+because the five reference seeds for the second recipe agreed with each other far more closely than
+the first recipe's did. Both recomputed independently here from the runs' own logs; see §4.1 and
+§5.1. Both grids therefore have a valid reference point, and the pre-registered precondition for
+comparing them to each other is met.
 
-1. **The finished batch answers a question the earlier draft of this audit could not: the downward
-   drift of the re-tuning signals did *not* continue to the end — it mostly flattened, and at the
-   sensory front-end it partly reversed.** The multiplier the modulator applies at the front-end
-   bottomed out around 25–60% of the way through training and then climbed back up by 0.03 to 0.17;
-   the memory-cell and value-head multipliers reached a plateau and stayed there. **Two signals are
-   the exception and had *not* converged when the episode budget ran out**: the additive offset at
-   the action head and at the value head, in the arms that feed the modulator all 27 senses. Those
-   two were still sliding downward at the last logged point, at roughly 11% and 7% of their own
-   final magnitude per final tenth of training. Detail and the full turning-point table in §4.3.
-2. **The twin cells behave alike on the health metrics, at matched training progress.** Because both
-   batches use the same random seed, matched cells start from bit-identical weights. Compared over
-   the same window of episodes, the modulator's gradient in the second batch is 0.79× to 1.16× the
-   first batch's in all fifteen modulated pairs, the typical total gradient differs by 3% across the
-   grid, and the re-tuning signals agree to within about 0.1 in nearly every case. The one systematic
-   difference is that the second batch's outside-world-input arms spend more of their time in the
-   upper part of the gradient range — 10–27% of logging windows against 0–4% — without ever
-   approaching a pathological level. §5.
-3. **The one large gradient spike found in the earlier draft stayed a one-off.** The value-head
-   run on outside-world input recorded a single spike to 1030 at 97% of its run; it did not recur,
-   nothing else moved when it happened, the gradient clip absorbed it, and the run finished mid-pack.
-   Exactly one new spike above 3.0 appeared anywhere as the ten then-unfinished runs completed
-   (peak 6.6, in the front-end narrow-input arm, in its final 0.04% of training). §4.8.
-4. **The provenance-recording weakness reported earlier got worse, not better.** The launcher's
+**Five things worth the user's attention:**
+
+1. **The odd, non-monotone shape of the re-tuning drift found in the first batch mostly reproduces in
+   the second — six of seven site families match, one does not.** In both batches the sensory
+   front-end's multiplier falls, bottoms out around the middle of training, and then climbs back; the
+   memory-cell and value-head multipliers reach a plateau; the action-head multiplier keeps creeping
+   down to the last logged step; the front-end and memory offsets flatten; and the additive offset at
+   the action head is still sliding downward at the budget's end, fastest in the arm that feeds the
+   modulator all 27 senses. The **exception** is the additive offset at the value head: in the first
+   batch that signal was still sliding in the all-senses arm (−0.124 over the final tenth), whereas in
+   the second batch the all-senses arm is essentially flat (−0.017) and the arm still sliding is the
+   outside-world one (−0.089) instead. Because both grids share the same random seed, a reproduced
+   shape is **weaker** evidence than a second seed would be — but it does show the shape survives
+   changing the learning-signal recipe, which the single-batch data could not show. §5.4.
+2. **The twin comparison changes when it is done at full length rather than early, in three ways —
+   and all three are consequences of the two batches diverging slowly rather than of anything
+   breaking.** The modulator-gradient agreement band was 0.77×–1.18× over an early matched window and
+   is **0.70×–0.94× over the complete histories**, with the second batch below the first in all
+   fifteen pairs rather than straddling. The reason is visible in the data: the first batch's
+   modulator gradient **grows** over training in fourteen of fifteen arms, while the second batch's
+   stays flat. Agreement between the two batches' re-tuning signals also loosens with length — 58 of
+   60 signals agreed to within 0.14 early, but only 41 of 60 do at the end, and the six largest gaps
+   are all offsets that the first batch drove much further negative (largest gap 0.72). And the one
+   systematic clipping difference reported earlier — more windows running hot under the new recipe —
+   **washes out and then reverses**: it is confined to roughly the first fifth of training, after
+   which the second batch is the quieter of the two everywhere. §5.5–§5.7.
+3. **The second batch is markedly quieter in the gradient tail than the first.** The first batch
+   recorded 22 post-warm-up gradient excursions above 3.0 spread over thirteen of its sixteen runs,
+   including a single 1030-magnitude event; the second recorded **6 events over five of sixteen runs,
+   the largest being 8.4**. Nothing remotely like the 1030 appeared in the twin. That is consistent
+   with the first batch's noisier learning-signal recipe and is not a defect in either. §5.3.
+4. **The provenance-recording weakness is now final and confirmed at its worst.** The launcher's
    check for "were there uncommitted edits at launch time" recorded "unknown" in **all sixteen** runs
-   of the second batch (it was fifteen of sixteen in the first). The experiment design's gate
-   requiring every row to record "no uncommitted edits" is unsatisfiable from the recorded evidence
-   in both batches. §6.2 explains why this is very probably harmless here and what was checked
-   instead. This is now a reproduced defect, not a one-off.
+   of the second batch, against fifteen of sixteen in the first. The gate both experiment designs
+   registered — every row must record "no uncommitted edits" — is **unsatisfiable from the recorded
+   evidence in either batch**. §6.2 explains why this is very probably harmless here and what was
+   checked instead; it is a reproduced defect, not a one-off.
+5. **The estimator's effect on survival is uniform in sign across every one of the sixteen
+   configurations, which is a health-relevant observation about the pair.** Reading each cell's mean
+   survival over its final million episodes, the second batch finishes above the first in **16 of 16
+   cells**, by +1.63 to +6.79 steps (mean +4.31). The spread of that effect across the sixteen cells
+   (standard deviation 1.59 steps) is smaller than the seed-to-seed spread of the same measurement
+   in the reference five-seed study (4.5 steps). Nothing in the data therefore requires the modulator
+   machinery to be interacting with the learning-signal recipe in some cell-specific way — which is
+   the precondition for treating the two grids as a matched pair. **This is an observation about 16
+   paired draws at one seed, not a tested hypothesis**, and it is not a claim about which
+   configuration is better. §5.8.
 
-**The reference run passes its gate.** The unmodulated control of the finished batch ended at
-**164.46 mean survival steps** over its final million episodes, inside the 162.4–166.9 band the
-design registered in advance from five previously-run seeds of the same configuration. Independently
-recomputed here; see §4.1.
-
-**One correction carried forward unchanged.** The project's metrics reference is still out of date in
-a way that would make a future reader misread every front-end number in both batches — it says the
-front-end gain is "pre-sigmoid" and must be squashed, which is no longer true under this code. §6.1.
+**Three standing flags carried forward, unchanged in substance.** (a) The project's metrics reference
+still describes the front-end gain as a "pre-sigmoid" quantity needing to be squashed, which is not
+true under the code these thirty-two runs used, and a reader who follows it will misread every
+front-end number in both batches — §6.1. (b) The launcher's clean-working-tree flag is now
+demonstrably unsatisfiable in both batches — §6.2. (c) The claim that switching a re-tuning site on
+is a no-op at step 0 holds for the layer's average but not for individual units, which start at a
+multiplier of 1.0 ± ~0.3 — §8.1, now confirmed a second time on the twin's complete data.
 
 ---
 
@@ -107,11 +134,12 @@ band.
   document is a claim about which arm is better. A 5-seed study of this same configuration measured
   a seed-to-seed spread of about 4.5 survival steps, and most gaps in the tables below are inside
   that.
-- **The second batch's sixteen runs are at *different* progress points** (12.8%–20.6%), and that
-  spread is explained entirely by which graphics card each run landed on (§7.2). Any cross-arm
-  comparison *within* that batch is therefore confounded by how far each run has trained, and none is
-  offered. Where the two batches are compared at all (§5), it is only over a window of episodes that
-  **every one of the thirty-two runs has completed**.
+- **Both batches are now complete**, so nothing in this document is confounded by unequal training
+  progress any more. The card each run landed on still confounds **throughput** comparisons (§7) and
+  nothing else. The twin comparison in §5.5–§5.7 is now run over the **complete** histories; where a
+  number differs from the earlier draft's early-window value, both are shown and the difference is
+  explained by which stretch of training the window covered — a full-history mean and a
+  first-eighth-of-training mean are different measurements, not a contradiction.
 - Differences between the two batches are **engineering observations about how the learning-signal
   recipe interacts with the modulator**, not behavioural or scientific claims.
 
@@ -159,41 +187,44 @@ complete when the first draft was written. All sixteen are now at exactly 10,000
 figure below is therefore end-of-training, and where a number moved as a run finished, the new value
 is what is reported.
 
-### 2.2 Batch B — the GAE_NORM twin (running)
+### 2.2 Batch B — the GAE_NORM twin (finished)
 
 Sixteen runs, WandB group `nmn_input_site_grid_gaenorm`, job type `pilot`, all seed 42, same
 environment config, same 10,000,000-episode budget, all at code commit `6695aa29`. Cell names match
-Batch A exactly, so a cell name identifies a **pair**.
+Batch A exactly, so a cell name identifies a **pair**. **All sixteen have now completed the full
+budget**; the percentages in the earlier draft (12.8–20.6%) are superseded.
 
 The twin's Launch Manifest (§3 of [[NMN_INPUT_SITE_GRID_GAENORM]]) is also still showing every row
 as `planned`. Reconstructed from the runs' own metadata:
 
 | Cell | Tag | WandB run ID | Local log dir | Node:GPU | Card | Episodes | % |
 |---|---|---|---|---|---|---|---|
-| T1_none (control) | `rppo_nmngaenorm_t1none_s42` | `xvw6uzrs` | `wandb/run-20260907_155906-xvw6uzrs` | 101:0 | RTX 2080 Ti | 1,548,000 | 15.5% |
-| T2_enc_ALL | `rppo_nmngaenorm_t2enc_ALL_s42` | `dtai9q6q` | `wandb/run-20260907_155906-dtai9q6q` | 101:1 | RTX 2080 Ti | 1,320,000 | 13.2% |
-| T2_enc_I | `rppo_nmngaenorm_t2enc_I_s42` | `a0qrdefg` | `wandb/run-20260907_155914-a0qrdefg` | 102:0 | RTX 4090 | 1,836,000 | 18.4% |
-| T2_enc_X | `rppo_nmngaenorm_t2enc_X_s42` | `9ovumjg0` | `wandb/run-20260907_155914-9ovumjg0` | 102:1 | RTX 4090 | 1,876,000 | 18.8% |
-| T3_rnn_ALL | `rppo_nmngaenorm_t3rnn_ALL_s42` | `k3nkwafh` | `wandb/run-20260907_155909-k3nkwafh` | 103:0 | RTX 2080 Ti | 1,324,000 | 13.2% |
-| T3_rnn_I | `rppo_nmngaenorm_t3rnn_I_s42` | `3om5z4jv` | `wandb/run-20260907_155910-3om5z4jv` | 103:1 | RTX 2080 Ti | 1,372,000 | 13.7% |
-| T3_rnn_X | `rppo_nmngaenorm_t3rnn_X_s42` | `igrblp5d` | `wandb/run-20260907_155912-igrblp5d` | 104:0 | RTX 2080 Ti | 1,284,000 | 12.8% |
-| T4_act_ALL | `rppo_nmngaenorm_t4act_ALL_s42` | `bo6t6y4m` | `wandb/run-20260907_155912-bo6t6y4m` | 104:1 | RTX 2080 Ti | 1,332,000 | 13.3% |
-| T4_act_I | `rppo_nmngaenorm_t4act_I_s42` | `3whh6e86` | `wandb/run-20260907_155914-3whh6e86` | 105:0 | RTX 2080 Ti | 1,480,000 | 14.8% |
-| T4_act_X | `rppo_nmngaenorm_t4act_X_s42` | `3jqmnf3a` | `wandb/run-20260907_155914-3jqmnf3a` | 105:1 | RTX 2080 Ti | 1,420,000 | 14.2% |
-| T5_crt_ALL | `rppo_nmngaenorm_t5crt_ALL_s42` | `rinfx023` | `wandb/run-20260907_155915-rinfx023` | 106:0 | RTX 3090 | 1,748,000 | 17.5% |
-| T5_crt_I | `rppo_nmngaenorm_t5crt_I_s42` | `e1ty78id` | `wandb/run-20260907_155916-e1ty78id` | 106:1 | RTX 3090 | 1,732,000 | 17.3% |
-| T5_crt_X | `rppo_nmngaenorm_t5crt_X_s42` | `76krj6ri` | `wandb/run-20260907_155917-76krj6ri` | 114:0 | RTX 6000 Ada | 2,060,000 | 20.6% |
-| T16_quad_ALL | `rppo_nmngaenorm_t16quad_ALL_s42` | `u69q0auc` | `wandb/run-20260907_155918-u69q0auc` | 114:1 | RTX 6000 Ada | 1,712,000 | 17.1% |
-| T16_quad_I | `rppo_nmngaenorm_t16quad_I_s42` | `khcs2pxc` | `wandb/run-20260907_155920-khcs2pxc` | 114:2 | RTX 6000 Ada | 1,788,000 | 17.9% |
-| T16_quad_X | `rppo_nmngaenorm_t16quad_X_s42` | `d4okzt4v` | `wandb/run-20260907_155922-d4okzt4v` | 114:3 | RTX 6000 Ada | 1,928,000 | 19.3% |
+| T1_none (control) | `rppo_nmngaenorm_t1none_s42` | `xvw6uzrs` | `wandb/run-20260907_155906-xvw6uzrs` | 101:0 | RTX 2080 Ti | 10,000,000 | 100% |
+| T2_enc_ALL | `rppo_nmngaenorm_t2enc_ALL_s42` | `dtai9q6q` | `wandb/run-20260907_155906-dtai9q6q` | 101:1 | RTX 2080 Ti | 10,000,000 | 100% |
+| T2_enc_I | `rppo_nmngaenorm_t2enc_I_s42` | `a0qrdefg` | `wandb/run-20260907_155914-a0qrdefg` | 102:0 | RTX 4090 | 10,000,000 | 100% |
+| T2_enc_X | `rppo_nmngaenorm_t2enc_X_s42` | `9ovumjg0` | `wandb/run-20260907_155914-9ovumjg0` | 102:1 | RTX 4090 | 10,000,000 | 100% |
+| T3_rnn_ALL | `rppo_nmngaenorm_t3rnn_ALL_s42` | `k3nkwafh` | `wandb/run-20260907_155909-k3nkwafh` | 103:0 | RTX 2080 Ti | 10,000,000 | 100% |
+| T3_rnn_I | `rppo_nmngaenorm_t3rnn_I_s42` | `3om5z4jv` | `wandb/run-20260907_155910-3om5z4jv` | 103:1 | RTX 2080 Ti | 10,000,000 | 100% |
+| T3_rnn_X | `rppo_nmngaenorm_t3rnn_X_s42` | `igrblp5d` | `wandb/run-20260907_155912-igrblp5d` | 104:0 | RTX 2080 Ti | 10,000,000 | 100% |
+| T4_act_ALL | `rppo_nmngaenorm_t4act_ALL_s42` | `bo6t6y4m` | `wandb/run-20260907_155912-bo6t6y4m` | 104:1 | RTX 2080 Ti | 10,000,000 | 100% |
+| T4_act_I | `rppo_nmngaenorm_t4act_I_s42` | `3whh6e86` | `wandb/run-20260907_155914-3whh6e86` | 105:0 | RTX 2080 Ti | 10,000,000 | 100% |
+| T4_act_X | `rppo_nmngaenorm_t4act_X_s42` | `3jqmnf3a` | `wandb/run-20260907_155914-3jqmnf3a` | 105:1 | RTX 2080 Ti | 10,000,000 | 100% |
+| T5_crt_ALL | `rppo_nmngaenorm_t5crt_ALL_s42` | `rinfx023` | `wandb/run-20260907_155915-rinfx023` | 106:0 | RTX 3090 | 10,000,000 | 100% |
+| T5_crt_I | `rppo_nmngaenorm_t5crt_I_s42` | `e1ty78id` | `wandb/run-20260907_155916-e1ty78id` | 106:1 | RTX 3090 | 10,000,000 | 100% |
+| T5_crt_X | `rppo_nmngaenorm_t5crt_X_s42` | `76krj6ri` | `wandb/run-20260907_155917-76krj6ri` | 114:0 | RTX 6000 Ada | 10,000,000 | 100% |
+| T16_quad_ALL | `rppo_nmngaenorm_t16quad_ALL_s42` | `u69q0auc` | `wandb/run-20260907_155918-u69q0auc` | 114:1 | RTX 6000 Ada | 10,000,000 | 100% |
+| T16_quad_I | `rppo_nmngaenorm_t16quad_I_s42` | `khcs2pxc` | `wandb/run-20260907_155920-khcs2pxc` | 114:2 | RTX 6000 Ada | 10,000,000 | 100% |
+| T16_quad_X | `rppo_nmngaenorm_t16quad_X_s42` | `d4okzt4v` | `wandb/run-20260907_155922-d4okzt4v` | 114:3 | RTX 6000 Ada | 10,000,000 | 100% |
 
-Episode counts are as of the last record flushed to each run's local transaction log at the time of
-this extraction; all sixteen are still advancing.
+Every one of the sixteen reached 10,000,000 episodes; the final checkpoint line in each run's
+captured output reads `Saving model at episode 10000004`–`10000097` (the small overshoot is the
+trainer finishing the iteration it was in).
 
-**The progress spread is hardware, not health.** The eight runs on the 2080 Ti nodes (101, 103, 104,
-105) are at 12.8–15.5%; the two on the 3090 node (106) at 17.3–17.5%; the two on the 4090 node (102)
-at 18.4–18.8%; the four on the RTX 6000 Ada node (114) at 17.1–20.6%. Card explains the ordering
-essentially perfectly (§7.2), which is why §1 rules out cross-arm comparison within this batch.
+**Note the hardware difference from Batch A when reading throughput only.** Batch A ran entirely on
+RTX 3090s and two RTX 4090s; Batch B is spread across 2080 Ti, 3090, 4090 and RTX 6000 Ada cards.
+That made the twin's runs finish at very different wall-clock times, and it is why §7.2's speed table
+cannot be compared cell-for-cell with §7.1's. It has no bearing on any gradient, loss or survival
+figure, all of which are measured per episode.
 
 ### 2.3 The two batches differ in one setting — verified on the trainer's own saved configs
 
@@ -212,6 +243,16 @@ three pairs give the same answer, with **264 keys on each side and exactly 5 dif
 | `wandb.name` | `rppo_nmnsite_…` | `rppo_nmngaenorm_…` | ✅ identity |
 
 Nothing else differs. **No finding.**
+
+**Extended to all sixteen twin runs at completion.** The three-pair, 264-key diff above is a
+whole-config check on a sample. It is now supplemented by a targeted check on **every one of the
+sixteen** twin runs' trainer-written configs: all sixteen record `return_mode: GAE_NORM`; all fifteen
+modulated ones record a write-site block that matches their cell name exactly (encoder-only,
+memory-only, action-head-only, value-head-only, or all four); all fifteen record
+`temperature.enabled: false` and `rnn_mechanism: activation`; and the modulator's input sensor list is
+`all` in the six ALL arms, `[Satiation, Interoceptive Nociception]` in the five narrow-input arms and
+`[Extero Nociception, Olfaction, Collision, Visual]` in the five outside-world arms. The control's
+config carries no modulation block at all. **Sixteen for sixteen, no exception.**
 
 **The commit delta is confirmed harmless to training.** `a71f4471` is an ancestor of `6695aa29`, and
 `git diff a71f4471 6695aa29 -- src/ train.py` is **empty** — the training code is byte-identical
@@ -237,8 +278,10 @@ code path and the third does not:
    `wandb/run-*/files/output.log`, which states the return mode, modulation type, input sensors and
    enabled sites as the constructed model reports them.
 
-Working extractions: `tmp/nmnsite2/`, consolidated in
-`tmp/20260907_172348_nmnsite_audit_refresh.md`.
+Working extractions: `tmp/nmnsite2/` (Batch A, and Batch B's superseded partial pass) and
+`tmp/nmnsite3/` (Batch B re-extracted at completion, plus every cross-batch comparison in §5),
+consolidated in `tmp/20260907_172348_nmnsite_audit_refresh.md` and
+`tmp/20260908_gaenorm_final_audit.md`.
 
 ---
 
@@ -268,8 +311,9 @@ absent from all thirty-two (that series belongs to the legacy gate-bias mechanis
 uses `rnn_mechanism: activation`). Both are expected absences per the metrics reference §2.8.
 
 **Non-modulator metric sets are identical across all thirty-two runs** — the same 59 keys in every
-run of both batches. No arm is missing an episode or loss metric its siblings have, and no arm has an
-extra one.
+run of both batches, with no arm missing an episode or loss metric its siblings have and no arm
+carrying an extra one. Re-verified on the twin's complete logs: sixteen runs, 59 non-modulator keys
+each, empty extra-set and empty missing-set against the reference run in every case.
 
 **Input slices and return mode verified from the runtime, not from the source YAML.** The startup
 banner in each of the sixteen twin runs reports `Return Mode: GAE_NORM` and the sensor list the
@@ -510,8 +554,12 @@ observation, not a coin flip — but note that all five share the same random se
 *independent* confirmations either. The mechanistic reading is straightforward and testable: a
 modulator driven by two slowly-varying body signals emits a smoother, lower-variance modulation than
 one driven by nineteen fast-changing world signals, and a smoother modulation puts less
-high-frequency energy into the gradient. **The same ordering reproduces in the GAE_NORM twin**
-(§5.3), which is a second, estimator-independent showing of the pattern.
+high-frequency energy into the gradient. **The same ordering reproduces in the GAE_NORM twin over
+its complete runs, with the same single exception** — the narrow-input arm is quietest at the sensory
+front-end, the memory cell, the action head and the all-four-sites configuration, and the family that
+breaks the pattern is the value head in both batches (§5.3). That is a second,
+estimator-independent showing of the pattern. It is still one seed per arm in both grids, so it is a
+repeated observation, not two independent confirmations.
 
 **Bottom line for the engineering question:** a two-dimensional modulator input is *not* degenerate
 in this codebase. The modulator learns, receives gradient, and moves its outputs further from
@@ -621,7 +669,8 @@ after. The clip did its job — an update of norm 1030 against a 0.5 ceiling is 
 0.0005, i.e. it was effectively a null update — and this run finished all 10,000,000 episodes at
 165.74 mean survival steps, mid-pack.
 
-**Did anything comparable appear in the ten runs that were still training?** **No.** Exactly one new
+**Did anything comparable appear in the ten Batch A runs that were still training when the previous
+version of this audit was written?** **No.** Exactly one new
 post-warm-up excursion above 3.0 appeared anywhere as those runs completed: `T2_enc_I` recorded a
 peak of **6.6** at episode ≈9,996,000, in the final 0.04% of its run. That is an ordinary member of
 this trainer's heavy tail. **Nothing above 20 appeared, and nothing remotely like 1030.**
@@ -645,6 +694,14 @@ this trainer's heavy tail. **Nothing above 20 appeared, and nothing remotely lik
 | T1_none (control) | 1 | 4.9 @ 82% |
 | T2_enc_X, T3_rnn_I, T16_quad_ALL | 0 | — |
 
+**A second, stronger reason to think the 1030 was not a defect, available only now.** The fifteen
+modulated architectures and the control were re-run for ten million episodes each under a different
+return mode, from the same seed and the same initialisation. That replication produced **six**
+post-warm-up excursions above 3.0 in total, the largest being **8.4** (§5.3). Nothing within two
+orders of magnitude of the 1030 recurred in a sixteen-run, 160-million-episode replication of the
+same modulation code. If the 1030 were caused by the FiLM machinery it had every opportunity to
+reappear.
+
 **Is the 1030 a defect?** Probably not, and here is the discipline: excursions above 3.0 after
 warm-up occur in **thirteen of the sixteen runs, including the unmodulated control**, so this trainer
 has a heavy-tailed gradient distribution as a background property. The 1030 is an extreme draw from a
@@ -660,183 +717,470 @@ only one excursion in that same early window too, so the comparison is not yet i
 
 ---
 
-## 5. Batch B (GAE_NORM twin) — early-life health check
+## 5. Batch B (GAE_NORM twin) — final numbers
 
-**What this section can and cannot say.** The sixteen twin runs are at 12.8–20.6% of their budget.
-Every statement below is an early-life liveness and correctness check. Nothing here says anything
-about how the twin will finish, and — because the sixteen runs are at different progress points,
-determined by which card each landed on — nothing here ranks the twin's arms against each other.
+**What this section can and cannot say.** All sixteen twin runs completed 10,000,000 episodes, so
+every figure here is end-of-training. It remains a health and correctness section: which arm is
+better is not asked, and the one place survival appears as more than a liveness check is §5.1's
+control gate and §5.8's paired estimator observation, which is framed as an engineering property of
+the *pair*, not as a result about either grid.
 
-### 5.1 Is every run learning, with no NaN or infinity? — Yes, all sixteen
+### 5.1 Is every run learning, with no NaN or infinity? — Yes, all sixteen, to completion
 
-**Zero non-finite values** across all sixteen transaction logs, in any metric, at any step. Every run
-prints `JIT compiling train_iteration…` exactly once, has zero warning or error lines in its captured
-output, and has zero exact-constant numeric series.
+**Zero non-finite values** across all sixteen complete transaction logs, in any metric, at any step.
+Every run prints `JIT compiling train_iteration…` exactly **once** and never again, has **zero**
+warning, error or traceback lines in its captured output, and has **zero** exact-constant numeric
+series (a series pinned at its initialisation value is the signature a disconnected component would
+leave; there are none).
 
-Survival steps by episode band, plus a short trailing window that is not contaminated by the opening
-climb:
+Survival steps (the rolling 5,000-episode mean the trainer logs), averaged within episode bands:
 
-| Cell | 0–1M | 1–2M | last 200k episodes | s.d. | episodes done |
-|---|---|---|---|---|---|
-| T1_none (control) | 87.8 | 149.5 | 152.89 | 3.4 | 1,548,000 |
-| T2_enc_ALL | 87.5 | 149.7 | 150.61 | 3.8 | 1,320,000 |
-| T2_enc_I | 95.9 | 153.9 | 156.37 | 3.2 | 1,836,000 |
-| T2_enc_X | 87.7 | 155.9 | 159.86 | 2.9 | 1,876,000 |
-| T3_rnn_ALL | 97.6 | 152.5 | 153.41 | 3.8 | 1,324,000 |
-| T3_rnn_I | 88.2 | 149.3 | 151.10 | 2.9 | 1,372,000 |
-| T3_rnn_X | 100.5 | 151.6 | 151.88 | 3.0 | 1,284,000 |
-| T4_act_ALL | 95.8 | 151.6 | 153.05 | 2.9 | 1,332,000 |
-| T4_act_I | 79.4 | 147.6 | 149.81 | 3.5 | 1,480,000 |
-| T4_act_X | 84.3 | 147.6 | 148.98 | 3.1 | 1,420,000 |
-| T5_crt_ALL | 84.0 | 147.6 | 153.05 | 3.3 | 1,748,000 |
-| T5_crt_I | 83.1 | 146.6 | 150.45 | 4.0 | 1,732,000 |
-| T5_crt_X | 81.5 | 151.3 | 156.97 | 2.9 | 2,060,000 |
-| T16_quad_ALL | 97.0 | 155.0 | 157.88 | 3.0 | 1,712,000 |
-| T16_quad_I | 91.6 | 151.3 | 155.05 | 3.0 | 1,788,000 |
-| T16_quad_X | 73.5 | 153.2 | 157.92 | 3.8 | 1,928,000 |
+| Cell | 0–1M | 1–2M | 2–5M | 5–9M | **final 1M** | s.d. within final 1M | final 200k | late slope (steps per M, 5M→10M) |
+|---|---|---|---|---|---|---|---|---|
+| T1_none (control) | 87.8 | 152.2 | 162.9 | 168.6 | **170.62** | 3.2 | 170.66 | +0.82 |
+| T2_enc_ALL | 87.5 | 154.9 | 164.9 | 170.1 | 172.65 | 3.3 | 174.45 | +0.96 |
+| T2_enc_I | 95.9 | 154.3 | 163.4 | 168.1 | 170.35 | 3.2 | 169.64 | +0.89 |
+| T2_enc_X | 87.7 | 156.3 | 167.0 | 171.7 | **173.16** | 3.3 | 173.51 | +0.69 |
+| T3_rnn_ALL | 97.6 | 155.3 | 162.4 | 166.1 | **167.59** | 3.4 | 168.17 | +0.44 |
+| T3_rnn_I | 88.2 | 153.4 | 162.6 | 167.4 | 170.22 | 3.3 | 171.31 | +1.08 |
+| T3_rnn_X | 100.5 | 155.1 | 164.1 | 168.9 | 170.77 | 3.4 | 171.50 | +0.77 |
+| T4_act_ALL | 95.8 | 155.2 | 163.8 | 167.8 | 168.90 | 3.2 | 168.71 | +0.62 |
+| T4_act_I | 79.4 | 150.8 | 161.4 | 166.6 | 169.22 | 3.2 | 169.70 | +0.99 |
+| T4_act_X | 84.3 | 152.1 | 162.3 | 168.1 | 170.32 | 3.2 | 170.80 | +0.85 |
+| T5_crt_ALL | 84.0 | 149.3 | 162.1 | 168.3 | 169.80 | 3.3 | 170.35 | +0.77 |
+| T5_crt_I | 83.1 | 148.4 | 161.4 | 168.3 | 169.38 | 3.5 | 170.26 | +0.64 |
+| T5_crt_X | 81.5 | 151.3 | 162.7 | 167.9 | 169.97 | 3.3 | 170.12 | +1.02 |
+| T16_quad_ALL | 97.0 | 156.2 | 164.8 | 169.7 | 172.18 | 3.2 | 173.17 | +1.06 |
+| T16_quad_I | 91.6 | 152.1 | 162.5 | 167.7 | 169.02 | 3.1 | 169.17 | +0.66 |
+| T16_quad_X | 73.5 | 153.7 | 165.6 | 171.2 | 172.22 | 3.5 | 173.19 | +0.67 |
 
-**Read this as a liveness check only.** The "last 200k" column is **not** comparable across rows —
-each row's window sits at a different point in that run's training (the 2080 Ti arms are ~600k
-episodes behind the Ada arms), and a run that is 20% through has simply had more time to climb than
-one that is 13% through. Every run is climbing, none has flatlined or collapsed. That is the whole
-finding.
+Every run follows the same shape as Batch A's: a fast climb through the first million episodes, then
+a long slow improvement whose slope over the second half of training is **+0.44 to +1.08 survival
+steps per million episodes** and is positive in all sixteen. Nothing flatlined, stalled, diverged or
+turned over.
 
-**Losses.** Total loss 0.094–0.100, value loss 0.204–0.216, entropy −0.47 to −0.63 in every arm, all
-finite and stable, with the control inside the pack on every channel.
+**Control gate — PASSED, recomputed independently here.** The unmodulated control's mean survival
+over its final million episodes is **170.62 steps**, inside the pre-registered **169.9 – 171.2** band
+that [[NMN_INPUT_SITE_GRID_GAENORM]] §4.1 fixed in advance from five earlier seeds of the identical
+unmodulated `GAE_NORM` configuration. The gate is not sensitive to the averaging window: the final
+500,000 episodes give **171.03** and the final 200,000 give **170.66**, both also inside. For
+comparison the parent grid's control gate also passes on both windows (164.46 and 162.90, band
+162.4–166.9). **Both grids have a valid reference point, so the design's precondition for attempting
+the cross-grid analysis at all is satisfied.**
 
-### 5.2 Does the modulator receive gradient in all fifteen modulated arms? — Yes
+This gate deserves the emphasis the design gave it. The twin's reference band is **1.3 steps wide**
+against the parent's 4.5, because the five `GAE_NORM` reference seeds agreed with each other far more
+tightly than the five `MC` ones did. A control landing at 168.5 would have failed here and passed
+there. It landed at 170.62, 0.26 above the five-seed reference mean of 170.36 — comfortably inside,
+not scraping the edge.
 
-| Cell | min ever | mean | max | first decile | last decile | share below 0.001 |
-|---|---|---|---|---|---|---|
-| T2_enc_ALL | 0.0272 | 0.1391 | 0.315 | 0.054 | 0.165 | 0% |
-| T2_enc_I | 0.0260 | 0.1490 | 0.473 | 0.052 | 0.158 | 0% |
-| T2_enc_X | 0.0298 | 0.1463 | 0.363 | 0.047 | 0.158 | 0% |
-| T3_rnn_ALL | 0.0323 | 0.0578 | 0.102 | 0.050 | 0.062 | 0% |
-| T3_rnn_I | 0.0212 | 0.0872 | 0.241 | 0.046 | 0.098 | 0% |
-| T3_rnn_X | 0.0234 | 0.0481 | 0.116 | 0.048 | 0.044 | 0% |
-| T4_act_ALL | 0.0100 | 0.0295 | 0.062 | 0.026 | 0.026 | 0% |
-| T4_act_I | **0.0076** | 0.0425 | 0.157 | 0.013 | 0.059 | 0% |
-| T4_act_X | 0.0117 | 0.0231 | 0.063 | 0.023 | 0.021 | 0% |
-| T5_crt_ALL | 0.0097 | 0.0306 | 0.076 | 0.022 | 0.037 | 0% |
-| T5_crt_I | 0.0079 | 0.0313 | 0.103 | 0.026 | 0.033 | 0% |
-| T5_crt_X | 0.0082 | 0.0213 | 0.142 | 0.027 | 0.019 | 0% |
-| T16_quad_ALL | 0.0534 | 0.1529 | 0.358 | 0.099 | 0.145 | 0% |
-| T16_quad_I | 0.0336 | 0.1277 | 0.446 | 0.074 | 0.127 | 0% |
-| T16_quad_X | 0.0330 | 0.1289 | 0.277 | 0.070 | 0.149 | 0% |
+**How to read the rest of the column, and how not to.** The whole 16-arm spread of the final-million
+means is 167.6 to 173.2, i.e. **5.6 steps**. Batch A's caveat was that its spread (7.6 steps) sat
+against a 4.5-step five-seed noise band, so the arms were "all in the same neighbourhood". Here the
+arithmetic is different and whoever does the outcome analysis should notice it: the five-seed noise
+band for this recipe is only 1.3 steps wide, so a 5.6-step spread is **not** obviously swallowed by
+seed noise. That is a live question for the pre-registered analysis and this audit does not answer
+it — it is flagged only so nobody carries Batch A's "all in the same neighbourhood" sentence across
+to Batch B by habit. With one seed per cell, this document offers no ranking either way.
 
-**The smallest value observed anywhere in the twin so far is 0.0076**, in the same cell that holds the
-parent batch's minimum (`T4_act_I`, 0.0071) — about **seven and a half times** the vanishing
-threshold. No site is disconnected in any twin arm, including the two sites that had never been run
-before this week.
+**Losses.** Total loss 0.094–0.099 (control 0.099), value loss 0.202–0.209 (control 0.209), policy
+loss −0.0009 to −0.0012, entropy −0.476 to −0.619 (control −0.476), all finite and stable, with the
+control inside the pack on every channel. The entropy term flattens by the third decile of training
+in every arm and stays flat to the end — no run shows a runaway drive toward zero entropy. Batch B's
+entropy sits nearer zero than Batch A's (−0.48 vs −0.67 in the two controls), which is a batch-level
+property of the estimator, is stable rather than progressive, and is not a health finding.
 
-**Gradient norm against the ceiling.** Over each twin run's post-warm-up rows so far, the mean total
-gradient is 0.24–0.44, the 99th percentile 0.28–0.60, the largest windowed mean 0.30–0.64, and the
-largest in-window peak anywhere is **1.5**. **There is not a single excursion above 3.0 anywhere in
-the twin**, against thirteen of sixteen runs having at least one in the parent batch — but the parent
-batch's early window is comparably quiet (one event across sixteen runs before episode 2M), so this
-is not yet a difference. Warm-up peaks are the same 9.1–32.7 as the parent's.
+### 5.2 Does the modulator receive gradient in all fifteen modulated arms? — Yes, to the end, and it does not fade to nothing
 
-### 5.3 Do the per-site signals start at identity, and where are they heading?
+| Cell | min ever | mean | max | first decile | last decile | last/first | share of points below 0.001 |
+|---|---|---|---|---|---|---|---|
+| T2_enc_ALL | 0.0272 | 0.1353 | 0.315 | 0.1401 | 0.1330 | 0.95 | 0% |
+| T2_enc_I | 0.0260 | 0.1565 | 0.689 | 0.1357 | 0.1476 | 1.09 | 0% |
+| T2_enc_X | 0.0298 | 0.1390 | 0.388 | 0.1378 | 0.1354 | 0.98 | 0% |
+| T3_rnn_ALL | 0.0323 | 0.0604 | 0.123 | 0.0582 | 0.0640 | 1.10 | 0% |
+| T3_rnn_I | 0.0212 | 0.1126 | 0.358 | 0.0889 | 0.1300 | 1.46 | 0% |
+| T3_rnn_X | 0.0234 | 0.0487 | 0.116 | 0.0480 | 0.0486 | 1.01 | 0% |
+| T4_act_ALL | 0.0100 | 0.0223 | 0.062 | 0.0294 | 0.0213 | **0.73** | 0% |
+| T4_act_I | **0.0076** | 0.0478 | 0.170 | 0.0428 | 0.0484 | 1.13 | 0% |
+| T4_act_X | 0.0116 | 0.0183 | 0.063 | 0.0229 | 0.0172 | **0.75** | 0% |
+| T5_crt_ALL | 0.0097 | 0.0331 | 0.102 | 0.0291 | 0.0326 | 1.12 | 0% |
+| T5_crt_I | 0.0079 | 0.0329 | 0.121 | 0.0304 | 0.0310 | 1.02 | 0% |
+| T5_crt_X | 0.0082 | 0.0194 | 0.142 | 0.0225 | 0.0192 | 0.85 | 0% |
+| T16_quad_ALL | 0.0534 | 0.1450 | 0.371 | 0.1552 | 0.1463 | 0.94 | 0% |
+| T16_quad_I | 0.0336 | 0.1338 | 0.446 | 0.1270 | 0.1500 | 1.18 | 0% |
+| T16_quad_X | 0.0330 | 0.1574 | 0.521 | 0.1243 | 0.1806 | 1.45 | 0% |
 
-**They start at identity, exactly as the parent batch does.** At the first logged point every enabled
-site in every twin arm has a mean gain between **0.94 and 1.08** and a mean offset between **−0.06
-and +0.05**, with a per-unit standard deviation of **0.28–0.39** for both — matching the parent's
-0.29–0.37 and reproducing the §8.1 caveat exactly (identity holds for the layer mean, not per unit).
+**The smallest value observed anywhere across all fifteen modulated runs' complete histories is
+0.0076** — unchanged from the early-life draft, about **seven and a half times** the 0.001 the metrics
+reference calls vanishing, and in the same cell (`T4_act_I`) that holds the parent batch's minimum of
+0.0071. No site is disconnected in any arm, including the two that had never been run before this
+week.
 
-**Where they are heading so far** (mean of last five logged points; remember each run is at a
-different progress point, so these are not comparable across rows):
+**Does it fade? — Not to any level that matters, but the two batches differ in direction.** In Batch
+A the modulator gradient *grew* over training: the last-decile mean was equal to or above the
+first-decile mean in fourteen of fifteen arms. In Batch B it is **flat overall** — nine of fifteen
+arms up, six down, median ratio 1.02. The six that decline are led by the two action-head arms
+(0.73× and 0.75×), and the parent's single declining arm was also an action-head arm (0.87×), so the
+action-head site is where the modulator's training signal weakens in **both** batches. Even there
+nothing approaches disconnection: the smallest last-decile mean anywhere in the twin is **0.0172**,
+seventeen times the vanishing threshold, with 0% of points below it in every arm.
 
-| Site | ALL | I | X | four-site arm (ALL / I / X) | direction |
-|---|---|---|---|---|---|
-| encoder stage 1 gain | 0.733 | 0.537 | 0.633 | 0.714 / 0.585 / 0.667 | down from 1.0 |
-| encoder stage 2 gain | 0.865 | 0.838 | 0.921 | 0.829 / 0.903 / 0.905 | down, mildly |
-| memory-cell gain | 0.838 | 0.704 | 1.001 | 0.848 / 0.813 / 1.006 | down, mildly |
-| **action-head gain** | **1.039** | **1.398** | **1.368** | 1.176 / 1.298 / 1.222 | **up from 1.0** |
-| value-head gain | 0.391 | 0.371 | 0.635 | 0.517 / 0.271 / 0.562 | down, strongly |
-| encoder stage 1 offset | −0.323 | −0.575 | −0.439 | −0.357 / −0.524 / −0.389 | down |
-| memory-cell offset | −0.039 | −0.010 | +0.035 | +0.047 / +0.017 / +0.022 | ≈ 0 |
-| action-head offset | −0.105 | −0.179 | −0.075 | −0.278 / −0.244 / −0.257 | down, mildly |
-| value-head offset | −0.519 | −0.533 | −0.343 | −0.480 / −0.856 / −0.502 | down |
+### 5.3 Gradient against the clip ceiling, and the excursion census
 
-**The action-head gain rising above 1.0 is not an estimator effect.** It looks like the opposite of
-the parent batch, where that gain ends at 0.50–0.72. But the parent batch's action-head gain was
-**also above 1.0 at this stage** (1.05–1.33 over episodes 1.0–1.25M) and only fell below 1.0 later.
-Compared at matched episodes the two batches agree (§5.4). This is a progress artifact, not a
-difference — and it is a good illustration of why the twin comparison has to be done on matched
-windows.
+The trainer clips the global gradient norm at **0.5**, and the logged `loss/grad_norm` is measured
+before clipping. Post-warm-up here means after the first 10% of each run's logged rows.
 
-Every twin signal is still moving (all last-decile changes non-zero), as expected 13–20% into
-training.
+| Cell | mean grad norm | 99th pct | max windowed mean | % of windows with mean above 0.5 | % of windows whose in-window **peak** exceeds 0.5 | largest peak | excursions above 3.0 |
+|---|---|---|---|---|---|---|---|
+| T1_none (control) | 0.192 | 0.298 | 0.330 | 0.00% | 24.5% | 1.3 | 0 |
+| T2_enc_ALL | 0.246 | 0.311 | 0.355 | 0.00% | 70.2% | 1.3 | 0 |
+| T2_enc_I | 0.218 | 0.271 | 0.295 | 0.00% | 32.0% | 1.6 | 0 |
+| T2_enc_X | 0.240 | 0.387 | 0.516 | 0.06% | 44.4% | **8.4** | 1 |
+| T3_rnn_ALL | 0.200 | 0.385 | 0.469 | 0.00% | 27.1% | 1.5 | 0 |
+| T3_rnn_I | 0.178 | 0.213 | 0.228 | 0.00% | **1.7%** | 0.8 | 0 |
+| T3_rnn_X | 0.189 | 0.297 | 0.334 | 0.00% | 16.5% | 1.0 | 0 |
+| T4_act_ALL | 0.191 | 0.323 | 0.391 | 0.00% | 18.4% | 4.8 | 2 |
+| T4_act_I | 0.162 | 0.229 | 0.256 | 0.00% | **2.5%** | 3.2 | 1 |
+| T4_act_X | 0.237 | 0.424 | 0.512 | 0.06% | 60.7% | 1.7 | 0 |
+| T5_crt_ALL | 0.220 | 0.393 | 0.534 | 0.06% | 50.5% | 1.5 | 0 |
+| T5_crt_I | 0.219 | 0.375 | 0.469 | 0.00% | 51.9% | **6.4** | 1 |
+| T5_crt_X | 0.176 | 0.265 | 0.297 | 0.00% | 9.7% | 1.3 | 0 |
+| T16_quad_ALL | 0.205 | 0.276 | 0.353 | 0.00% | 23.6% | 1.6 | 0 |
+| T16_quad_I | 0.180 | 0.223 | 0.247 | 0.00% | **4.7%** | 2.6 | 0 |
+| T16_quad_X | 0.231 | 0.350 | 0.399 | 0.00% | 25.8% | **7.6** | 1 |
 
-### 5.4 Do the twin cells behave alike, at matched training progress?
+Every arm's typical gradient is between 0.32× and 0.49× the ceiling; every arm's 99th percentile is
+below it; and the fraction of logging windows whose *average* exceeds the ceiling is at most 0.06%
+anywhere, including the control. All sixteen sit inside the metrics reference's healthy band of
+0.01–1.0, and nothing comes near the 5.0 warning level as a windowed mean.
 
-This is the check that only became possible once a second batch existed. Both batches use seed 42, so
-a matched pair of cells starts from **bit-identical weights**; a large early divergence in modulator
-gradient or gain trajectory would therefore be attributable to the return mode. All comparisons below
-use the episode window **1,000,000 – 1,250,000**, which **every one of the thirty-two runs has
-completed** (63 logged rows on each side of every pair).
+**The narrow-input ordering of §4.4 reproduces, with the same single exception.** The arm fed only
+the two internal-body signals produces the quietest gradient of its three siblings at the sensory
+front-end (32.0% of windows touching the ceiling, against 70.2% and 44.4%), the memory cell (1.7% vs
+27.1% and 16.5%), the action head (2.5% vs 18.4% and 60.7%) and the all-four-sites configuration
+(4.7% vs 23.6% and 25.8%) — four of five families, the same four as in Batch A, and the family that
+breaks the pattern is the value head in **both** batches. That is the mechanism §4.4 proposed
+(a modulator driven by two slowly-varying body signals emits a smoother modulation, which puts less
+high-frequency energy into the gradient) surviving a change of learning-signal recipe. It remains one
+seed per arm in both batches, so it is a repeated observation rather than five independent
+confirmations.
 
-**Answer: yes, they behave alike.** No health metric diverges materially.
+**Excursion census — the twin is markedly quieter in the tail.** Post-warm-up peaks above 3.0, with
+location:
 
-| Cell | modulator gradient MC | GAE_NORM | ratio | total gradient MC | GAE_NORM |
-|---|---|---|---|---|---|
-| T2_enc_ALL | 0.1542 | 0.1620 | 1.05 | 0.402 | 0.347 |
-| T2_enc_I | 0.1435 | 0.1696 | 1.18 | 0.248 | 0.271 |
-| T2_enc_X | 0.1575 | 0.1580 | 1.00 | 0.354 | 0.411 |
-| T3_rnn_ALL | 0.0782 | 0.0610 | 0.78 | 0.321 | 0.398 |
-| T3_rnn_I | 0.0923 | 0.1065 | 1.15 | 0.252 | 0.227 |
-| T3_rnn_X | 0.0539 | 0.0461 | 0.86 | 0.376 | 0.299 |
-| T4_act_ALL | 0.0289 | 0.0298 | 1.03 | 0.384 | 0.385 |
-| T4_act_I | 0.0582 | 0.0549 | 0.94 | 0.295 | 0.277 |
-| T4_act_X | 0.0208 | 0.0219 | 1.05 | 0.368 | 0.451 |
-| T5_crt_ALL | 0.0406 | 0.0322 | 0.79 | 0.389 | 0.409 |
-| T5_crt_I | 0.0372 | 0.0288 | 0.77 | 0.383 | 0.407 |
-| T5_crt_X | 0.0244 | 0.0220 | 0.90 | 0.377 | 0.331 |
-| T16_quad_ALL | 0.1705 | 0.1617 | 0.95 | 0.329 | 0.298 |
-| T16_quad_I | 0.1595 | 0.1426 | 0.89 | 0.265 | 0.239 |
-| T16_quad_X | 0.1347 | 0.1339 | 0.99 | 0.389 | 0.436 |
-
-**Modulator gradient agrees to within 0.77×–1.18× in all fifteen pairs**, with only a slight tilt:
-five pairs are higher under the new estimator, nine lower, one identical (median ratio 0.95). Over a wider common window (episodes
-200k–1.25M), the grid-mean total gradient is **0.351 (MC) vs 0.362 (GAE_NORM)** — a 3% difference
-across thirty-two runs.
-
-**The re-tuning signals also agree.** Over the same window, the largest disagreement between any twin
-pair on any FiLM signal is **+0.255** (action-head gain, narrow-input arm: 1.249 under MC, 1.505
-under GAE_NORM); the next largest is +0.176 (same signal, exteroceptive arm); every other one of the
-60 compared signals agrees to within **0.14**, and most to within 0.05. The consistent direction of
-those two largest gaps — the new estimator drives the action-head gain slightly further above 1.0 —
-is worth noting for whoever analyses the twin scientifically, but it is a 20% relative difference on
-a signal that both batches move in the same direction.
-
-**The one systematic clipping difference.** Over the common post-warm-up window (episodes
-200k–1.25M), the fraction of logging windows whose *mean* gradient exceeded the 0.5 ceiling is higher
-under the new estimator in the outside-world-input and all-senses arms:
-
-| Cell | MC | GAE_NORM |
+| Cell | events | peaks and where |
 |---|---|---|
-| T1_none (control) | 0.0% | 10.4% |
-| T2_enc_X | 0.7% | 26.9% |
-| T4_act_X | 0.0% | 22.3% |
-| T16_quad_X | 0.0% | 16.5% |
-| T4_act_ALL | 1.4% | 11.0% |
-| T3_rnn_X | 0.0% | 6.2% |
-| all five `I` (narrow-input) arms | 0.0% | 0.0% |
+| T2_enc_X | 1 | 8.4 @ 95% |
+| T4_act_ALL | 2 | 4.8 @ 35%; 3.4 @ 86% |
+| T4_act_I | 1 | 3.2 @ 30% |
+| T5_crt_I | 1 | 6.4 @ 98% |
+| T16_quad_X | 1 | 7.6 @ 48% |
+| the other eleven runs, control included | 0 | — |
 
-**How to read this, and how not to.** The effect is present in the **control** as well as the
-modulated arms, so it is a property of the estimator, not of the modulator — the new recipe's
-advantage signal simply carries slightly more energy at this stage of training. It stays inside the
-healthy regime throughout: the 99th percentile never exceeds 0.60, the largest in-window peak
-anywhere in the twin is 1.5, and there are no excursions above 3.0 at all. The narrow-input arms are
-unaffected in both batches, which reproduces the §4.4 ordering under a second estimator. **It is an
-engineering observation about how the estimator interacts with the trainer's clip, and it is not a
-behavioural claim.**
+**Six events across five of sixteen runs, largest 8.4.** Batch A recorded **22 events across thirteen
+of sixteen runs**, with a largest of **1030.3**. So the heavy gradient tail this trainer shows under
+the first learning-signal recipe is substantially thinner under the second, and **nothing remotely
+like the 1030 event appeared anywhere in the twin**. Warm-up peaks are the same in both batches
+(9.1–32.7), so this is a property of the post-warm-up regime, not of initialisation. Read together
+with §4.8 this makes the 1030 look even more like an extreme draw from a heavy-tailed distribution
+that belongs to the `MC` estimator, rather than a defect in the modulation code — the same fifteen
+modulated architectures, differing only in return mode, produced no comparable event in ten million
+episodes each.
 
-**Survival at matched episodes**, for completeness and as a liveness cross-check only: the twin cell
-is ahead of its parent in all sixteen pairs, by 0.9 to 10.4 steps (mean +5.2). That is consistent
-with the direction the five-seed return-mode study measured on unmodulated agents, but **it is one
-seed per cell at 12% of training and must not be reported as a result**; it is included here solely
-because a twin that was *behind* everywhere would have been a health signal worth chasing.
+### 5.4 Where the gain and offset signals ended up, and whether the parent's drift shape reproduced
+
+#### 5.4.1 End-of-training values
+
+Each enabled site multiplies its layer by a per-unit gain (γ) and then adds a per-unit offset (β);
+under the FiLM code these are the values **as applied**, with no sigmoid in between. A gain of 1.0
+with an offset of 0.0 leaves the layer untouched. Values below are the mean of the last five logged
+points of each completed run.
+
+**Mean gain (γ) at end of training:**
+
+| Site | ALL | I | X | single-site range | four-site arm (ALL / I / X) | full range incl. four-site |
+|---|---|---|---|---|---|---|
+| encoder, stage 1 (`gamma_uni_mean`) | 0.654 | 0.491 | 0.641 | 0.491 – 0.654 | 0.677 / 0.575 / 0.568 | 0.491 – 0.677 |
+| encoder, stage 2 (`gamma_multi_mean`) | 0.594 | 0.542 | 0.734 | 0.542 – 0.734 | 0.514 / 0.656 / 0.635 | 0.514 – 0.734 |
+| memory cell (`gamma_rnn_mean`) | 0.516 | 0.458 | 0.576 | 0.458 – 0.576 | 0.684 / 0.603 / 0.681 | 0.458 – 0.684 |
+| action head (`gamma_actor_mean`) | 0.684 | 0.612 | **0.771** | 0.612 – 0.771 | 0.537 / 0.733 / 0.674 | 0.537 – 0.771 |
+| value head (`gamma_critic_mean`) | 0.340 | 0.211 | 0.624 | 0.211 – 0.624 | 0.340 / **0.160** / 0.411 | **0.160** – 0.624 |
+
+**Mean offset (β) at end of training:**
+
+| Site | ALL | I | X | four-site arm (ALL / I / X) | full range |
+|---|---|---|---|---|---|
+| encoder, stage 1 (`beta_uni_mean`) | −0.572 | −0.751 | −0.834 | −0.582 / −0.591 / −0.627 | −0.834 … −0.572 |
+| encoder, stage 2 (`beta_multi_mean`) | −0.210 | −0.307 | −0.180 | −0.231 / −0.213 / −0.202 | −0.307 … −0.180 |
+| memory cell (`beta_rnn_mean`) | −0.011 | −0.026 | +0.013 | +0.048 / +0.097 / +0.042 | −0.026 … +0.097 |
+| action head (`beta_actor_mean`) | **−1.108** | −0.731 | −0.654 | −0.709 / −0.576 / −0.607 | −1.108 … −0.576 |
+| value head (`beta_critic_mean`) | **−1.118** | −0.919 | −1.003 | −0.889 / −1.050 / −0.570 | −1.118 … −0.570 |
+
+**Comparison with Batch A, at the level of range.** The gains land in a similar neighbourhood
+(Batch A 0.203–0.909, Batch B 0.160–0.771), though the twin's are compressed at the top and reach
+slightly lower at the bottom. The offsets are the channel that differs: Batch A's most negative
+offset is **−1.827** and Batch B's is **−1.118**, and every one of the six largest twin-pair
+disagreements in §5.6 is an offset that Batch A drove further negative. Whatever the first recipe's
+noisier learning signal does, one of its consequences is that the modulator's additive channel
+travels roughly 50% further from its starting point.
+
+**Per-unit spread.** At the first logged point the per-unit standard deviation of the gain is
+**0.29–0.39** and of the offset **0.28–0.35** in every twin arm — matching Batch A and
+reproducing the §8.1 caveat exactly. By the end the gain's spread has grown to 0.33–1.14 and the
+offset's to 0.32–1.70, the largest being the value-head offset in the outside-world arm. Batch A
+reached 2.35 on that same signal. Rising spread alongside a falling mean is the modulator learning to
+treat units differently, which is what it is for — and it is also the situation in which a mean alone
+misleads.
+
+#### 5.4.2 Does the parent's drift shape reproduce? — In six of seven site families, yes; in one, no
+
+This is the check the user most wanted, and it is worth being precise about what it can prove. **The
+two grids share seed 42**, so a matched pair of cells starts from bit-identical weights. Reproducing
+a shape across the pair therefore shows the shape survives changing the learning-signal recipe; it
+does **not** show the shape survives changing the seed, which is the stronger and still-untested
+claim. A *failure* to reproduce would have been the more informative outcome, and there is one.
+
+| Site family | Batch A (MC) behaviour | Batch B (GAE_NORM) behaviour | Reproduced? |
+|---|---|---|---|
+| **encoder stage-1 gain** (`gamma_uni`) | falls, bottoms out at 25–60% (single-site) / 81–96% (four-site), then climbs back; final tenth **+0.003 to +0.054** | falls, bottoms out at **43–62%** in five of six arms, then climbs back by +0.043 to +0.078; final tenth **+0.006 to +0.017** in those five (the sixth, the four-site exteroceptive arm, is flat at −0.002) | ✅ **yes**, and in the twin the reversal reaches two of three four-site arms too |
+| **encoder stage-2 gain** (`gamma_multi`) | same U-shape, milder | minima at 84–100%, recovery ≤ 0.023, final tenth −0.019 to +0.016 | ◐ **partly** — the twin's stage-2 gain plateaus rather than reversing |
+| **memory-cell gain** (`gamma_rnn`) | plateau; extremum at 89–99%; final tenth −0.007 to +0.015 | plateau; extremum at **85–100%**; final tenth **−0.021 to +0.007** | ✅ yes |
+| **value-head gain** (`gamma_critic`) | plateau; extremum at 27–100%; final tenth −0.014 to +0.012 | plateau; extremum at **41–100%**; final tenth **−0.013 to +0.012** | ✅ yes, near-identical bands |
+| **action-head gain** (`gamma_actor`) | still creeping down; final tenth −0.003 to −0.060 | still creeping down; final tenth **−0.010 to −0.035** | ✅ yes |
+| **encoder / memory offsets** | plateau; final tenth −0.032 to +0.019 | plateau; final tenth **−0.031 to +0.007** | ✅ yes |
+| **action-head offset** (`beta_actor`) | **still sliding**, worst in the all-senses arm: **−0.197**, others −0.024 to −0.069 | **still sliding**, worst in the all-senses arm: **−0.118**, others −0.002 to −0.044 | ✅ yes — same arm, ~60% of the magnitude |
+| **value-head offset** (`beta_critic`) | **still sliding**, worst in the all-senses arm: **−0.124**, others −0.006 to −0.043 | still sliding, but **worst in the outside-world arm: −0.089**; the all-senses arm is nearly flat at **−0.017**, and one four-site arm is moving *upward* (+0.037) | ❌ **no** — the "which arm has not converged" answer does not carry across |
+
+**Worked examples, the same two the parent used, plus the one that broke.**
+
+- **Front-end gain, exteroceptive input** (`T2_enc_X`, `gamma_uni_mean`): falls to a minimum of
+  **0.564 at 43%** of training, then climbs back to **0.642** at the end — a recovery of +0.078,
+  still rising at +0.011 per final decile. Batch A's counterpart bottomed at 0.678 at 25% and
+  recovered +0.172. **Same shape, same direction, roughly half the amplitude.**
+- **Action-head offset, all-senses input** (`T4_act_ALL`, `beta_actor_mean`): minimum at **96%**,
+  changed by **−0.118 over the final decile**, about **11% of its own final magnitude of −1.108**.
+  Batch A's counterpart moved −0.197, also 11% of *its* final magnitude of −1.827. The percentage is
+  the same to the digit; the absolute is smaller only because the twin's offset travelled less far.
+  **This signal had not converged in either batch when the budget ran out.**
+- **Value-head offset, all-senses input** (`T5_crt_ALL`, `beta_critic_mean`): minimum at **100%** but
+  changed by only **−0.017 over the final decile**, 1.5% of its final magnitude of −1.118 — against
+  Batch A's −0.124 and 7%. The signal that had *not* settled in Batch A had essentially settled here,
+  while the twin's outside-world arm (`T5_crt_X`) slid **−0.089**, 8.9% of its final −1.003, which
+  Batch A's outside-world arm did not do (−0.043).
+
+**What to take from the one failure.** With one seed per cell in each grid, a difference of this size
+between two arms of the same family sits inside what a single seed could produce — the parent grid's
+own five value-head-offset signals spanned −0.006 to −0.124 with no apparent logic to the ordering.
+The honest reading is therefore: **the family-level shapes (which sites plateau, which reverse, which
+are still moving at the budget's end) reproduce; the arm-level attribution of "this exact arm has not
+converged" does not, and should not have been leaned on.** What survives both batches is the
+conclusion that matters operationally — **the offsets at the action and value heads are the signals
+that have not converged at 10,000,000 episodes**, which is the §9 item-2 request's justification and
+is unaffected by which input slice is worst.
+
+### 5.5 Twin comparison at full length — modulator gradient
+
+Both batches are now complete, so the comparison can use each pair's **entire** history rather than a
+matched early window. Both readings are shown, because they answer different questions and they do
+not agree.
+
+| Cell | MC mean (full) | GN mean (full) | ratio | MC first→last decile | GN first→last decile |
+|---|---|---|---|---|---|
+| T2_enc_ALL | 0.1737 | 0.1353 | 0.78 | 0.154 → 0.181 | 0.140 → 0.133 |
+| T2_enc_I | 0.1767 | 0.1565 | 0.89 | 0.116 → 0.202 | 0.136 → 0.148 |
+| T2_enc_X | 0.1730 | 0.1390 | 0.80 | 0.132 → 0.195 | 0.138 → 0.135 |
+| T3_rnn_ALL | 0.0863 | 0.0604 | **0.70** | 0.073 → 0.093 | 0.058 → 0.064 |
+| T3_rnn_I | 0.1274 | 0.1126 | 0.88 | 0.083 → 0.152 | 0.089 → 0.130 |
+| T3_rnn_X | 0.0582 | 0.0487 | 0.84 | 0.053 → 0.062 | 0.048 → 0.049 |
+| T4_act_ALL | 0.0264 | 0.0223 | 0.85 | 0.029 → 0.025 | 0.029 → 0.021 |
+| T4_act_I | 0.0600 | 0.0478 | 0.80 | 0.044 → 0.060 | 0.043 → 0.048 |
+| T4_act_X | 0.0221 | 0.0183 | 0.83 | 0.024 → 0.024 | 0.023 → 0.017 |
+| T5_crt_ALL | 0.0378 | 0.0331 | 0.88 | 0.035 → 0.036 | 0.029 → 0.033 |
+| T5_crt_I | 0.0352 | 0.0329 | **0.94** | 0.036 → 0.037 | 0.030 → 0.031 |
+| T5_crt_X | 0.0266 | 0.0194 | 0.73 | 0.024 → 0.026 | 0.023 → 0.019 |
+| T16_quad_ALL | 0.1901 | 0.1450 | 0.76 | 0.159 → 0.195 | 0.155 → 0.146 |
+| T16_quad_I | 0.1567 | 0.1338 | 0.85 | 0.129 → 0.171 | 0.127 → 0.150 |
+| T16_quad_X | 0.1969 | 0.1574 | 0.80 | 0.125 → 0.196 | 0.124 → 0.181 |
+
+**The band did not hold, and the reason is legible.** Over the early matched window (episodes
+1.00M–1.25M) the earlier draft measured 0.77×–1.18× with five pairs above 1.0 and nine below. Over
+the **complete** histories the band is **0.70×–0.94×, median 0.83×, with the twin below the parent in
+all fifteen pairs**. Those two statements are both correct and describe different stretches of
+training. The mechanism is in the last two columns: the parent's modulator gradient **grows** through
+training (last decile above first in fourteen of fifteen arms), while the twin's is **flat** (median
+last/first 1.02). The two start together — they must, they share an initialisation — and then the
+parent's climbs away.
+
+**Is that a health problem? No.** Every twin arm remains between 17× and 180× the vanishing
+threshold; no arm's share of points below 0.001 is anything other than 0%; and a 0.83× median ratio
+between two different learning-signal recipes is a small difference by the standards of this trainer,
+whose per-arm modulator gradients already span an order of magnitude within a single batch (0.018 to
+0.157). It is worth recording because it is systematic — fifteen of fifteen in the same direction is
+not a coin flip — and because it makes any future statement of the form "the modulator is equally
+well-driven under either estimator" need the qualifier "for the first fifth of training".
+
+Over the same complete histories, the grid-mean post-warm-up **total** gradient is **0.255 (MC) vs
+0.205 (GAE_NORM)**, i.e. the twin runs about 20% cooler overall. The earlier draft's "3% difference"
+was measured over episodes 200k–1.25M, where the two are indeed nearly identical (0.351 vs 0.362).
+
+### 5.6 Twin comparison at full length — the re-tuning signals
+
+Sixty signals are comparable (fifteen modulated arms × their enabled gain/offset pairs). Comparing
+each pair's **end-of-training** value (mean of the last five logged points):
+
+| Agreement threshold | signals within it |
+|---|---|
+| |GN − MC| ≤ 0.05 | 24 / 60 |
+| ≤ 0.10 | 35 / 60 |
+| **≤ 0.14** | **41 / 60** |
+| ≤ 0.20 | 50 / 60 |
+| ≤ 0.30 | 55 / 60 |
+| ≤ 0.50 | 57 / 60 |
+
+The earlier draft, comparing at episodes 1.00M–1.25M, found 58 of 60 within 0.14. At the end of
+training only **41 of 60** are. **Agreement loosens with training length**, which is what two
+optimisation trajectories that start identical and are driven by different advantage estimates should
+be expected to do.
+
+The twelve largest disagreements are dominated by one channel and one direction:
+
+| Cell | signal | MC | GAE_NORM | difference |
+|---|---|---|---|---|
+| T4_act_ALL | action-head offset | −1.827 | −1.108 | **+0.719** |
+| T5_crt_ALL | value-head offset | −1.817 | −1.118 | **+0.698** |
+| T5_crt_X | value-head offset | −1.562 | −1.003 | +0.558 |
+| T16_quad_ALL | action-head offset | −1.048 | −0.709 | +0.339 |
+| T2_enc_I | encoder stage-1 offset | −1.083 | −0.751 | +0.333 |
+| T16_quad_X | value-head offset | −0.834 | −0.570 | +0.264 |
+| T2_enc_X | encoder stage-1 gain | 0.869 | 0.641 | −0.228 |
+| T16_quad_X | memory-cell offset | −0.182 | +0.042 | +0.225 |
+| T16_quad_I | action-head offset | −0.787 | −0.576 | +0.211 |
+| T4_act_I | action-head offset | −0.529 | −0.731 | −0.202 |
+| T16_quad_X | action-head offset | −0.805 | −0.607 | +0.198 |
+| T2_enc_X | encoder stage-1 offset | −0.639 | −0.834 | −0.195 |
+
+Nine of the twelve are **offsets**, and in eight of those nine the parent's offset is the more
+negative. The single largest *gain* disagreement is 0.228. **The two batches agree much better on how
+far the modulator scales a layer than on how far it shifts it**, and the parent's noisier learning
+signal is associated with a consistently larger additive excursion. That is an engineering
+observation about the estimator, not a claim about behaviour.
+
+### 5.7 Twin comparison at full length — the clipping difference washed out, then reversed
+
+The earlier draft's one systematic difference was that the twin's outside-world-input and all-senses
+arms spent 10–27% of logging windows with a **mean** gradient above the 0.5 ceiling against the
+parent's 0–4%, **and that the effect was present in the unmodulated control too** (10.4% vs 0.0%),
+which is what attributed it to the estimator rather than to modulation. That measurement was taken
+over episodes 200k–1.25M. It reproduces exactly on the completed data — the window is unchanged, so
+it must.
+
+**What the full run adds is that the effect is confined to roughly the first tenth of training.**
+Tracking the same quantity per decile:
+
+| Decile of training | 1 | 2 | 3 | 4 | 5–10 |
+|---|---|---|---|---|---|
+| control — MC | 2.2% | 0.0% | 0.0% | 0.0% | 0.0% |
+| control — GAE_NORM | **9.9%** | 0.0% | 0.0% | 0.0% | 0.0% |
+| encoder / exteroceptive — MC | 4.2% | 0.0% | 0.0% | 0.0% | 0.0% |
+| encoder / exteroceptive — GAE_NORM | **21.9%** | 0.5% | 0.0% | 0.0% | 0.0% |
+| action head / exteroceptive — GAE_NORM | **19.9%** | 0.5% | 0.0% | 0.0% | 0.0% |
+| four-site / exteroceptive — GAE_NORM | **13.5%** | 0.0% | 0.0% | 0.0% | 0.0% |
+
+By the second decile the difference is gone in every one of the sixteen pairs, and from the third
+decile onward **no arm in either batch has a single logging window whose mean gradient exceeds the
+ceiling**, with two isolated exceptions in the parent batch (one window each in `T3_rnn_ALL` and
+`T5_crt_X`).
+
+**And on the softer measure — how often a window's *peak* touched the ceiling — the ordering
+reverses.** That statistic falls over training in both batches but much faster in the twin:
+
+| Cell | decile 1 | decile 3 | decile 5 | decile 8 | decile 10 |
+|---|---|---|---|---|---|
+| control — MC | 99% | 98% | 79% | 72% | **71%** |
+| control — GAE_NORM | 98% | 55% | 26% | 0% | **0%** |
+| action head / all-senses — MC | 100% | 99% | 92% | 74% | **52%** |
+| action head / all-senses — GAE_NORM | 98% | 44% | 10% | 1% | **1%** |
+| four-site / exteroceptive — MC | 98% | 97% | 91% | 77% | **43%** |
+| four-site / exteroceptive — GAE_NORM | 95% | 52% | 24% | 8% | **0%** |
+
+Over the whole post-warm-up run this makes the twin the **quieter** batch on every arm: its
+grid-mean gradient is 0.205 against 0.255, its worst arm's peak-touch fraction is 70.2% against the
+parent's 90.8%, and its tail has six excursions above 3.0 against twenty-two (§5.3).
+
+**How to read this.** The correct summary is now: *under the second learning-signal recipe the
+opening transient is briefly hotter and the rest of training is uniformly cooler.* The earlier
+draft's sentence — "the second batch's outside-world-input arms spend more of their time in the upper
+part of the gradient range" — was true of the data it had and is **not** true of the completed runs,
+and it is superseded. The effect remains present in the unmodulated control at both ends of the
+reversal, so it remains attributable to the estimator rather than to the modulator. Nothing in either
+batch leaves the healthy regime at any point.
+
+### 5.8 The estimator's survival effect is uniform in sign across all sixteen cells
+
+**Why a survival number appears in a health audit.** The two grids are intended to be read as a
+matched pair. That reading needs the modulation machinery not to interact with the learning-signal
+recipe in some cell-specific way — if, say, the estimator helped four arms and hurt three, the pair
+would not be matched and no cross-grid statement could be made. Checking that is an engineering
+precondition, so it belongs here. **It is not a claim about which configuration performs better, and
+it is not an outcome analysis.**
+
+Mean survival over each run's final million episodes, per cell:
+
+| Cell | MC | GAE_NORM | difference |
+|---|---|---|---|
+| T1_none (control) | 164.46 | 170.62 | **+6.16** |
+| T2_enc_ALL | 168.44 | 172.65 | +4.21 |
+| T2_enc_I | 163.56 | 170.35 | +6.79 |
+| T2_enc_X | 167.61 | 173.16 | +5.56 |
+| T3_rnn_ALL | 164.87 | 167.59 | +2.72 |
+| T3_rnn_I | 166.93 | 170.22 | +3.29 |
+| T3_rnn_X | 165.62 | 170.77 | +5.14 |
+| T4_act_ALL | 166.87 | 168.90 | +2.03 |
+| T4_act_I | 165.83 | 169.22 | +3.39 |
+| T4_act_X | 165.17 | 170.32 | +5.15 |
+| T5_crt_ALL | 165.43 | 169.80 | +4.37 |
+| T5_crt_I | 163.53 | 169.38 | +5.85 |
+| T5_crt_X | 165.74 | 169.97 | +4.23 |
+| T16_quad_ALL | 169.76 | 172.18 | +2.42 |
+| T16_quad_I | 163.04 | 169.02 | +5.98 |
+| T16_quad_X | 170.58 | 172.22 | +1.63 |
+| **all sixteen** | | | **mean +4.31, s.d. 1.59, range +1.63 to +6.79, positive in 16/16** |
+
+Read on the final 200,000 episodes instead, the same picture: **mean +4.58, range +1.95 to +7.76,
+positive in 16/16**.
+
+**The precondition holds, with three qualifications the user should carry.**
+
+1. **Uniform in sign, and the dispersion is small relative to known noise.** The sixteen differences
+   scatter with a standard deviation of **1.59 steps**, against a **4.5-step** spread between the
+   five reference seeds of the unmodulated `MC` configuration measured the same way. A single
+   common estimator effect plus one-seed noise reproduces the sixteen numbers without needing any
+   cell-specific interaction term. Grouping them, the write-site means run +3.35 to +5.52 and the
+   input-slice means +3.15 to +5.06 — ranges of about two steps, well inside single-seed noise.
+2. **"Uniform" is an observation about 16 paired draws at one seed, not a tested hypothesis.** The
+   sixteen differences are not sixteen independent experiments: every cell in both grids uses seed
+   42, so a lucky or unlucky draw of that seed is common to all of them. A sign test on 16/16
+   would be misleading for exactly that reason and is not offered.
+3. **The apparent uniformity is partly a ceiling effect and should not be over-read.** The
+   correlation between a cell's parent-batch level and its difference is **−0.72**: the three cells
+   where the parent scored highest (`T16_quad_X` 170.58, `T16_quad_ALL` 169.76, `T2_enc_ALL` 168.44)
+   are the three with the smallest differences (+1.63, +2.42, +4.21). Both batches' cells sit within
+   a few steps of each other near the top of this environment's range, so the differences compress
+   where the parent already did well. That is a regression-toward-the-ceiling pattern, and it is the
+   most likely explanation for why the twin's arm-to-arm spread (5.6 steps) is smaller than the
+   parent's (7.6).
+
+**On the control specifically, and on the earlier `+4.47` figure.** The control's difference here is
+**+6.16** steps (final million) or **+7.76** (final 200,000). The reference for that comparison is
+**not** the +4.47 in [[return_mode_cmp_10M]] §4.9 — that number is a **greedy-evaluation** result
+(2,000 evaluation episodes per seed, 170.04 vs 165.57), a different measurement from the
+training-time rolling mean used throughout this document. The right training-time comparator is the
+same study's five-seed end-of-budget means: **170.36 (`GAE_NORM`) − 165.20 (`MC`) = +5.16 steps**.
+Against that, this grid's single-seed control difference of +6.16 is one step high, decomposing as
+its `MC` control landing 0.74 below the five-seed `MC` mean and its `GAE_NORM` control landing 0.26
+above the five-seed `GAE_NORM` mean — both ordinary single-seed draws given the `MC` reference's
+1.9-step standard deviation. **The control reproduces the known estimator effect within single-seed
+noise, and the +4.47 and +5.16 figures should not be conflated.**
 
 ---
 
@@ -879,7 +1223,10 @@ from every comparison." The twin's design inherits that gate.
 | GAE_NORM (`6695aa29`) | yes | 0 | **16** | 0 |
 
 Taken literally, **the design's gate is not met by any of the thirty-two rows**. The twin is
-*worse*: not one of its sixteen runs succeeded in reading the flag.
+*worse*: not one of its sixteen runs succeeded in reading the flag. **Re-checked on the twin's
+provenance files now that all sixteen have finished — still `"unknown"` in all sixteen.** The flag is
+written once at launch, so this was expected; it is stated because the earlier reading was taken
+mid-run and a reader should not have to wonder whether it changed.
 
 **Why it happened.** `src/utils/provenance.py:99-102` determines dirtiness by running
 `git status --porcelain --untracked-files=no` with a **10-second timeout**, and returns the string
@@ -951,21 +1298,30 @@ any finer comparison meaningless:
   between the two co-resident processes), and it is large enough to reorder the middle of this table
   on its own.
 
-### 7.2 GAE_NORM batch — the progress spread is entirely the card
+### 7.2 GAE_NORM batch — speed is set by the card, and cannot be compared with §7.1
 
-| Card | Node | Cells | steps/s (range) | progress (range) |
-|---|---|---|---|---|
-| RTX 2080 Ti | 101, 103, 104, 105 | control, enc_ALL, rnn_{ALL,I,X}, act_{ALL,I,X} | 29,401 – 36,896 | 12.8 – 15.5% |
-| RTX 3090 | 106 | crt_ALL, crt_I | 41,571 – 42,266 | 17.3 – 17.5% |
-| RTX 4090 | 102 | enc_I, enc_X | 49,262 – 49,377 | 18.4 – 18.8% |
-| RTX 6000 Ada | 114 | crt_X, quad_{ALL,I,X} | 45,231 – 52,736 | 17.1 – 20.6% |
+Environment steps per second (cumulative average over each completed run):
 
-Card separates the progress groups without a single inversion. **This is why §1 forbids cross-arm
-comparison within this batch** — an arm that looks ahead of a sibling is simply on a better card.
-Wall-clock gaps between consecutive logged rows are 5.0–8.2 s median, 11.9–20.2 s at the 99th
-percentile, maximum 19.4–38.6 s; the largest gap in any twin run is 7.5× its own median (on the fast
-4090 node, where the fixed-cost checkpoint step is a larger multiple of a smaller median). **No
-stall signature.**
+| Card | Node | Cells | steps/s (range) |
+|---|---|---|---|
+| RTX 2080 Ti | 101, 103, 104, 105 | control, enc_ALL, rnn_{ALL,I,X}, act_{ALL,I,X} | 29,955 – 37,601 |
+| RTX 3090 | 106 | crt_ALL, crt_I | 42,667 – 43,493 |
+| RTX 4090 | 102 | enc_I, enc_X | 50,635 – 50,722 |
+| RTX 6000 Ada | 114 | crt_X, quad_{ALL,I,X} | 46,128 – 53,679 |
+
+Card separates the speed groups without a single inversion, and it also determined the order in which
+these runs finished (the 2080 Ti arms completed roughly six hours after the Ada arms). **§7.1's
+modulator-overhead figures cannot be carried across.** Batch A ran fourteen of sixteen cells on
+identical RTX 3090s, which is what made its 11–26% overhead estimate meaningful; Batch B spreads four
+card generations across sixteen cells, so its speed table measures hardware, not architecture. The
+one within-card comparison available here — the control (37,601) against `T2_enc_ALL` (29,955), both
+on node 101's two 2080 Ti GPUs — gives a 20% cost for a single front-end modulator, consistent with
+§7.1's range but a single pair and subject to the same GPU-slot effect §7.1 documents.
+
+Wall-clock gaps between consecutive logged rows are 6.7–11.9 s median, 12.7–23.3 s at the 99th
+percentile, maximum 19.4–38.6 s. **The largest gap in any twin run is 5.5× its own median**, on the
+fast 4090 node where the fixed-cost checkpoint step is a larger multiple of a smaller median. **No
+stall signature anywhere**, and no run recompiled.
 
 ---
 
@@ -983,15 +1339,18 @@ but with a per-unit random deviation.
 
 **The size of that deviation is measurable, is not small, and reproduces in the twin.** At the first
 logged point the per-unit standard deviation of the gain is **0.29–0.37** in every MC arm and
-**0.29–0.39** in every GAE_NORM arm; of the offset, **0.27–0.35** and **0.28–0.35** respectively. So
-on day one a typical unit is being multiplied by something in the region of 0.7 to 1.3 and shifted by
-±0.3, rather than left alone.
+**0.29–0.39** in every GAE_NORM arm; of the offset, **0.27–0.35** and **0.28–0.35** respectively —
+re-measured on the twin's complete logs, unchanged from the early-life reading because these are
+first-logged-point values. So on day one a typical unit is being multiplied by something in the
+region of 0.7 to 1.3 and shifted by ±0.3, rather than left alone.
 
 **Why this is a note and not a bug report.** The code comment at
 `src/models/neuromodulator.py:178-181` explicitly claims "a newly-enabled site is a no-op at step 0",
-and taken per-unit that claim is not exact. But nothing observed suggests it caused harm — every arm
-in both batches learned normally from the start, and the arms differ from their controls in their
-first-million survival by amounts that are not ordered by how many sites they enable. The correct
+and taken per-unit that claim is not exact. But nothing observed suggests it caused harm — every one
+of the thirty completed modulated runs learned normally from the start, and the arms differ from
+their controls in their first-million survival by amounts that are not ordered by how many sites they
+enable (in the twin, the four-site all-senses arm has the *highest* first-million survival at 97.0
+and the four-site exteroceptive arm the *lowest* at 73.5). The correct
 response is to **state the property accurately** in the designs' reasoning rather than to change the
 initialisation mid-experiment.
 
@@ -1000,16 +1359,22 @@ cell with the gain and offset heads' weight matrices initialised to zero, making
 identity at step 0, and compare the first-million-episode survival curve. That is a one-run control,
 not a code change to either batch.
 
-### 8.2 The gain drift, restated with the finished data
+### 8.2 The gain drift, restated with both batches finished
 
-Covered in §4.3. Restating the discipline: a falling FiLM gain is **not** evidence of a layer being
-silenced, because the layer's own weights are free to grow and absorb the change. The observation is
-"the mean gain fell to 0.203–0.909 depending on site and arm, then **plateaued or partly recovered at
-every site except the action head**, while the offsets at the action and value heads under all-senses
-input were **still sliding when the budget ran out**". The inference "the site is silencing its
-layer" is **not** supported by anything currently logged. §9 asks for the two scalars that would let a
-future reader tell these apart — and the fact that two signals had not converged makes that request
-more urgent for the next wave.
+Covered in §4.3 and §5.4. Restating the discipline: a falling FiLM gain is **not** evidence of a
+layer being silenced, because the layer's own weights are free to grow and absorb the change. The
+observation across both batches is "the mean gain fell to 0.160–0.909 depending on site, arm and
+batch, then **plateaued or partly recovered at every site except the action head**, while the offsets
+at the action and value heads were **still sliding when the budget ran out in both batches**". The
+inference "the site is silencing its layer" is **not** supported by anything currently logged.
+
+Two things the completed twin adds. First, the combination §4.3 flagged as worth a targeted check —
+a gain in the 0.2–0.4 region together with an offset near −1.0 at a layer that is then passed through
+a rectifier — is **not** milder in the twin despite its offsets travelling less far: the twin's
+four-site narrow-input arm ends with a value-head gain of **0.160** and a value-head offset of
+**−1.050**, the most extreme such pairing anywhere in either batch. Second, the fact that the
+non-convergence at the budget's end reproduces at the *family* level in both batches (§5.4.2) removes
+the possibility that it was one run's quirk. Both raise, not lower, the priority of §9 item 2.
 
 ---
 
@@ -1018,12 +1383,18 @@ more urgent for the next wave.
 Four metrics whose absence bounded this audit. All are cheap. None is required for either batch's
 pre-registered analysis to proceed.
 
+**Priority changed now that both batches are complete.** Item 2 (post-FiLM active fraction) was
+already ranked highest and the twin's completion **raises** it further; item 1 (splitting the
+modulator's spread into its across-unit and across-time parts) **rises from third to second**; item 3
+(per-update clipping statistics) **falls**, because the completed data answered most of what it was
+wanted for. Reasons are given per row.
+
 | | Metric | Why now | Where it'd live | Cost |
 |---|---|---|---|---|
-| 1 | `modulator/gamma_<site>_temporal_std` and `modulator/gamma_<site>_unit_std` — the standard deviation of the site's gain **across time/batch after averaging over units**, and **across units after averaging over time**, in the same units as the existing gain (dimensionless multiplier) | The single currently-logged spread mixes these two components, so it cannot distinguish a modulator that genuinely re-tunes the network moment-to-moment from one that has learned a fixed per-unit re-parameterisation and is functionally inert. This is exactly the question the narrow-input (`I`) arms raise in §4.4 — and that question is now doubly live, because the same ordering reproduced under a second estimator (§5.4) without becoming any easier to interpret. It is also the discriminator that keeps a conditional behaviour from being averaged away | `train.py` around the `_mod_spread` helper at line ~1848, where the existing mean/std over `mod_info` are already computed | cheap — two extra reductions over an array that is already resident, at the existing logging cadence |
-| 2 | `network/<site>_postfilm_active_fraction` — the fraction of the modulated layer's units whose post-FiLM pre-activation is positive, i.e. surviving the rectifier (dimensionless, 0–1) | §4.3 now shows the completed picture: gains near 0.2–0.4 combined with offsets near −1.0 to −1.8 at the action and value heads, **with those offsets still moving downward at the last logged step**. Whether that has silenced a large part of those layers, or is a harmless scale re-partition absorbed by the layer's own weights, is currently unanswerable — and the two possibilities have opposite implications for reading both batches' results. This is the highest-value of the four | `src/models/recurrent_ppo_network.py`, immediately after the FiLM applications at lines 553 and 564 | cheap — one comparison and one mean per site per iteration |
-| 3 | `loss/grad_norm_p99` and `loss/grad_norm_clipped_fraction` — the 99th percentile of the **per-update** pre-clip gradient norm within a logging window, and the fraction of individual updates whose norm exceeded `max_grad_norm` (L2 norm; fraction 0–1) | Only the per-iteration mean and the window peak are kept, so §4.5's and §5.4's clipping statements are bounded above and below rather than measured, and §4.8's 1030 excursion cannot be localised to a single minibatch. The return-mode study established clipping fraction as the decisive variable separating arms that learn from arms that crawl — and this audit now has a *second* return mode in flight whose clipping regime differs from the first's precisely in the upper tail (§5.4), which is the part the current logging measures worst | `src/models/recurrent_ppo_trainer.py` around line 375, where `grad_norm` is already computed per update, plus the windowing in `train.py` | cheap — the per-update norms already exist; this is an extra reduction over them |
-| 4 | `modulator/param_count` and `network/param_count` at startup (integers, logged once) | §7 attributes an 11–26% throughput cost to the modulator, but the audit cannot state the parameter cost of each site configuration because it is not recorded; a future reader comparing throughput across site configurations has to reconstruct it from the architecture | `train.py`, in the startup banner block that already prints the modulation configuration | cheap — one scalar each, logged once |
+| **1 (was 2) — highest** | `network/<site>_postfilm_active_fraction` — the fraction of the modulated layer's units whose post-FiLM pre-activation is positive, i.e. surviving the rectifier (dimensionless, 0–1) | **Raised in priority by the completed twin.** The concern is a gain in the 0.2–0.4 region combined with an offset near −1.0, at a layer feeding a rectifier: if the layer's own pre-activation is O(1), that combination pushes a large fraction of units permanently off, which would be a real sparsification invisible in every currently-logged metric. Three things now argue for it that did not before. (a) The twin's offsets travel *less* far than the parent's (§5.6), yet the twin still produces the most extreme pairing in either batch — a value-head gain of 0.160 with an offset of −1.050 (§8.2). (b) The non-convergence of the action- and value-head offsets at the budget's end reproduces across both batches at the family level (§5.4.2), so it is a property of the setup, not one run's quirk. (c) Any cross-grid conclusion now rests on the two batches' modulators doing comparable things, and the largest cross-batch disagreements are precisely in this channel (§5.6) — this scalar is what would say whether a −1.83 offset and a −1.11 offset are functionally the same or not | `src/models/recurrent_ppo_network.py`, immediately after the FiLM applications at lines 553 and 564 | cheap — one comparison and one mean per site per iteration |
+| **2 (was 1)** | `modulator/gamma_<site>_temporal_std` and `modulator/gamma_<site>_unit_std` — the standard deviation of the site's gain **across time/batch after averaging over units**, and **across units after averaging over time** (dimensionless multiplier) | The single currently-logged spread mixes these two components, so it cannot distinguish a modulator that genuinely re-tunes the network moment-to-moment from one that has learned a fixed per-unit re-parameterisation and is functionally inert. The narrow-input (`I`) arms raise exactly this question, and it is now **doubly live**: the same quiet-gradient ordering reproduced at full length under a second estimator (§5.3) without becoming any easier to interpret, and the per-unit spread grew 3–4× over training in both batches (§4.3, §5.4.1) with no way to say which component grew. It is also the discriminator that keeps a conditional behaviour from being averaged away | `train.py` around the `_mod_spread` helper at line ~1848, where the existing mean/std over `mod_info` are already computed | cheap — two extra reductions over an array that is already resident, at the existing logging cadence |
+| **3 (was 3) — lowered** | `loss/grad_norm_p99` and `loss/grad_norm_clipped_fraction` — the 99th percentile of the **per-update** pre-clip gradient norm within a logging window, and the fraction of individual updates whose norm exceeded `max_grad_norm` | **Lowered, because the completed data answered most of the question.** The reason for asking was that the twin's clipping regime appeared to differ from the parent's in the upper tail, which the current logging measures worst. At full length that difference turned out to be an opening transient that reverses (§5.7), and the twin's tail is unambiguously *thinner* (six excursions above 3.0 against twenty-two, §5.3) — a conclusion the window peak was adequate to reach. What the metric would still buy is localising §4.8's 1030 excursion to a single minibatch, which is a curiosity rather than a blocker now that a full sixteen-run replication under a second estimator produced nothing above 8.4 | `src/models/recurrent_ppo_trainer.py` around line 375, where `grad_norm` is already computed per update, plus the windowing in `train.py` | cheap — the per-update norms already exist; this is an extra reduction over them |
+| **4 (unchanged)** | `modulator/param_count` and `network/param_count` at startup (integers, logged once) | §7 attributes a throughput cost to the modulator, but the audit cannot state the parameter cost of each site configuration because it is not recorded. This got slightly worse rather than better: Batch B is spread across four card generations (§7.2), so the only clean overhead measurement left is Batch A's, and a future reader comparing the two grids' cost has to reconstruct parameter counts from the architecture | `train.py`, in the startup banner block that already prints the modulation configuration | cheap — one scalar each, logged once |
 
 ---
 
@@ -1038,10 +1409,10 @@ decides whether to route them.
    do not say it is conditional on `modulation.type`. Under `type: FiLM` the encoder's gains are
    linear and initialise at 1.0. Suggested route: documentation maintenance. **A reader who follows
    §5.1 on these thirty-two runs will misread every front-end number.**
-2. **Provenance dirty-flag is unreliable under simultaneous multi-run launch — now reproduced**
-   (§6.2). `src/utils/provenance.py:99-102` runs `git status` with a 10 s timeout per training
+2. **Provenance dirty-flag is unreliable under simultaneous multi-run launch — now reproduced and
+   final** (§6.2). `src/utils/provenance.py:99-102` runs `git status` with a 10 s timeout per training
    process; sixteen concurrent launches produced `"unknown"` in 15/16 on the first batch and
-   **16/16** on the second. Suggested route: a bug-fix plan under `docs/develop/active/`. Options
+   **16/16** on the second, re-confirmed after both batches finished. Suggested route: a bug-fix plan under `docs/develop/active/`. Options
    worth weighing: retry on timeout, raise the timeout for this call specifically, or have the
    launcher read the flag once and pass it to every child process. The current behaviour is *safe*
    (it never claims clean when it does not know) — the defect is that it makes an experiment-design
@@ -1049,50 +1420,97 @@ decides whether to route them.
 
 Also worth surfacing to whoever owns the design documents, though neither is a defect:
 
-3. **Neither Launch Manifest was filled in.** All sixteen rows of [[NMN_INPUT_SITE_GRID]] §3 and all
-   sixteen of [[NMN_INPUT_SITE_GRID_GAENORM]] §3 still read `planned` with empty node, GPU, run-ID
-   and log-path columns. §2.1 and §2.2 above reconstruct the actual values from the runs' own
-   metadata. Per the manifests' stated ownership, only `training-runner` writes those columns; this
-   audit has not touched them.
+3. **Neither Launch Manifest was filled in, and both batches are now finished.** All sixteen rows of
+   [[NMN_INPUT_SITE_GRID]] §3 and all sixteen of [[NMN_INPUT_SITE_GRID_GAENORM]] §3 still read
+   `planned` with empty node, GPU, run-ID and log-path columns, although every run has completed.
+   §2.1 and §2.2 above reconstruct the actual values from the runs' own metadata and are offered as
+   evidence for whoever owns the manifests. Per the manifests' stated ownership, only
+   `training-runner` writes those columns; this audit has not touched them.
 4. **The designs' step-0 identity argument should be restated** (§8.1). "Turning a site on cannot
    hurt at step 0" holds for the layer mean but not per unit, where the gain starts at 1.0 ± ~0.3.
-   Confirmed independently in both batches.
+   Confirmed independently in both completed batches.
+5. **One claim in the previous version of this document is withdrawn** (§5.7). It reported that the
+   twin's wide-input arms spend more of their training with the gradient running hot against the clip
+   than the parent's. That was true of the first fifth of training, which was all the data then
+   available; over the complete runs the ordering **reverses** and the twin is the quieter batch
+   throughout the remaining four-fifths. Anyone who took the earlier sentence into a figure or a
+   summary should update it. The attribution is unchanged — the effect is present in the unmodulated
+   control at both ends, so it belongs to the estimator, not to the modulator.
 
 ---
 
 ## 11. Bottom line
 
-**Batch A, the MC grid, is finished and healthy.** All sixteen runs completed 10,000,000 episodes.
-No run needs to be discarded. The wiring is correct in all sixteen, verified three independent ways.
-The modulator received gradient throughout in all fifteen modulated arms — the smallest value seen
-anywhere across the complete histories is 0.0071, seven times the vanishing threshold. Nothing
-diverged, nothing stalled, nothing was crushed by the gradient clip, and the four-simultaneous-sites
-configuration is if anything the calmest arm. The control lands inside its pre-registered reference
-band at 164.46 survival steps, so the batch has a valid reference point. The single 1030 gradient
-spike stayed a one-off, and only one further excursion above 3.0 (peak 6.6) appeared as the last ten
-runs finished.
+**Both batches are finished and both are healthy.** All thirty-two runs completed 10,000,000
+episodes. No run needs to be discarded. The wiring is correct in all thirty-two, verified three
+independent ways, and the twin's verification is now run-by-run rather than on a sample: every one of
+its sixteen trainer-written configs records the right learning-signal recipe, the right write sites
+for its cell, the right sensor list for its input slice, the temperature mechanism off and the
+memory-cell mechanism set to activation — and every one of its sixteen logs exactly the corresponding
+metric set, with the temperature and legacy gate-bias series absent as expected and the same 59
+non-modulator keys in every run of both batches. Zero non-finite values anywhere. Zero recompiles.
+Zero constant series. Zero warnings or errors. No stall signature.
 
-**The refined finding the completed data allowed.** The downward drift of the re-tuning signals was
-not monotone to the end: the front-end gains bottomed out between 25% and 60% of training and
-recovered by up to +0.17, the memory-cell and value-head gains plateaued, and only the action-head
-gain is still creeping down. Two signals had **not** converged when the episode budget expired — the
-additive offset at the action head and at the value head, in the all-senses arms, still moving at
-roughly 11% and 7% of their final magnitude per final tenth of training. That is the strongest reason
-to add the post-FiLM active-fraction scalar (§9, item 2) before the next wave.
+**Both controls pass their pre-registered gates**, independently recomputed here: 164.46 survival
+steps for the first batch against a 162.4–166.9 band, and **170.62 for the second against a
+169.9–171.2 band** that is three and a half times narrower. Both grids therefore have a valid
+reference point, and the designs' precondition for attempting the cross-grid analysis is met.
 
-**Batch B, the GAE_NORM twin, is healthy at 12.8–20.6%.** All sixteen learning, zero non-finite
-values, zero recompiles, zero constant series, correct metric set in every arm, modulator gradient
-alive in all fifteen modulated arms with a minimum of 0.0076, and every site starting at identity
-exactly as the parent did. Its progress spread is fully explained by card assignment, so nothing
-within it may be compared arm-to-arm yet.
+**The modulator was driven throughout, in all thirty modulated runs.** The smallest gradient seen
+anywhere across either batch's complete history is 0.0071 (first batch) and 0.0076 (second), about
+seven times the vanishing threshold, both in the same cell. No arm has a single logged point below
+the threshold. The first batch's modulator gradient *grows* over training in fourteen of fifteen
+arms; the second's is flat; the only site where it weakens in both is the action head, and even there
+the smallest last-decile mean is seventeen times the threshold.
 
-**The twin comparison, kept to engineering.** At matched episodes the two batches' health metrics
-agree closely — modulator gradient within 0.77×–1.18× in all fifteen pairs, grid-mean total gradient
-differing by 3%, and 58 of 60 re-tuning signals agreeing to within 0.14. The one systematic
-difference is that under the new estimator the outside-world-input and all-senses arms spend
-10–27% of their logging windows with a mean gradient above the 0.5 clip ceiling, against 0–4% under
-the old one — an effect that is **also present in the unmodulated control**, so it belongs to the
-estimator rather than to the modulator, and one that stays comfortably inside the healthy regime.
+**The drift shape reproduced across the pair in six of seven site families.** Front-end gains fall,
+bottom out near the middle of training and climb back; memory-cell and value-head gains plateau; the
+action-head gain keeps creeping down; front-end and memory offsets flatten; and the action-head
+offset is still sliding at the budget's end, worst in the all-senses arm, at 11% of its own final
+magnitude per final tenth **in both batches to the digit**. The one family that did not reproduce is
+the value-head offset, where the arm that had not converged differs between the batches. Because the
+two grids share seed 42, a reproduced shape is **weaker** evidence than a second seed would be; what
+it shows is that the shape survives changing the learning-signal recipe. The arm-level claim "this
+exact arm has not converged" does not survive and should not be leaned on. The family-level claim —
+**the action-head and value-head offsets have not converged at 10,000,000 episodes** — survives both
+batches and is the justification for the highest-priority requested metric.
+
+**The twin comparison, kept to engineering, and it changed with length.** Three of the earlier
+draft's numbers move when measured over the complete runs rather than an early window, and in each
+case both readings are correct measurements of different stretches of training. The modulator's
+gradient agreement band goes from 0.77×–1.18× (early) to **0.70×–0.94× with the twin below the parent
+in all fifteen pairs** (full), because the parent's grows and the twin's does not. Agreement between
+the two batches' re-tuning signals loosens from 58-of-60 within 0.14 (early) to **41 of 60** (end of
+training), with nine of the twelve largest gaps being offsets that the parent drove further negative.
+And the one systematic clipping difference — **more windows running hot under the new recipe** —
+turns out to be confined to the opening tenth of training and then to **reverse**: from the third
+decile onward the twin is the quieter batch on every arm, with a grid-mean gradient of 0.205 against
+0.255 and six post-warm-up excursions above 3.0 against twenty-two. That earlier sentence is
+**withdrawn and superseded** (§10 item 5). Its attribution is not: the effect appears in the
+unmodulated control at both ends of the reversal, so it belongs to the estimator rather than to the
+modulator, and nothing leaves the healthy regime at any point.
+
+**The 1030 spike looks weaker as a defect candidate than it did.** Fifteen modulated architectures
+plus a control, re-run for ten million episodes each under a different return mode, produced nothing
+above 8.4. That is consistent with the event being an extreme draw from a heavy tail belonging to the
+first learning-signal recipe, and inconsistent with it being a fault in the modulation code.
+
+**One health-relevant property of the pair.** The second batch finishes above the first in **16 of 16
+cells**, mean +4.31 survival steps, spread 1.59 — smaller than the 4.5-step seed-to-seed spread of
+the same measurement. Nothing in the data requires the modulator machinery to interact with the
+learning-signal recipe cell-specifically, which is the precondition for treating the two grids as a
+matched pair. **This is 16 paired draws at a single shared seed, not a tested hypothesis**, it is
+partly a ceiling effect (the correlation between a cell's parent-batch level and its gain is −0.72),
+and it is not a claim about which configuration is better. The control's own difference of +6.16
+reproduces the known unmodulated estimator effect of +5.16 within single-seed noise — and should not
+be compared against the +4.47 figure from the return-mode study, which is a greedy-evaluation number
+rather than a training-time one.
+
+**What is still wrong is documentation and provenance, not training.** The metrics reference would
+make a reader misread every front-end number in both batches; the launcher's clean-working-tree flag
+recorded "unknown" in 31 of 32 runs, making an experiment-design gate unsatisfiable twice over; and
+neither Launch Manifest has been filled in although every run has now finished. All three are in §10
+for the user to route.
 
 ---
 
@@ -1106,13 +1524,21 @@ Raw extractions, retained for traceability (gitignored):
   every series as `(row index, value)` pairs so that metrics emitted in different history records can
   be aligned to an episode count by forward fill.
 - `tmp/nmnsite2/lib.py` — shared cell↔run-ID maps and the episode-aligned column accessor.
-- `tmp/nmnsite2/{mc,gn}_<runid>.json` — per-run complete series, key inventory and non-finite scan.
-- `tmp/nmnsite2/r1.py` … `r9.py` — the nine analyses this document is built from (progress and
-  survival; modulator gradient and clipping; FiLM temporal tables; matched-band twin comparison;
-  metric-set audit; excursion census and throughput; constant-series and wall-clock-gap scan;
-  turning-point analysis; common-window clipping comparison).
+- `tmp/nmnsite2/mc_<runid>.json` — Batch A per-run complete series, key inventory and non-finite
+  scan. Unchanged; Batch A was already complete when these were written.
+- `tmp/nmnsite2/gn_<runid>.json` — Batch B at 12.8–20.6%. **Superseded**, retained only so the
+  earlier draft's numbers can be reproduced.
+- `tmp/nmnsite3/gn_<runid>.json` — **Batch B re-extracted at completion**; the source of every Batch B
+  number in this version. `tmp/nmnsite3/lib.py` reads Batch A from `nmnsite2` and Batch B from
+  `nmnsite3`, so every cross-batch comparison in §5.5–§5.8 uses the final data on both sides.
+- `tmp/nmnsite2/r1.py` … `r9.py` and `tmp/nmnsite3/{r1,r2,r3,r5,r6,r7,r8b,t1,t2,t3}.py` — the
+  analyses this document is built from (progress and survival; modulator gradient, fade and clipping;
+  FiLM temporal tables; metric-set audit; excursion census and throughput; constant-series and
+  wall-clock-gap scan; drift turning points for both batches; full-history twin comparison;
+  per-decile clipping evolution; delta dispersion, control gate and temporal evolution).
 - `tmp/nmnsite2/cfgdiff.py` — the flattened key-by-key config differ used in §2.3.
-- `tmp/20260907_172348_nmnsite_audit_refresh.md` — consolidated output of all nine.
+- `tmp/20260907_172348_nmnsite_audit_refresh.md` — consolidated output of the first refresh.
+- `tmp/20260908_gaenorm_final_audit.md` — consolidated output of this pass.
 
 ### B. Provenance of every number here
 
@@ -1128,4 +1554,5 @@ twin-difference claim in §2.3.
 | Date | Change |
 |---|---|
 | 2026-09-07 | Initial audit. MC grid: six runs complete, ten at 84–99%. |
+| 2026-09-08 | **Final.** GAE_NORM twin now 16/16 complete at 10,000,000 episodes — every provisional twin figure recomputed on full histories and §5 rewritten from "early-life health check" to "final numbers". Twin control gate independently confirmed **PASS** at 170.62 against the pre-registered 169.9–171.2 (§5.1). Drift-shape reproduction tested family by family: six of seven reproduce, the value-head offset does not (§5.4.2). Twin comparison redone at full length: gradient ratio band moves to 0.70×–0.94× with the twin below in 15/15 (§5.5), FiLM end-value agreement loosens to 41/60 within 0.14 (§5.6), and **the hot-window clipping difference is shown to be an opening transient that then reverses — the earlier claim is withdrawn** (§5.7, §10 item 5). Excursion census: 6 events above 3.0 across 5 of 16 runs, max 8.4, against Batch A's 22 across 13 of 16 and max 1030 (§5.3). Added the paired estimator-effect observation, framed as a matched-pair precondition (§5.8). Config verification extended from 3 pairs to all 16 twin runs (§2.3). Metrics Requested re-prioritised (§9). Batch B throughput rewritten as card-bound and non-comparable with Batch A's (§7.2). |
 | 2026-09-07 | **Refresh.** MC grid now 16/16 complete — every reported figure recomputed on full histories (§4). Added the drift turning-point analysis that the partial data could not support (§4.3.2): drift mostly plateaued or reversed; two offsets had not converged. Confirmed the 1030 spike stayed a one-off and censused the one new excursion (§4.8). Added Batch B, the GAE_NORM twin, at 12.8–20.6%: manifest (§2.2), one-key config verification on three twin pairs (§2.3), full early-life health check (§5), matched-episode twin comparison (§5.4), throughput (§7.2). Provenance defect reproduced at 16/16 (§6.2). |
