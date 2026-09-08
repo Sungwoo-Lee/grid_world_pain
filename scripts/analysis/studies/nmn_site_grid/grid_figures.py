@@ -28,7 +28,21 @@ SITES = ["t2enc", "t3rnn", "t4act", "t5crt", "t16quad"]
 SLICES = ["I", "X", "ALL"]
 SITE_NAME = {"t2enc": "encoder", "t3rnn": "memory", "t4act": "actor", "t5crt": "critic",
              "t16quad": "all four"}
-C = {"I": "#8a4b8f", "X": "#2f6f9f", "ALL": "#2d6a4f", "ctrl": "#6f6d69", "none": "#b3322b"}
+C = {"I": "#8a4b8f", "X": "#2f6f9f", "ALL": "#2d6a4f", "ctrl": "#6f6d69", "none": "#1b1b1d"}
+# t1none is drawn in INK, not the page's warn-red. Red already means "callout accent" and "tier A"
+# in the surrounding page, and inside panel 3 a red annotation sat directly above a red line and
+# read as its label. A data series and the page's chrome must not share a colour.
+ANNO = "#3d3c3a"
+# Rendered text size = native size x (column width / figure width). At a 730px column a 2266px-wide
+# figure scales by 0.26, so a 10pt tick label lands at 7.7px -- below the 9px floor this project
+# uses for diagrams. Sizes here are chosen so the SMALLEST text clears 9px after that scaling.
+plt.rcParams.update({"font.size": 21, "axes.titlesize": 22, "axes.labelsize": 20,
+                     "xtick.labelsize": 19, "ytick.labelsize": 19, "legend.fontsize": 18,
+                     "figure.facecolor": "none", "savefig.facecolor": "none",
+                     "axes.facecolor": "white"})
+MARK = {"t2enc": "o", "t3rnn": "s", "t4act": "^", "t5crt": "D", "t16quad": "v"}
+DASH = {"t2enc": (0,()), "t3rnn": (0,(5,2)), "t4act": (0,(1,1.5)),
+        "t5crt": (0,(6,2,1,2)), "t16quad": (0,(3,1,1,1,1,1))}
 BINS = ["0-25", "25-50", ">=50"]
 XT = ["0-25", "25-50", "50-100"]
 
@@ -57,7 +71,7 @@ def prox_curve(d):
 def finish(fig, name):
     os.makedirs(FIG, exist_ok=True)
     p = f"{FIG}/{name}.png"
-    fig.savefig(p, dpi=200, bbox_inches="tight", facecolor="white")
+    fig.savefig(p, dpi=150, bbox_inches="tight", transparent=True)
     plt.close(fig)
     print(f"  wrote {p}")
 
@@ -81,13 +95,14 @@ def main():
     # reads a 1.5-point axis and a 35-point axis as comparable. The whole finding is that one of
     # these effects is twenty times the other, so a figure that hides the ratio argues against
     # its own caption.
-    fig, ax = plt.subplots(1, 3, figsize=(16.4, 5.0),
-                           gridspec_kw={"width_ratios": [1, 1, 1.05]})
+    # hspace: a 21pt left-aligned title sits directly under the previous panel's two-line
+    # x-label. At the default 0.2 they overlap. 0.55 clears both.
+    fig, ax = plt.subplots(3, 1, figsize=(11.5, 21.5), gridspec_kw={"hspace": .55})
     for i, (fn, ttl, yl) in enumerate(
             [(b0_curve, "The decision: does a wounded agent step INTO cover?",
-              "bush-entry rate (% of open-standing steps\non which the agent moved into a bush)"),
+              "bush-entry rate (%)\nopen steps ending in a bush"),
              (rest_curve, "The by-product: does it stop moving at all?",
-              "rest rate (% of steps on which\nthe agent chose to rest)")]):
+              "rest rate (%)\nsteps spent resting")]):
         lo, hi = band(fn, ctrl)
         ax[i].fill_between(x, lo, hi, color=C["ctrl"], alpha=.25, lw=0,
                            label="five unmodulated controls (range)")
@@ -96,51 +111,62 @@ def main():
         ax[i].plot(x, fn(none), color=C["none"], lw=2.4, label="t1none — in-grid control", zorder=5)
         ax[i].set_xticks(x); ax[i].set_xticklabels(XT)
         ax[i].set_xlabel("randomised starting injury (0-100 scale), in quarters")
-        ax[i].set_ylabel(yl, fontsize=9)
-        ax[i].set_title(ttl, fontsize=10, loc="left")
+        ax[i].set_ylabel(yl, fontsize=18)
+        ax[i].set_title(ttl, fontsize=21, loc="left")
         ax[i].grid(alpha=.25, lw=.5)
         span = np.nanmax(hi) - np.nanmin(lo)
-        ax[i].annotate(f"this axis spans {span:.1f} pp", xy=(.98, .03), xycoords="axes fraction",
-                       ha="right", fontsize=8.5, color=C["none"] if i == 0 else "#3d3c3a",
+        ax[i].annotate(f"this axis spans {span:.1f} pp", xy=(.98, .04), xycoords="axes fraction",
+                       ha="right", fontsize=19, color=ANNO,
                        fontweight="bold")
+        # The legend goes upper-left, so the data must not. Lift the top of the axis until the
+        # legend block has empty plot to sit on rather than covering the control band.
+        b, t = ax[i].get_ylim()
+        ax[i].set_ylim(b, b + (t - b) * (1.75 if i == 0 else 1.45))
     # panel 3: the same two quantities, one axis, no rescaling
     for k, d in cells.items():
         ax[2].plot(x, b0_curve(d), color=C[k.split("_")[1]], lw=1.0, alpha=.4)
         ax[2].plot(x, rest_curve(d), color=C[k.split("_")[1]], lw=1.0, alpha=.4)
     ax[2].plot(x, b0_curve(none), color=C["none"], lw=2.4, zorder=5)
     ax[2].plot(x, rest_curve(none), color=C["none"], lw=2.4, zorder=5)
-    ax[2].set_ylim(0, 62); ax[2].set_xticks(x); ax[2].set_xticklabels(XT)
+    ax[2].set_ylim(0, 70); ax[2].set_xticks(x); ax[2].set_xticklabels(XT)
     ax[2].set_xlabel("randomised starting injury (0-100 scale), in quarters")
-    ax[2].set_ylabel("percent of steps (both quantities, one scale)", fontsize=9)
-    ax[2].set_title("The same two panels, on one axis", fontsize=10, loc="left")
+    ax[2].set_ylabel("percent of steps\nboth quantities, one scale", fontsize=18)
+    ax[2].set_title("The same two quantities, on one axis", fontsize=21, loc="left")
     ax[2].grid(alpha=.25, lw=.5)
-    ax[2].annotate("resting", xy=(2, 57), fontsize=9.5, color="#3d3c3a", fontweight="bold")
-    ax[2].annotate("entering cover — the flat line at the bottom", xy=(0.02, 10.5),
-                   fontsize=9.5, color=C["none"], fontweight="bold")
+    ax[2].annotate("resting", xy=(1.95, 65), ha="right", fontsize=20, color=ANNO, fontweight="bold")
+    ax[2].annotate("entering cover — the flat line along the bottom", xy=(0.02, 11.5),
+                   fontsize=20, color=ANNO, fontweight="bold")
     h = [plt.Line2D([], [], color=C[s], lw=1.6) for s in SLICES]
     ax[0].legend(handles=h + ax[0].get_legend_handles_labels()[0],
                  labels=["modulator reads body only", "reads world only", "reads everything"]
                         + ax[0].get_legend_handles_labels()[1],
-                 fontsize=8, loc="upper left", framealpha=.9)
-    ax[1].legend(fontsize=8, loc="upper left", framealpha=.9)
+                 fontsize=17, loc="upper left", ncol=2, framealpha=.94)
+    ax[1].legend(fontsize=17, loc="upper left", framealpha=.94)
     finish(fig, "g01_decision_vs_byproduct")
 
     # ---- FIG 2: the interaction the whole study is about ----
-    fig, ax = plt.subplots(1, 2, figsize=(12.6, 5.0), sharey=True)
+    fig, ax = plt.subplots(2, 1, figsize=(11.5, 14.0), sharey=True, sharex=True,
+                           gridspec_kw={"hspace": .42})
     lo, hi = band(prox_curve, ctrl)
     for i, (grp, ttl) in enumerate([(["I"], "Modulator reads the BODY only"),
                                     (["X"], "Modulator reads the WORLD only")]):
         ax[i].fill_between(x, lo, hi, color=C["ctrl"], alpha=.25, lw=0, label="controls (range)")
         for k, d in cells.items():
             if k.split("_")[1] not in grp: continue
-            ax[i].plot(x, prox_curve(d), color=C[grp[0]], lw=1.6, marker="o", ms=3.5,
-                       label=SITE_NAME[k.split("_")[0]])
+            site = k.split("_")[0]
+            ax[i].plot(x, prox_curve(d), color=C[grp[0]], lw=2.0, marker=MARK[site], ms=9,
+                       ls=DASH[site], label=SITE_NAME[site])
         ax[i].plot(x, prox_curve(none), color=C["none"], lw=2.2, ls="--", label="t1none")
         ax[i].set_xticks(x); ax[i].set_xticklabels(XT)
-        ax[i].set_xlabel("randomised starting injury (0-100 scale), in quarters")
-        ax[i].set_title(ttl, fontsize=10, loc="left")
-        ax[i].grid(alpha=.25, lw=.5); ax[i].legend(fontsize=8, ncol=2)
-    ax[0].set_ylabel("threat response (percentage points):\nhiding with a predator near minus hiding with none", fontsize=9)
+        ax[i].set_title(ttl, fontsize=21, loc="left")
+        ax[i].grid(alpha=.25, lw=.5)
+        ax[i].legend(fontsize=16, ncol=2, framealpha=.92, loc="upper left")
+    # sharex=True: only the bottom panel carries the axis label, otherwise the top panel's label
+    # is drawn into the gap between the two panels and reads as a caption for neither.
+    ax[1].set_xlabel("randomised starting injury (0-100 scale), in quarters")
+    b, t = ax[0].get_ylim()
+    ax[0].set_ylim(b, b + (t - b) * 1.40)
+    for a in ax: a.set_ylabel("threat response (pp):\npredator near minus none", fontsize=19)
     finish(fig, "g02_interaction_body_vs_world")
     print("done")
 

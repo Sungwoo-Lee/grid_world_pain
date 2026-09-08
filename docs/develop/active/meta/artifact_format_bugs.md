@@ -631,6 +631,33 @@ as a standalone rule.
 element and flag any whose border, padding and background are all identical to it. One pass, and it
 catches every instance on the page rather than the one somebody noticed.
 
+### F29 — a table whose header row has fewer cells than its body rows
+
+**Saw:** a sixteen-row results table rendered with three column headers over seven columns of
+numbers. Every cell after the third sat under no header at all, and the reader had no way to know
+which quantity a column held. The page still looked orderly: the rows were aligned, the numbers were
+right, and nothing overflowed.
+
+**Cause:** the table was rebuilt by a script that located it with a regex on
+`<table class="results">`, and the page had three tables with that class. The regex matched the
+**first** in document order, so a newly written three-column header was written over the sixteen-row
+seven-column table while the intended target kept its stale numbers. Two defects for the price of
+one, and neither is visible unless you count.
+
+**Why neither review method catches it:** the HTML reads correctly in isolation — a `<thead>` with
+three `<th>` is valid markup, and a `<tbody>` row with seven `<td>` is valid markup. The browser
+does not complain; it renders the extra columns headerless. Nothing overlaps, nothing clips, and a
+screenshot scan reads the block as "a table", because the eye checks alignment, not arity.
+
+**Rule:** any script that rewrites a table must address it by **position or a unique id**, never by
+a class that repeats. And after any table edit, assert that every `<tbody>` row has exactly as many
+cells as the `<thead>` has headers, for every table on the page.
+
+**Verifying a fix:** parse the page and, per table, print `len(thead th)` against the set of
+`len(tr td)` across body rows. A set with more than one member, or a member that differs from the
+header count, is the defect. This is three lines and catches every table at once; counting by eye on
+the rendered page does not scale past about five columns.
+
 ## Related
 
 - [`artifact_generation_guide`](artifact_generation_guide.md) — the wider guide: content, claims,
